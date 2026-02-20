@@ -1,0 +1,369 @@
+{
+  "232": {
+    "inputs": {
+      "text": "score_6, score_5, score_4, low resolution,worst quality, low quality, normal quality, lowres,jpeg, cropped, bad composition, artifacts bad proportions, error, inaccurate limb, bad anatomy, bad, ugly, terrible, extra fingers, fewer fingers, missing fingers, extra arms, extra legs, inaccurate eyes,extra digit, fewer digits, trademark, artist's name, username, watermarksignature, watermark, text, words, ribs, rib marks, visible ribs, abdominal muscles, skinny, muscular, thin, ",
+      "clip": [
+        "238",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP文本编码"
+    }
+  },
+  "233": {
+    "inputs": {
+      "text": "score_9, score_8_up, score_7_up, masterpiece, realistic, HDR, UHD, 8K, best quality, highres, absurdres, ultra-highres, Highly detailed, clear details, detailed skin, skin textures, fair skin, newest, \nA Korean girl, completely nude, nude， breasts, nipples",
+      "clip": [
+        "238",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP文本编码"
+    }
+  },
+  "235": {
+    "inputs": {
+      "samples": [
+        "246",
+        0
+      ],
+      "vae": [
+        "238",
+        2
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE解码"
+    }
+  },
+  "236": {
+    "inputs": {
+      "pixels": [
+        "253",
+        0
+      ],
+      "vae": [
+        "238",
+        2
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAE编码"
+    }
+  },
+  "238": {
+    "inputs": {
+      "ckpt_name": "IL-perfectionRealisticILXL_33.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple",
+    "_meta": {
+      "title": "Checkpoint加载器（简易）"
+    }
+  },
+  "239": {
+    "inputs": {
+      "x": 0,
+      "y": 0,
+      "resize_source": false,
+      "destination": [
+        "253",
+        0
+      ],
+      "source": [
+        "280",
+        0
+      ],
+      "mask": [
+        "366",
+        0
+      ]
+    },
+    "class_type": "ImageCompositeMasked",
+    "_meta": {
+      "title": "合成图像（遮罩）"
+    }
+  },
+  "244": {
+    "inputs": {
+      "grow": 20,
+      "blur": 50,
+      "mask": [
+        "251",
+        0
+      ]
+    },
+    "class_type": "INPAINT_ExpandMask",
+    "_meta": {
+      "title": "扩展遮罩"
+    }
+  },
+  "246": {
+    "inputs": {
+      "seed": [
+        "392",
+        0
+      ],
+      "steps": 12,
+      "cfg": 3,
+      "sampler_name": "dpmpp_2m_sde",
+      "scheduler": "karras",
+      "denoise": 0.45,
+      "model": [
+        "238",
+        0
+      ],
+      "positive": [
+        "233",
+        0
+      ],
+      "negative": [
+        "232",
+        0
+      ],
+      "latent_image": [
+        "236",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "K采样器"
+    }
+  },
+  "247": {
+    "inputs": {
+      "image": "ComfyUI_00083_ (1).png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像"
+    }
+  },
+  "249": {
+    "inputs": {
+      "prompt": "Body",
+      "threshold": 0.4,
+      "keep_model_loaded": false,
+      "add_background": "none",
+      "detection_limit": -1,
+      "sam3_model": [
+        "252",
+        0
+      ],
+      "images": [
+        "253",
+        0
+      ]
+    },
+    "class_type": "easy sam3ImageSegmentation",
+    "_meta": {
+      "title": "SAM3 图像分割"
+    }
+  },
+  "250": {
+    "inputs": {
+      "prompt": "Head, neck, face, clothes, shoes, hat,socks,accessories",
+      "threshold": 0.4,
+      "keep_model_loaded": false,
+      "add_background": "none",
+      "detection_limit": -1,
+      "sam3_model": [
+        "252",
+        0
+      ],
+      "images": [
+        "253",
+        0
+      ]
+    },
+    "class_type": "easy sam3ImageSegmentation",
+    "_meta": {
+      "title": "SAM3 图像分割"
+    }
+  },
+  "251": {
+    "inputs": {
+      "masks_a": [
+        "249",
+        0
+      ],
+      "masks_b": [
+        "374",
+        0
+      ]
+    },
+    "class_type": "Masks Subtract",
+    "_meta": {
+      "title": "遮罩相减"
+    }
+  },
+  "252": {
+    "inputs": {
+      "model": "sam3-fp16.safetensors",
+      "segmentor": "image",
+      "device": "cuda",
+      "precision": "fp16"
+    },
+    "class_type": "easy sam3ModelLoader",
+    "_meta": {
+      "title": "加载 SAM3 模型"
+    }
+  },
+  "253": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "megapixels": 1.2,
+      "resolution_steps": 1,
+      "image": [
+        "247",
+        0
+      ]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {
+      "title": "缩放图像（像素）"
+    }
+  },
+  "280": {
+    "inputs": {
+      "method": "wavelet",
+      "image_output": "Preview",
+      "save_prefix": "ComfyUI",
+      "image_ref": [
+        "253",
+        0
+      ],
+      "image_target": [
+        "235",
+        0
+      ]
+    },
+    "class_type": "easy imageColorMatch",
+    "_meta": {
+      "title": "图像颜色匹配"
+    }
+  },
+  "363": {
+    "inputs": {
+      "prompt": "Hands",
+      "threshold": 0.4,
+      "keep_model_loaded": false,
+      "add_background": "none",
+      "detection_limit": -1,
+      "sam3_model": [
+        "252",
+        0
+      ],
+      "images": [
+        "253",
+        0
+      ]
+    },
+    "class_type": "easy sam3ImageSegmentation",
+    "_meta": {
+      "title": "SAM3 图像分割"
+    }
+  },
+  "365": {
+    "inputs": {
+      "grow": 7,
+      "blur": 35,
+      "mask": [
+        "363",
+        0
+      ]
+    },
+    "class_type": "INPAINT_ExpandMask",
+    "_meta": {
+      "title": "扩展遮罩"
+    }
+  },
+  "366": {
+    "inputs": {
+      "masks_a": [
+        "244",
+        0
+      ],
+      "masks_b": [
+        "365",
+        0
+      ]
+    },
+    "class_type": "Masks Subtract",
+    "_meta": {
+      "title": "遮罩相减"
+    }
+  },
+  "372": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": [
+        "239",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "保存图像"
+    }
+  },
+  "374": {
+    "inputs": {
+      "grow": 6,
+      "blur": 0,
+      "mask": [
+        "250",
+        0
+      ]
+    },
+    "class_type": "INPAINT_ExpandMask",
+    "_meta": {
+      "title": "扩展遮罩"
+    }
+  },
+  "376": {
+    "inputs": {
+      "rgthree_comparer": {
+        "images": [
+          {
+            "name": "A",
+            "selected": true,
+            "url": "/api/view?filename=rgthree.compare._temp_sfpun_00063_.png&type=temp&subfolder=&rand=0.8400769838276859"
+          },
+          {
+            "name": "B",
+            "selected": true,
+            "url": "/api/view?filename=rgthree.compare._temp_sfpun_00064_.png&type=temp&subfolder=&rand=0.8707404881888986"
+          }
+        ]
+      },
+      "image_a": [
+        "253",
+        0
+      ],
+      "image_b": [
+        "239",
+        0
+      ]
+    },
+    "class_type": "Image Comparer (rgthree)",
+    "_meta": {
+      "title": "图像对比"
+    }
+  },
+  "392": {
+    "inputs": {
+      "seed": 289458326381522
+    },
+    "class_type": "easy seed",
+    "_meta": {
+      "title": "随机种"
+    }
+  }
+}
