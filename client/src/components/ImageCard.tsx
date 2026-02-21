@@ -21,6 +21,7 @@ export function ImageCard({ image }: ImageCardProps) {
   const { sendMessage } = useWebSocket();
 
   const [isHovered, setIsHovered] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const task = tasks[image.id];
@@ -52,6 +53,16 @@ export function ImageCard({ image }: ImageCardProps) {
       videoRef.current.pause();
       videoRef.current.currentTime = 0;
     }
+  }, []);
+
+  const handleDragStart = useCallback((e: React.DragEvent) => {
+    e.dataTransfer.setData('application/x-workflow-image', image.id);
+    e.dataTransfer.effectAllowed = 'copy';
+    setIsDragging(true);
+  }, [image.id]);
+
+  const handleDragEnd = useCallback(() => {
+    setIsDragging(false);
   }, []);
 
   const handleExecute = useCallback(async () => {
@@ -87,11 +98,19 @@ export function ImageCard({ image }: ImageCardProps) {
   }, [clientId, image, activeTab, prompts, startTask, sendMessage]);
 
   return (
-    <div style={{
-      border: '1px solid var(--color-border)',
-      backgroundColor: 'var(--color-surface)',
-      overflow: 'hidden',
-    }}>
+    <div
+      draggable
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      style={{
+        border: '1px solid var(--color-border)',
+        backgroundColor: 'var(--color-surface)',
+        overflow: 'hidden',
+        opacity: isDragging ? 0.5 : 1,
+        cursor: 'grab',
+        transition: 'opacity 0.15s',
+      }}
+    >
       {/* Image container */}
       <div
         style={{ position: 'relative' }}
