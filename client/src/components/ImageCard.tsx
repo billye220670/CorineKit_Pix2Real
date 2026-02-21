@@ -99,15 +99,15 @@ export function ImageCard({ image }: ImageCardProps) {
 
   return (
     <div
-      draggable
-      onDragStart={handleDragStart}
+      draggable={!isProcessing}
+      onDragStart={isProcessing ? undefined : handleDragStart}
       onDragEnd={handleDragEnd}
       style={{
         border: '1px solid var(--color-border)',
         backgroundColor: 'var(--color-surface)',
         overflow: 'hidden',
         opacity: isDragging ? 0.5 : 1,
-        cursor: 'grab',
+        cursor: isDragging ? 'grabbing' : 'grab',
         transition: 'opacity 0.15s',
       }}
     >
