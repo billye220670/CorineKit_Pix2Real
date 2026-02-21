@@ -20,19 +20,12 @@ export function TabSwitcher() {
     const state = useWorkflowStore.getState();
     let sourceFile: File | null = null;
 
-    // Find which tab this image currently lives in
     let sourceTabId: number | null = null;
-    for (const [key, tabEntry] of Object.entries(state.tabData)) {
-      if (tabEntry.images.some((i) => i.id === imageId)) {
-        sourceTabId = Number(key);
-        break;
-      }
-    }
-    if (sourceTabId === targetTab) return;
 
-    for (const tabEntry of Object.values(state.tabData)) {
+    for (const [key, tabEntry] of Object.entries(state.tabData)) {
       const img = tabEntry.images.find((i) => i.id === imageId);
       if (!img) continue;
+      sourceTabId = Number(key);
 
       const outputs = tabEntry.tasks[imageId]?.outputs ?? [];
       if (outputs.length > 0) {
@@ -50,7 +43,7 @@ export function TabSwitcher() {
       break;
     }
 
-    if (!sourceFile) return;
+    if (sourceTabId === null || sourceTabId === targetTab || !sourceFile) return;
 
     addImagesToTab(targetTab, [sourceFile]);
     const targetName = state.workflows.find((w) => w.id === targetTab)?.name ?? '';
@@ -69,7 +62,8 @@ export function TabSwitcher() {
             onClick={() => setActiveTab(wf.id)}
             onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setDragOverTab(wf.id); }}
             onDragLeave={(e) => {
-              if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+              const related = e.relatedTarget as Node | null;
+              if (!e.currentTarget.contains(related)) {
                 setDragOverTab(null);
               }
             }}

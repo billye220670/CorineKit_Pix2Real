@@ -107,7 +107,7 @@ export function ImageCard({ image }: ImageCardProps) {
         backgroundColor: 'var(--color-surface)',
         overflow: 'hidden',
         opacity: isDragging ? 0.5 : 1,
-        cursor: isDragging ? 'grabbing' : 'grab',
+        cursor: isDragging ? 'grabbing' : isProcessing ? 'default' : 'grab',
         transition: 'opacity 0.15s',
       }}
     >
