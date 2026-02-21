@@ -20,6 +20,16 @@ export function TabSwitcher() {
     const state = useWorkflowStore.getState();
     let sourceFile: File | null = null;
 
+    // Find which tab this image currently lives in
+    let sourceTabId: number | null = null;
+    for (const [key, tabEntry] of Object.entries(state.tabData)) {
+      if (tabEntry.images.some((i) => i.id === imageId)) {
+        sourceTabId = Number(key);
+        break;
+      }
+    }
+    if (sourceTabId === targetTab) return;
+
     for (const tabEntry of Object.values(state.tabData)) {
       const img = tabEntry.images.find((i) => i.id === imageId);
       if (!img) continue;
@@ -57,8 +67,12 @@ export function TabSwitcher() {
           <button
             key={wf.id}
             onClick={() => setActiveTab(wf.id)}
-            onDragOver={(e) => { e.preventDefault(); setDragOverTab(wf.id); }}
-            onDragLeave={() => setDragOverTab(null)}
+            onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setDragOverTab(wf.id); }}
+            onDragLeave={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                setDragOverTab(null);
+              }
+            }}
             onDrop={(e) => handleDrop(e, wf.id)}
             style={{
               position: 'relative',
