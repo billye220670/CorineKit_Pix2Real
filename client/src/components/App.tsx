@@ -6,6 +6,7 @@ import { DropZone } from './DropZone.js';
 import { PhotoWall } from './PhotoWall.js';
 import { ThemeToggle } from './ThemeToggle.js';
 import { Trash2 } from 'lucide-react';
+import { Toast } from './Toast.js';
 
 export function App() {
   const images = useWorkflowStore((s) => s.tabData[s.activeTab]?.images ?? []);
@@ -104,6 +105,7 @@ export function App() {
           </>
         )}
       </main>
+      <Toast />
     </div>
   );
 }
