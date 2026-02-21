@@ -28,6 +28,7 @@ interface WorkflowStore {
 
   setActiveTab: (tab: number) => void;
   addImages: (files: File[]) => void;
+  addImagesToTab: (tabId: number, files: File[]) => void;
   removeImage: (id: string) => void;
   clearCurrentImages: () => void;
   setPrompt: (imageId: string, prompt: string) => void;
@@ -78,6 +79,24 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         tabData: {
           ...state.tabData,
           [tab]: { ...prev, images: [...prev.images, ...newImages] },
+        },
+      };
+    });
+  },
+
+  addImagesToTab: (tabId, files) => {
+    const newImages: ImageItem[] = files.map((file) => ({
+      id: `img_${Date.now()}_${imageCounter++}`,
+      file,
+      previewUrl: URL.createObjectURL(file),
+      originalName: file.name,
+    }));
+    set((state) => {
+      const prev = state.tabData[tabId] || emptyTabData();
+      return {
+        tabData: {
+          ...state.tabData,
+          [tabId]: { ...prev, images: [...prev.images, ...newImages] },
         },
       };
     });
