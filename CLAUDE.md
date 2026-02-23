@@ -35,7 +35,21 @@ Max safe seed value for ComfyUI: `1125899906842624`
 
 ## Key Files
 
-- `client/src/hooks/useWorkflowStore.ts` — Zustand store (per-tab images, tasks, progress)
+- `client/src/hooks/useWorkflowStore.ts` — Zustand store (per-tab images, tasks, progress, selectedOutputIndex)
 - `client/src/hooks/useWebSocket.ts` — Singleton WS hook
+- `client/src/components/ThumbnailStrip.tsx` — Multi-output thumbnail navigator
 - `server/src/services/comfyui.ts` — ComfyUI HTTP + WS client
 - `server/src/routes/workflow.ts` — Execute, batch, release-memory, open-folder endpoints
+
+## Store Notes
+
+- `TabData.selectedOutputIndex`: `Record<imageId, number>` — `-1` = original image selected, `>= 0` = index into `task.outputs`
+- `startTask` preserves existing `outputs` so re-executions accumulate results on the same card
+- `completeTask` appends new outputs to existing array; defaults selection to first of new batch
+
+## UI Notes
+
+- Photo wall uses CSS Grid `repeat(auto-fill, minmax(columnWidth, 1fr))` — no right-side whitespace
+- ThumbnailStrip: original always at index 0, no background, thumb size adapts via ResizeObserver
+- Release-memory button disabled when any task is queued/processing across all tabs; stats span sits outside button to preserve usage colors
+- VRAM/RAM display uses continuous rAF lerp (factor 0.012) toward poll target for smooth animation
