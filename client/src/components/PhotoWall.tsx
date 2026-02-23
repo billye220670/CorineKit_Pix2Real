@@ -9,7 +9,7 @@ type ViewSize = 'small' | 'medium' | 'large';
 const VIEW_CONFIG: Record<ViewSize, { columnWidth: string; label: string }> = {
   small: { columnWidth: '180px', label: '小' },
   medium: { columnWidth: '280px', label: '中' },
-  large: { columnWidth: '420px', label: '大' },
+  large: { columnWidth: '600px', label: '大' },
 };
 
 function getInitialViewSize(): ViewSize {

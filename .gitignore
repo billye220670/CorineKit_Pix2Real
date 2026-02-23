@@ -25,6 +25,9 @@ output/
 .DS_Store
 Thumbs.db
 
+# Dev server PID tracking
+.pid
+
 # Logs
 *.log
 npm-debug.log*
