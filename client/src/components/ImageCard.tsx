@@ -3,6 +3,7 @@ import { X, Play, Check, AlertCircle } from 'lucide-react';
 import { useWorkflowStore } from '../hooks/useWorkflowStore.js';
 import { useWebSocket } from '../hooks/useWebSocket.js';
 import { ProgressOverlay } from './ProgressOverlay.js';
+import { ThumbnailStrip } from './ThumbnailStrip.js';
 import type { ImageItem } from '../types/index.js';
 
 interface ImageCardProps {
@@ -25,10 +26,15 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
   const startTask = useWorkflowStore((s) => s.startTask);
   const resetTask = useWorkflowStore((s) => s.resetTask);
   const setFlashingImage = useWorkflowStore((s) => s.setFlashingImage);
+  const selectedOutputIdx = useWorkflowStore(
+    (s) => s.tabData[s.activeTab]?.selectedOutputIndex?.[image.id] ?? Math.max(0, (s.tabData[s.activeTab]?.tasks?.[image.id]?.outputs?.length ?? 1) - 1)
+  );
+  const setSelectedOutputIndex = useWorkflowStore((s) => s.setSelectedOutputIndex);
   const { sendMessage } = useWebSocket();
 
   const [isHovered, setIsHovered] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [hoverOutputIdx, setHoverOutputIdx] = useState<number | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressFired = useRef(false);
@@ -41,12 +47,9 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
   const isProcessing = status === 'processing' || status === 'queued';
   const canExecute = !!clientId && !isProcessing;
 
-  const outputs = task?.outputs || [];
-  let displayOutput = outputs.length > 0 ? outputs[outputs.length - 1] : null;
-  if (isVideoWorkflow && outputs.length > 1) {
-    const interpolated = outputs.find((o) => o.filename.includes('插帧'));
-    if (interpolated) displayOutput = interpolated;
-  }
+  const outputs = task?.outputs ?? [];
+  const effectiveIdx = hoverOutputIdx ?? selectedOutputIdx;
+  const displayOutput = outputs[effectiveIdx] ?? null;
 
   const cancelLongPress = useCallback(() => {
     if (longPressTimer.current) {
@@ -219,7 +222,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
                 left: 0,
                 width: '100%',
                 display: 'block',
-                opacity: isHovered ? 0 : 1,
+                opacity: hoverOutputIdx !== null ? 1 : (isHovered ? 0 : 1),
                 transition: 'opacity 0.2s ease',
                 pointerEvents: 'none',
               }}
@@ -311,6 +314,18 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
           }}>
             {isSelected && <Check size={11} color="#fff" strokeWidth={3} />}
           </div>
+        )}
+
+        {/* Thumbnail strip for multiple outputs */}
+        {outputs.length > 1 && (
+          <ThumbnailStrip
+            outputs={outputs}
+            selectedIndex={selectedOutputIdx}
+            onSelect={(i) => setSelectedOutputIndex(image.id, i)}
+            onHover={(i) => setHoverOutputIdx(i)}
+            onHoverEnd={() => setHoverOutputIdx(null)}
+            isVideoWorkflow={isVideoWorkflow}
+          />
         )}
       </div>
 

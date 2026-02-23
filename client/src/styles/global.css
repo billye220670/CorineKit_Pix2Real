@@ -71,3 +71,5 @@ img {
 .card-flash-anim {
   animation: card-flash 0.35s ease-in-out 4;
 }
+
+.no-scrollbar::-webkit-scrollbar { display: none; }

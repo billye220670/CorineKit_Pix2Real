@@ -53,11 +53,12 @@ export function TabSwitcher() {
         if (!img) continue;
         const outputs = tabEntry.tasks[id]?.outputs ?? [];
         if (outputs.length > 0) {
-          const last = outputs[outputs.length - 1];
+          const selectedIdx = tabEntry.selectedOutputIndex?.[id] ?? (outputs.length - 1);
+          const selected = outputs[selectedIdx] ?? outputs[outputs.length - 1];
           try {
-            const res = await fetch(last.url);
+            const res = await fetch(selected.url);
             const blob = await res.blob();
-            file = new File([blob], last.filename, { type: blob.type });
+            file = new File([blob], selected.filename, { type: blob.type });
           } catch {
             file = img.file;
           }

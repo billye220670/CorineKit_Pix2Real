@@ -14,10 +14,11 @@ interface TabData {
   prompts: Record<string, string>;
   tasks: Record<string, TaskInfo>;
   imagePromptMap: Record<string, string>;
+  selectedOutputIndex: Record<string, number>;
 }
 
 function emptyTabData(): TabData {
-  return { images: [], prompts: {}, tasks: {}, imagePromptMap: {} };
+  return { images: [], prompts: {}, tasks: {}, imagePromptMap: {}, selectedOutputIndex: {} };
 }
 
 interface WorkflowStore {
@@ -44,6 +45,8 @@ interface WorkflowStore {
   flashingImageId: string | null;
   setFlashingImage: (id: string | null) => void;
   remapTaskPromptIds: (mapping: Array<{ oldPromptId: string; newPromptId: string }>) => void;
+
+  setSelectedOutputIndex: (imageId: string, index: number) => void;
 
   // Task management
   startTask: (imageId: string, promptId: string) => void;
@@ -173,6 +176,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       const { [id]: _p, ...restPrompts } = prev.prompts;
       const { [id]: _t, ...restTasks } = prev.tasks;
       const { [id]: _m, ...restMap } = prev.imagePromptMap;
+      const { [id]: _s, ...restSelectedOutputIndex } = prev.selectedOutputIndex;
       return {
         tabData: {
           ...state.tabData,
@@ -181,6 +185,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
             prompts: restPrompts,
             tasks: restTasks,
             imagePromptMap: restMap,
+            selectedOutputIndex: restSelectedOutputIndex,
           },
         },
       };
@@ -202,6 +207,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
             prompts: Object.fromEntries(Object.entries(prev.prompts).filter(([k]) => !idSet.has(k))),
             tasks: Object.fromEntries(Object.entries(prev.tasks).filter(([k]) => !idSet.has(k))),
             imagePromptMap: Object.fromEntries(Object.entries(prev.imagePromptMap).filter(([k]) => !idSet.has(k))),
+            selectedOutputIndex: Object.fromEntries(Object.entries(prev.selectedOutputIndex).filter(([k]) => !idSet.has(k))),
           },
         },
         selectedImageIds: state.selectedImageIds.filter((i) => !idSet.has(i)),
@@ -251,7 +257,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
 
   setClientId: (id) => set({ clientId: id }),
 
-  startTask: (imageId, promptId) => {
+  setSelectedOutputIndex: (imageId, index) => {
     set((state) => {
       const tab = state.activeTab;
       const prev = state.tabData[tab] || emptyTabData();
@@ -260,9 +266,26 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
           ...state.tabData,
           [tab]: {
             ...prev,
+            selectedOutputIndex: { ...prev.selectedOutputIndex, [imageId]: index },
+          },
+        },
+      };
+    });
+  },
+
+  startTask: (imageId, promptId) => {
+    set((state) => {
+      const tab = state.activeTab;
+      const prev = state.tabData[tab] || emptyTabData();
+      const existingOutputs = prev.tasks[imageId]?.outputs ?? [];
+      return {
+        tabData: {
+          ...state.tabData,
+          [tab]: {
+            ...prev,
             tasks: {
               ...prev.tasks,
-              [imageId]: { promptId, status: 'queued' as TaskStatus, progress: 0, outputs: [] },
+              [imageId]: { promptId, status: 'queued' as TaskStatus, progress: 0, outputs: existingOutputs },
             },
             imagePromptMap: { ...prev.imagePromptMap, [imageId]: promptId },
           },
@@ -327,14 +350,24 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         if (!prev) continue;
         let changed = false;
         const newTasks = { ...prev.tasks };
+        const newSelectedOutputIndex = { ...prev.selectedOutputIndex };
         for (const [imageId, task] of Object.entries(newTasks)) {
           if (task.promptId === promptId) {
-            newTasks[imageId] = { ...task, status: 'done', progress: 100, outputs };
+            const existingOutputs = task.outputs ?? [];
+            const allOutputs = [...existingOutputs, ...outputs];
+            newTasks[imageId] = { ...task, status: 'done', progress: 100, outputs: allOutputs };
+            // Default to the first output of the new batch; for video workflows prefer 插帧 within new batch
+            let defaultIdx = existingOutputs.length;
+            if ((tab === 3 || tab === 4) && outputs.length > 1) {
+              const i = outputs.findIndex((o) => o.filename.includes('插帧'));
+              if (i >= 0) defaultIdx = existingOutputs.length + i;
+            }
+            newSelectedOutputIndex[imageId] = defaultIdx;
             changed = true;
           }
         }
         if (changed) {
-          newTabData[tab] = { ...prev, tasks: newTasks };
+          newTabData[tab] = { ...prev, tasks: newTasks, selectedOutputIndex: newSelectedOutputIndex };
         }
       }
       return { tabData: newTabData };
@@ -370,10 +403,11 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       const prev = state.tabData[tab] || emptyTabData();
       const { [imageId]: _t, ...restTasks } = prev.tasks;
       const { [imageId]: _m, ...restMap } = prev.imagePromptMap;
+      const { [imageId]: _s, ...restSelectedOutputIndex } = prev.selectedOutputIndex;
       return {
         tabData: {
           ...state.tabData,
-          [tab]: { ...prev, tasks: restTasks, imagePromptMap: restMap },
+          [tab]: { ...prev, tasks: restTasks, imagePromptMap: restMap, selectedOutputIndex: restSelectedOutputIndex },
         },
       };
     });
