@@ -7,9 +7,14 @@ import type { ImageItem } from '../types/index.js';
 
 interface ImageCardProps {
   image: ImageItem;
+  isMultiSelectMode: boolean;
+  isSelected: boolean;
+  isFlashing?: boolean;
+  onLongPress: () => void;
+  onToggleSelect: () => void;
 }
 
-export function ImageCard({ image }: ImageCardProps) {
+export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, onLongPress, onToggleSelect }: ImageCardProps) {
   const activeTab = useWorkflowStore((s) => s.activeTab);
   const workflows = useWorkflowStore((s) => s.workflows);
   const clientId = useWorkflowStore((s) => s.clientId);
@@ -18,27 +23,55 @@ export function ImageCard({ image }: ImageCardProps) {
   const removeImage = useWorkflowStore((s) => s.removeImage);
   const setPrompt = useWorkflowStore((s) => s.setPrompt);
   const startTask = useWorkflowStore((s) => s.startTask);
+  const resetTask = useWorkflowStore((s) => s.resetTask);
+  const setFlashingImage = useWorkflowStore((s) => s.setFlashingImage);
   const { sendMessage } = useWebSocket();
 
   const [isHovered, setIsHovered] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressFired = useRef(false);
 
   const task = tasks[image.id];
   const status = task?.status || 'idle';
   const progress = task?.progress || 0;
   const needsPrompt = workflows[activeTab]?.needsPrompt ?? false;
   const isVideoWorkflow = activeTab === 3 || activeTab === 4;
-  const isProcessing = status === 'processing';
+  const isProcessing = status === 'processing' || status === 'queued';
   const canExecute = !!clientId && !isProcessing;
 
-  // Pick the right output to display
   const outputs = task?.outputs || [];
   let displayOutput = outputs.length > 0 ? outputs[outputs.length - 1] : null;
   if (isVideoWorkflow && outputs.length > 1) {
     const interpolated = outputs.find((o) => o.filename.includes('插帧'));
     if (interpolated) displayOutput = interpolated;
   }
+
+  const cancelLongPress = useCallback(() => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  }, []);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0 || isProcessing) return;
+    longPressFired.current = false;
+    longPressTimer.current = setTimeout(() => {
+      longPressFired.current = true;
+      longPressTimer.current = null;
+      onLongPress();
+    }, 600);
+  }, [isProcessing, onLongPress]);
+
+  const handleMouseUp = useCallback(() => {
+    cancelLongPress();
+  }, [cancelLongPress]);
+
+  const handleMouseLeaveOuter = useCallback(() => {
+    cancelLongPress();
+  }, [cancelLongPress]);
 
   const handleMouseEnter = useCallback(() => {
     setIsHovered(true);
@@ -55,15 +88,36 @@ export function ImageCard({ image }: ImageCardProps) {
     }
   }, []);
 
+  const handleImageAreaClick = useCallback(() => {
+    if (!isMultiSelectMode) return;
+    if (longPressFired.current) {
+      longPressFired.current = false;
+      return;
+    }
+    onToggleSelect();
+  }, [isMultiSelectMode, onToggleSelect]);
+
   const handleDragStart = useCallback((e: React.DragEvent) => {
+    cancelLongPress();
     e.dataTransfer.setData('application/x-workflow-image', image.id);
     e.dataTransfer.effectAllowed = 'copy';
     setIsDragging(true);
-  }, [image.id]);
+  }, [image.id, cancelLongPress]);
 
   const handleDragEnd = useCallback(() => {
     setIsDragging(false);
   }, []);
+
+  const handleCancelQueue = useCallback(async () => {
+    const promptId = task?.promptId;
+    if (!promptId) return;
+    try {
+      await fetch(`/api/workflow/cancel-queue/${promptId}`, { method: 'POST' });
+    } catch {
+      // best-effort; reset UI regardless
+    }
+    resetTask(image.id);
+  }, [task, image.id, resetTask]);
 
   const handleExecute = useCallback(async () => {
     if (!clientId) return;
@@ -102,22 +156,30 @@ export function ImageCard({ image }: ImageCardProps) {
       draggable={!isProcessing}
       onDragStart={isProcessing ? undefined : handleDragStart}
       onDragEnd={handleDragEnd}
+      onMouseDown={handleMouseDown}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseLeaveOuter}
+      className={isFlashing ? 'card-flash-anim' : undefined}
+      onAnimationEnd={() => { if (isFlashing) setFlashingImage(null); }}
       style={{
         border: '1px solid var(--color-border)',
         backgroundColor: 'var(--color-surface)',
         overflow: 'hidden',
         opacity: isDragging ? 0.5 : 1,
         cursor: isDragging ? 'grabbing' : isProcessing ? 'default' : 'grab',
-        transition: 'opacity 0.15s',
+        transition: 'opacity 0.15s, box-shadow 0.15s',
+        boxShadow: isSelected ? '0 0 0 2px var(--color-primary)' : 'none',
+        userSelect: 'none',
       }}
     >
       {/* Image container */}
       <div
-        style={{ position: 'relative' }}
+        style={{ position: 'relative', cursor: isMultiSelectMode ? 'pointer' : 'inherit' }}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
+        onClick={handleImageAreaClick}
       >
-        {/* Original image - always rendered, determines container size */}
+        {/* Original image */}
         <img
           src={image.previewUrl}
           alt={image.originalName}
@@ -127,7 +189,6 @@ export function ImageCard({ image }: ImageCardProps) {
         {/* Output overlay */}
         {displayOutput && (
           isVideoWorkflow ? (
-            /* Video: hidden by default, plays on hover */
             <video
               ref={videoRef}
               src={displayOutput.url}
@@ -149,7 +210,6 @@ export function ImageCard({ image }: ImageCardProps) {
               }}
             />
           ) : (
-            /* Image: shown by default, fades out on hover to reveal original */
             <img
               src={displayOutput.url}
               alt="Output"
@@ -168,11 +228,15 @@ export function ImageCard({ image }: ImageCardProps) {
         )}
 
         {/* Progress overlay */}
-        {isProcessing && (
-          <ProgressOverlay progress={progress} />
+        {(status === 'queued' || status === 'processing') && (
+          <ProgressOverlay
+            status={status}
+            progress={progress}
+            onCancel={status === 'queued' ? handleCancelQueue : undefined}
+          />
         )}
 
-        {/* Done badge (top-left) */}
+        {/* Done badge */}
         {status === 'done' && (
           <div style={{
             position: 'absolute',
@@ -188,7 +252,7 @@ export function ImageCard({ image }: ImageCardProps) {
           </div>
         )}
 
-        {/* Error badge (top-left) */}
+        {/* Error badge */}
         {status === 'error' && (
           <div style={{
             position: 'absolute',
@@ -207,10 +271,10 @@ export function ImageCard({ image }: ImageCardProps) {
           </div>
         )}
 
-        {/* Remove button (top-right) - visible when not processing */}
-        {!isProcessing && (
+        {/* Remove button — hidden in multi-select mode */}
+        {!isProcessing && !isMultiSelectMode && isHovered && (
           <button
-            onClick={() => removeImage(image.id)}
+            onClick={(e) => { e.stopPropagation(); removeImage(image.id); }}
             style={{
               position: 'absolute',
               top: 'var(--spacing-sm)',
@@ -227,70 +291,88 @@ export function ImageCard({ image }: ImageCardProps) {
             <X size={14} />
           </button>
         )}
+
+        {/* Multi-select checkmark overlay */}
+        {isMultiSelectMode && (
+          <div style={{
+            position: 'absolute',
+            top: 'var(--spacing-sm)',
+            right: 'var(--spacing-sm)',
+            width: 20,
+            height: 20,
+            borderRadius: '50%',
+            border: '2px solid',
+            borderColor: isSelected ? 'var(--color-primary)' : 'rgba(255,255,255,0.8)',
+            backgroundColor: isSelected ? 'var(--color-primary)' : 'rgba(0,0,0,0.25)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            pointerEvents: 'none',
+          }}>
+            {isSelected && <Check size={11} color="#fff" strokeWidth={3} />}
+          </div>
+        )}
       </div>
 
       {/* Card footer */}
       <div style={{ padding: 'var(--spacing-sm)' }}>
-        {/* Filename */}
         <div style={{
           fontSize: '12px',
           color: 'var(--color-text-secondary)',
           overflow: 'hidden',
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
-          marginBottom: needsPrompt ? 'var(--spacing-sm)' : 0,
+          marginBottom: 'var(--spacing-sm)',
         }}>
           {image.originalName}
         </div>
 
-        {/* Prompt input (conditional) */}
-        {needsPrompt && (
-          <textarea
-            placeholder={activeTab === 3 ? '输入提示词（留空使用默认）' : '额外提示词（可选）'}
-            value={prompts[image.id] || ''}
-            onChange={(e) => setPrompt(image.id, e.target.value)}
-            disabled={isProcessing}
-            rows={2}
+        <div style={{ display: 'flex', gap: 'var(--spacing-sm)', alignItems: 'flex-start' }}>
+          {needsPrompt && (
+            <textarea
+              placeholder={activeTab === 3 ? '输入提示词（留空使用默认）' : '额外提示词（可选）'}
+              value={prompts[image.id] || ''}
+              onChange={(e) => setPrompt(image.id, e.target.value)}
+              disabled={isProcessing}
+              rows={1}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                flex: 1,
+                height: 28,
+                padding: 'var(--spacing-xs) var(--spacing-sm)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 0,
+                backgroundColor: 'var(--color-bg)',
+                color: 'var(--color-text)',
+                fontSize: '12px',
+                resize: 'vertical',
+                outline: 'none',
+                fontFamily: 'inherit',
+              }}
+            />
+          )}
+          <button
+            onClick={(e) => { e.stopPropagation(); handleExecute(); }}
+            disabled={!canExecute}
+            title={status === 'done' ? '重新生成' : '执行'}
             style={{
-              width: '100%',
-              padding: 'var(--spacing-xs) var(--spacing-sm)',
-              border: '1px solid var(--color-border)',
+              flexShrink: 0,
+              height: 28,
+              padding: '0 10px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: 'var(--color-primary)',
+              color: '#ffffff',
+              border: 'none',
               borderRadius: 0,
-              backgroundColor: 'var(--color-bg)',
-              color: 'var(--color-text)',
-              fontSize: '12px',
-              resize: 'vertical',
-              outline: 'none',
-              fontFamily: 'inherit',
+              cursor: canExecute ? 'pointer' : 'not-allowed',
+              opacity: canExecute ? 1 : 0.5,
             }}
-          />
-        )}
-
-        {/* Execute button - always visible, disabled during processing */}
-        <button
-          onClick={handleExecute}
-          disabled={!canExecute}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 'var(--spacing-xs)',
-            width: '100%',
-            marginTop: 'var(--spacing-sm)',
-            padding: 'var(--spacing-xs) var(--spacing-sm)',
-            backgroundColor: 'var(--color-primary)',
-            color: '#ffffff',
-            border: 'none',
-            borderRadius: 0,
-            fontSize: '12px',
-            fontWeight: 600,
-            cursor: canExecute ? 'pointer' : 'not-allowed',
-            opacity: canExecute ? 1 : 0.5,
-          }}
-        >
-          <Play size={12} />
-          {status === 'done' ? '重新生成' : '执行'}
-        </button>
+          >
+            <Play size={13} />
+          </button>
+        </div>
       </div>
     </div>
   );

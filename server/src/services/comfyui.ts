@@ -87,15 +87,56 @@ export interface ComfyUIProgress {
   max: number;
 }
 
+export async function deleteQueueItem(promptId: string): Promise<void> {
+  const res = await fetch(`${COMFYUI_URL}/queue`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ delete: [promptId] }),
+  });
+  if (!res.ok) {
+    throw new Error(`Delete queue item failed: ${res.status}`);
+  }
+}
+
+export interface SystemStats {
+  vram: number | null;   // used percentage 0–100, null if no GPU
+  ram: number;           // used percentage 0–100
+}
+
+export async function getSystemStats(): Promise<SystemStats> {
+  const res = await fetch(`${COMFYUI_URL}/system_stats`);
+  if (!res.ok) throw new Error(`system_stats failed: ${res.status}`);
+
+  const data = (await res.json()) as {
+    system: { ram_total: number; ram_free: number };
+    devices: Array<{ vram_total: number; vram_free: number }>;
+  };
+
+  const ramTotal = data.system?.ram_total ?? 0;
+  const ramFree = data.system?.ram_free ?? 0;
+  const ram = ramTotal > 0 ? Math.round((1 - ramFree / ramTotal) * 100) : 0;
+
+  const device = data.devices?.[0];
+  const vramTotal = device?.vram_total ?? 0;
+  const vramFree = device?.vram_free ?? 0;
+  const vram = vramTotal > 0 ? Math.round((1 - vramFree / vramTotal) * 100) : null;
+
+  return { vram, ram };
+}
+
 export function connectWebSocket(
   clientId: string,
   callbacks: {
     onProgress?: (promptId: string, progress: ComfyUIProgress) => void;
+    onExecutionStart?: (promptId: string) => void;
     onComplete?: (promptId: string) => void;
     onError?: (promptId: string, message: string) => void;
   }
 ): WebSocket {
   const ws = new WebSocket(`${COMFYUI_WS_URL}/ws?clientId=${clientId}`);
+
+  // Track which prompts have already fired onExecutionStart (per connection)
+  const startedPrompts = new Set<string>();
 
   ws.on('message', (raw) => {
     try {
@@ -110,8 +151,13 @@ export function connectWebSocket(
       }
 
       if (type === 'executing') {
-        if (data.node === null && callbacks.onComplete) {
-          callbacks.onComplete(data.prompt_id);
+        if (data.node !== null && !startedPrompts.has(data.prompt_id)) {
+          startedPrompts.add(data.prompt_id);
+          callbacks.onExecutionStart?.(data.prompt_id);
+        }
+        if (data.node === null) {
+          startedPrompts.delete(data.prompt_id);
+          callbacks.onComplete?.(data.prompt_id);
         }
       }
 
@@ -128,4 +174,73 @@ export function connectWebSocket(
   });
 
   return ws;
+}
+
+export interface ComfyQueueItem {
+  queueNumber: number;
+  promptId: string;
+  prompt: object;
+  clientId: string;
+}
+
+export interface ComfyQueue {
+  running: ComfyQueueItem[];
+  pending: ComfyQueueItem[];
+}
+
+export async function getQueue(): Promise<ComfyQueue> {
+  const res = await fetch(`${COMFYUI_URL}/queue`);
+  if (!res.ok) throw new Error(`Get queue failed: ${res.status}`);
+  const data = (await res.json()) as {
+    queue_running: Array<[number, string, object, Record<string, string>, string[]]>;
+    queue_pending: Array<[number, string, object, Record<string, string>, string[]]>;
+  };
+  const mapItem = (
+    item: [number, string, object, Record<string, string>, string[]],
+  ): ComfyQueueItem => ({
+    queueNumber: item[0],
+    promptId: item[1],
+    prompt: item[2],
+    clientId: item[3]?.client_id ?? '',
+  });
+  return {
+    running: (data.queue_running ?? []).map(mapItem),
+    pending: (data.queue_pending ?? []).map(mapItem),
+  };
+}
+
+export interface PromptIdRemap {
+  oldPromptId: string;
+  newPromptId: string;
+}
+
+export async function prioritizeQueueItem(targetPromptId: string): Promise<PromptIdRemap[]> {
+  const queue = await getQueue();
+  const allPending = queue.pending;
+  const targetIdx = allPending.findIndex((i) => i.promptId === targetPromptId);
+  if (targetIdx <= 0) return []; // already first or not found
+
+  // Delete all pending items at once
+  const pendingIds = allPending.map((i) => i.promptId);
+  const deleteRes = await fetch(`${COMFYUI_URL}/queue`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ delete: pendingIds }),
+  });
+  if (!deleteRes.ok) throw new Error(`Delete queue failed: ${deleteRes.status}`);
+
+  const mapping: PromptIdRemap[] = [];
+
+  // Re-queue target first, then the rest in original order
+  const target = allPending[targetIdx];
+  const targetResult = await queuePrompt(target.prompt, target.clientId);
+  mapping.push({ oldPromptId: target.promptId, newPromptId: targetResult.prompt_id });
+
+  for (const item of allPending) {
+    if (item.promptId === targetPromptId) continue;
+    const result = await queuePrompt(item.prompt, item.clientId);
+    mapping.push({ oldPromptId: item.promptId, newPromptId: result.prompt_id });
+  }
+
+  return mapping;
 }

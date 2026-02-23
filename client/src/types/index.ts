@@ -12,7 +12,7 @@ export interface WorkflowInfo {
   basePrompt: string;
 }
 
-export type TaskStatus = 'idle' | 'uploading' | 'processing' | 'done' | 'error';
+export type TaskStatus = 'idle' | 'uploading' | 'queued' | 'processing' | 'done' | 'error';
 
 export interface TaskInfo {
   promptId: string;
@@ -47,4 +47,9 @@ export interface WSErrorMessage {
   message: string;
 }
 
-export type WSMessage = WSConnectedMessage | WSProgressMessage | WSCompleteMessage | WSErrorMessage;
+export interface WSExecutionStartMessage {
+  type: 'execution_start';
+  promptId: string;
+}
+
+export type WSMessage = WSConnectedMessage | WSProgressMessage | WSCompleteMessage | WSErrorMessage | WSExecutionStartMessage;

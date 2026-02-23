@@ -32,6 +32,9 @@ function getOrCreateConnection(): WebSocket {
         case 'connected':
           store.setClientId(msg.clientId);
           break;
+        case 'execution_start':
+          store.markTaskStarted(msg.promptId);
+          break;
         case 'progress':
           store.updateProgress(msg.promptId, msg.percentage);
           break;

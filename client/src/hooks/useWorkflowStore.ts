@@ -25,20 +25,33 @@ interface WorkflowStore {
   workflows: typeof WORKFLOWS;
   tabData: Record<number, TabData>;
   clientId: string | null;
+  selectedImageIds: string[];
 
   setActiveTab: (tab: number) => void;
   addImages: (files: File[]) => void;
   addImagesToTab: (tabId: number, files: File[]) => void;
   removeImage: (id: string) => void;
+  removeImages: (ids: string[]) => void;
   clearCurrentImages: () => void;
   setPrompt: (imageId: string, prompt: string) => void;
+  setPrompts: (updates: Record<string, string>) => void;
   setClientId: (id: string) => void;
+  enterMultiSelect: (id: string) => void;
+  toggleImageSelection: (id: string) => void;
+  setSelectedImageIds: (ids: string[]) => void;
+  clearSelection: () => void;
+
+  flashingImageId: string | null;
+  setFlashingImage: (id: string | null) => void;
+  remapTaskPromptIds: (mapping: Array<{ oldPromptId: string; newPromptId: string }>) => void;
 
   // Task management
   startTask: (imageId: string, promptId: string) => void;
+  markTaskStarted: (promptId: string) => void;
   updateProgress: (promptId: string, percentage: number) => void;
   completeTask: (promptId: string, outputs: Array<{ filename: string; url: string }>) => void;
   failTask: (promptId: string, error: string) => void;
+  resetTask: (imageId: string) => void;
 
   // Computed helpers
   needsPrompt: () => boolean;
@@ -62,8 +75,57 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     4: emptyTabData(),
   },
   clientId: null,
+  selectedImageIds: [],
 
-  setActiveTab: (tab) => set({ activeTab: tab }),
+  setActiveTab: (tab) => set({ activeTab: tab, selectedImageIds: [] }),
+
+  enterMultiSelect: (id) => set({ selectedImageIds: [id] }),
+
+  toggleImageSelection: (id) => set((state) => {
+    const current = state.selectedImageIds;
+    if (current.includes(id)) {
+      return { selectedImageIds: current.filter((i) => i !== id) };
+    }
+    return { selectedImageIds: [...current, id] };
+  }),
+
+  setSelectedImageIds: (ids) => set({ selectedImageIds: ids }),
+
+  clearSelection: () => set({ selectedImageIds: [] }),
+
+  flashingImageId: null,
+  setFlashingImage: (id) => set({ flashingImageId: id }),
+
+  remapTaskPromptIds: (mapping) => {
+    if (!mapping.length) return;
+    const oldToNew: Record<string, string> = {};
+    for (const { oldPromptId, newPromptId } of mapping) {
+      oldToNew[oldPromptId] = newPromptId;
+    }
+    set((state) => {
+      const newTabData = { ...state.tabData };
+      for (const tabKey of Object.keys(newTabData)) {
+        const tab = Number(tabKey);
+        const prev = newTabData[tab];
+        if (!prev) continue;
+        let changed = false;
+        const newTasks = { ...prev.tasks };
+        const newImagePromptMap = { ...prev.imagePromptMap };
+        for (const [imageId, task] of Object.entries(newTasks)) {
+          const newId = oldToNew[task.promptId];
+          if (newId) {
+            newTasks[imageId] = { ...task, promptId: newId };
+            newImagePromptMap[imageId] = newId;
+            changed = true;
+          }
+        }
+        if (changed) {
+          newTabData[tab] = { ...prev, tasks: newTasks, imagePromptMap: newImagePromptMap };
+        }
+      }
+      return { tabData: newTabData };
+    });
+  },
 
   addImages: (files) => {
     const newImages: ImageItem[] = files.map((file) => ({
@@ -125,6 +187,28 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     });
   },
 
+  removeImages: (ids) => {
+    set((state) => {
+      const tab = state.activeTab;
+      const prev = state.tabData[tab] || emptyTabData();
+      const idSet = new Set(ids);
+      prev.images.forEach((img) => { if (idSet.has(img.id)) URL.revokeObjectURL(img.previewUrl); });
+      return {
+        tabData: {
+          ...state.tabData,
+          [tab]: {
+            ...prev,
+            images: prev.images.filter((i) => !idSet.has(i.id)),
+            prompts: Object.fromEntries(Object.entries(prev.prompts).filter(([k]) => !idSet.has(k))),
+            tasks: Object.fromEntries(Object.entries(prev.tasks).filter(([k]) => !idSet.has(k))),
+            imagePromptMap: Object.fromEntries(Object.entries(prev.imagePromptMap).filter(([k]) => !idSet.has(k))),
+          },
+        },
+        selectedImageIds: state.selectedImageIds.filter((i) => !idSet.has(i)),
+      };
+    });
+  },
+
   clearCurrentImages: () => {
     set((state) => {
       const tab = state.activeTab;
@@ -152,6 +236,19 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     });
   },
 
+  setPrompts: (updates) => {
+    set((state) => {
+      const tab = state.activeTab;
+      const prev = state.tabData[tab] || emptyTabData();
+      return {
+        tabData: {
+          ...state.tabData,
+          [tab]: { ...prev, prompts: { ...prev.prompts, ...updates } },
+        },
+      };
+    });
+  },
+
   setClientId: (id) => set({ clientId: id }),
 
   startTask: (imageId, promptId) => {
@@ -165,12 +262,35 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
             ...prev,
             tasks: {
               ...prev.tasks,
-              [imageId]: { promptId, status: 'processing' as TaskStatus, progress: 0, outputs: [] },
+              [imageId]: { promptId, status: 'queued' as TaskStatus, progress: 0, outputs: [] },
             },
             imagePromptMap: { ...prev.imagePromptMap, [imageId]: promptId },
           },
         },
       };
+    });
+  },
+
+  markTaskStarted: (promptId) => {
+    set((state) => {
+      const newTabData = { ...state.tabData };
+      for (const tabKey of Object.keys(newTabData)) {
+        const tab = Number(tabKey);
+        const prev = newTabData[tab];
+        if (!prev) continue;
+        let changed = false;
+        const newTasks = { ...prev.tasks };
+        for (const [imageId, task] of Object.entries(newTasks)) {
+          if (task.promptId === promptId && task.status === 'queued') {
+            newTasks[imageId] = { ...task, status: 'processing' as TaskStatus };
+            changed = true;
+          }
+        }
+        if (changed) {
+          newTabData[tab] = { ...prev, tasks: newTasks };
+        }
+      }
+      return { tabData: newTabData };
     });
   },
 
@@ -244,6 +364,21 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     });
   },
 
+  resetTask: (imageId) => {
+    set((state) => {
+      const tab = state.activeTab;
+      const prev = state.tabData[tab] || emptyTabData();
+      const { [imageId]: _t, ...restTasks } = prev.tasks;
+      const { [imageId]: _m, ...restMap } = prev.imagePromptMap;
+      return {
+        tabData: {
+          ...state.tabData,
+          [tab]: { ...prev, tasks: restTasks, imagePromptMap: restMap },
+        },
+      };
+    });
+  },
+
   needsPrompt: () => {
     const { activeTab, workflows } = get();
     return workflows[activeTab]?.needsPrompt ?? false;
@@ -253,6 +388,6 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     const { activeTab, tabData } = get();
     const tab = tabData[activeTab];
     if (!tab) return false;
-    return Object.values(tab.tasks).some((t) => t.status === 'processing');
+    return Object.values(tab.tasks).some((t) => t.status === 'processing' || t.status === 'queued');
   },
 }));

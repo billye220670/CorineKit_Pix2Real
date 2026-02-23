@@ -1,9 +1,10 @@
 import { useCallback, useState } from 'react';
 import { Upload } from 'lucide-react';
-import { useWorkflowStore } from '../hooks/useWorkflowStore.js';
 
 interface DropZoneProps {
   fullscreen: boolean;
+  importFiles: (files: File[]) => void;
+  onDropHandled?: () => void;
 }
 
 function isImageOrVideo(file: File): boolean {
@@ -35,13 +36,14 @@ async function readFilesFromEntry(entry: FileSystemEntry): Promise<File[]> {
   return [];
 }
 
-export function DropZone({ fullscreen }: DropZoneProps) {
-  const addImages = useWorkflowStore((s) => s.addImages);
+export function DropZone({ fullscreen, importFiles, onDropHandled }: DropZoneProps) {
   const [isDragOver, setIsDragOver] = useState(false);
 
   const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
+    e.stopPropagation(); // prevent App.tsx main-level drop from also processing these files
     setIsDragOver(false);
+    onDropHandled?.();
 
     const items = e.dataTransfer.items;
     const files: File[] = [];
@@ -66,9 +68,9 @@ export function DropZone({ fullscreen }: DropZoneProps) {
     }
 
     if (files.length > 0) {
-      addImages(files);
+      importFiles(files);
     }
-  }, [addImages]);
+  }, [importFiles, onDropHandled]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -83,10 +85,10 @@ export function DropZone({ fullscreen }: DropZoneProps) {
   const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []).filter(isImageOrVideo);
     if (files.length > 0) {
-      addImages(files);
+      importFiles(files);
     }
     e.target.value = '';
-  }, [addImages]);
+  }, [importFiles]);
 
   if (fullscreen) {
     return (

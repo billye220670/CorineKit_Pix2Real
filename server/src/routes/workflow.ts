@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 import { exec } from 'child_process';
 import multer from 'multer';
 import { getAdapter, adapters } from '../adapters/index.js';
-import { uploadImage, uploadVideo, queuePrompt } from '../services/comfyui.js';
+import { uploadImage, uploadVideo, queuePrompt, deleteQueueItem, getSystemStats, getQueue, prioritizeQueueItem } from '../services/comfyui.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const releaseMemoryTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-释放内存.json');
@@ -139,6 +139,26 @@ router.post('/:id/batch', upload.array('images', 50), async (req, res) => {
   }
 });
 
+// POST /api/workflow/cancel-queue/:promptId - remove a pending item from ComfyUI queue
+router.post('/cancel-queue/:promptId', async (req, res) => {
+  try {
+    await deleteQueueItem(req.params.promptId as string);
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Internal server error' });
+  }
+});
+
+// GET /api/workflow/system-stats - VRAM and RAM usage from ComfyUI
+router.get('/system-stats', async (_req, res) => {
+  try {
+    const stats = await getSystemStats();
+    res.json(stats);
+  } catch {
+    res.status(502).json({ error: 'ComfyUI unavailable' });
+  }
+});
+
 // POST /api/workflow/release-memory - release GPU/RAM memory
 router.post('/release-memory', async (req, res) => {
   try {
@@ -154,6 +174,26 @@ router.post('/release-memory', async (req, res) => {
     res.json({ promptId: result.prompt_id, clientId });
   } catch (err: any) {
     console.error('[Release Memory Error]', err);
+    res.status(500).json({ error: err.message || 'Internal server error' });
+  }
+});
+
+// GET /api/workflow/queue - get current ComfyUI queue
+router.get('/queue', async (_req, res) => {
+  try {
+    const queue = await getQueue();
+    res.json(queue);
+  } catch {
+    res.status(502).json({ error: 'ComfyUI unavailable' });
+  }
+});
+
+// POST /api/workflow/queue/prioritize/:promptId - move pending item to front of queue
+router.post('/queue/prioritize/:promptId', async (req, res) => {
+  try {
+    const mapping = await prioritizeQueueItem(req.params.promptId as string);
+    res.json({ ok: true, mapping });
+  } catch (err: any) {
     res.status(500).json({ error: err.message || 'Internal server error' });
   }
 });

@@ -66,6 +66,12 @@ wss.on('connection', (clientWs) => {
 
   // Connect to ComfyUI WebSocket with this clientId
   const comfyWs = connectWebSocket(clientId, {
+    onExecutionStart(promptId) {
+      if (clientWs.readyState === WebSocket.OPEN) {
+        clientWs.send(JSON.stringify({ type: 'execution_start', promptId }));
+      }
+    },
+
     onProgress(promptId, progress) {
       const percentage = Math.round((progress.value / progress.max) * 100);
       if (clientWs.readyState === WebSocket.OPEN) {
