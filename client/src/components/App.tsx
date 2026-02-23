@@ -51,24 +51,64 @@ async function readFilesFromEntry(entry: FileSystemEntry): Promise<File[]> {
 export function App() {
   const images = useWorkflowStore((s) => s.tabData[s.activeTab]?.images ?? []);
   const clientId = useWorkflowStore((s) => s.clientId);
+  const hasAnyProcessing = useWorkflowStore((s) =>
+    Object.values(s.tabData).some((tab) =>
+      Object.values(tab.tasks).some((t) => t.status === 'processing' || t.status === 'queued')
+    )
+  );
   const { importFiles, dialog, overwrite, keepBoth, cancel } = useImageImporter();
   const [releasing, setReleasing] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
-  const [sysStats, setSysStats] = useState<SysStats | null>(null);
+  const [displayStats, setDisplayStats] = useState<SysStats | null>(null);
+  const targetStatsRef = useRef<SysStats | null>(null);
+  const currentVramRef = useRef<number | null>(null);
+  const currentRamRef = useRef<number>(0);
   const [isQueueOpen, setIsQueueOpen] = useState(false);
   const queueWrapperRef = useRef<HTMLDivElement>(null);
   useWebSocket();
 
+  // Polling — only updates the target; display is driven by the rAF loop below
   useEffect(() => {
     const poll = async () => {
       try {
         const res = await fetch('/api/workflow/system-stats');
-        if (res.ok) setSysStats(await res.json());
+        if (res.ok) {
+          const data: SysStats = await res.json();
+          if (targetStatsRef.current === null) {
+            // First value: seed the running values so there's no initial jump
+            currentVramRef.current = data.vram;
+            currentRamRef.current = data.ram;
+          }
+          targetStatsRef.current = data;
+        }
       } catch { /* ComfyUI not ready yet */ }
     };
     poll();
-    const timer = setInterval(poll, 3000);
+    const timer = setInterval(poll, 2000);
     return () => clearInterval(timer);
+  }, []);
+
+  // Continuous rAF loop — lerps display toward target every frame
+  useEffect(() => {
+    const LERP = 0.012;
+    let rafId: number;
+    const frame = () => {
+      rafId = requestAnimationFrame(frame);
+      const target = targetStatsRef.current;
+      if (!target) return;
+      currentVramRef.current = currentVramRef.current !== null && target.vram !== null
+        ? currentVramRef.current + (target.vram - currentVramRef.current) * LERP
+        : target.vram;
+      currentRamRef.current = currentRamRef.current + (target.ram - currentRamRef.current) * LERP;
+      const roundedVram = currentVramRef.current !== null ? Math.round(currentVramRef.current) : null;
+      const roundedRam = Math.round(currentRamRef.current);
+      setDisplayStats((prev) => {
+        if (prev?.vram === roundedVram && prev?.ram === roundedRam) return prev;
+        return { vram: roundedVram, ram: roundedRam };
+      });
+    };
+    rafId = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(rafId);
   }, []);
 
   useEffect(() => {
@@ -176,45 +216,47 @@ export function App() {
       }}>
         <TabSwitcher />
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
-          <button
-            onClick={handleReleaseMemory}
-            disabled={!clientId || releasing}
-            title="释放显存/内存"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 'var(--spacing-xs)',
-              padding: 'var(--spacing-sm) var(--spacing-md)',
-              backgroundColor: 'transparent',
-              color: releasing ? 'var(--color-text-secondary)' : 'var(--color-error)',
-              border: '1px solid',
-              borderColor: releasing ? 'var(--color-border)' : 'var(--color-error)',
-              borderRadius: 0,
-              fontSize: '12px',
-              fontWeight: 600,
-              cursor: (!clientId || releasing) ? 'not-allowed' : 'pointer',
-              opacity: (!clientId || releasing) ? 0.5 : 1,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            <Trash2 size={14} />
-            {releasing ? '释放中...' : '释放显存'}
-            {sysStats && !releasing && (
-              <span style={{ display: 'flex', alignItems: 'center', gap: 5, marginLeft: 4, paddingLeft: 6, borderLeft: '1px solid currentColor', opacity: 0.9 }}>
-                {sysStats.vram !== null && (
-                  <span style={{ fontSize: '11px', fontWeight: 700, color: usageColor(sysStats.vram) }}>
-                    显存{sysStats.vram}%
+          {/* Release memory button + stats — stats sit outside the button so queue-disabled state doesn't dim them */}
+          <div style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}>
+            <button
+              onClick={handleReleaseMemory}
+              disabled={!clientId || releasing || hasAnyProcessing}
+              title={hasAnyProcessing ? '队列执行中，无法释放' : '释放显存/内存'}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 'var(--spacing-xs)',
+                padding: 'var(--spacing-sm) var(--spacing-md)',
+                backgroundColor: 'transparent',
+                color: 'var(--color-text-secondary)',
+                border: 'none',
+                borderRadius: 0,
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: (!clientId || releasing || hasAnyProcessing) ? 'not-allowed' : 'pointer',
+                opacity: (!clientId || releasing || hasAnyProcessing) ? 0.45 : 1,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <Trash2 size={14} />
+              {releasing ? '释放中...' : '释放显存'}
+            </button>
+            {displayStats && (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 5, paddingLeft: 6, paddingRight: 10, borderLeft: '1px solid var(--color-border)' }}>
+                {displayStats.vram !== null && (
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: usageColor(displayStats.vram) }}>
+                    显存{displayStats.vram}%
                   </span>
                 )}
-                {sysStats.vram !== null && (
+                {displayStats.vram !== null && (
                   <span style={{ fontSize: '11px', opacity: 0.35 }}>·</span>
                 )}
-                <span style={{ fontSize: '11px', fontWeight: 700, color: usageColor(sysStats.ram) }}>
-                  内存{sysStats.ram}%
+                <span style={{ fontSize: '11px', fontWeight: 700, color: usageColor(displayStats.ram) }}>
+                  内存{displayStats.ram}%
                 </span>
               </span>
             )}
-          </button>
+          </div>
 
           {/* Queue manager */}
           <div ref={queueWrapperRef} style={{ position: 'relative' }}>

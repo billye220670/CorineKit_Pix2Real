@@ -52,8 +52,8 @@ export function TabSwitcher() {
         const img = tabEntry.images.find((i) => i.id === id);
         if (!img) continue;
         const outputs = tabEntry.tasks[id]?.outputs ?? [];
-        if (outputs.length > 0) {
-          const selectedIdx = tabEntry.selectedOutputIndex?.[id] ?? (outputs.length - 1);
+        const selectedIdx = tabEntry.selectedOutputIndex?.[id] ?? (outputs.length - 1);
+        if (outputs.length > 0 && selectedIdx !== -1) {
           const selected = outputs[selectedIdx] ?? outputs[outputs.length - 1];
           try {
             const res = await fetch(selected.url);

@@ -1,13 +1,16 @@
 import { useRef, useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
+interface StripItem {
+  filename: string;
+  url: string;
+  isVideo: boolean;
+}
+
 interface ThumbnailStripProps {
-  outputs: Array<{ filename: string; url: string }>;
+  items: StripItem[];
   selectedIndex: number;
   onSelect: (index: number) => void;
-  onHover: (index: number) => void;
-  onHoverEnd: () => void;
-  isVideoWorkflow: boolean;
 }
 
 interface ThumbDims {
@@ -25,12 +28,9 @@ function dimsForWidth(w: number): ThumbDims {
 }
 
 export function ThumbnailStrip({
-  outputs,
+  items,
   selectedIndex,
   onSelect,
-  onHover,
-  onHoverEnd,
-  isVideoWorkflow,
 }: ThumbnailStripProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const rowRef = useRef<HTMLDivElement>(null);
@@ -50,7 +50,7 @@ export function ThumbnailStrip({
     setDims(dimsForWidth(container.clientWidth));
     setHasOverflow(row.scrollWidth > row.clientWidth);
     return () => obs.disconnect();
-  }, [outputs]);
+  }, [items]);
 
   useEffect(() => {
     const row = rowRef.current;
@@ -61,12 +61,12 @@ export function ThumbnailStrip({
 
   const handlePrev = (e: React.MouseEvent) => {
     e.stopPropagation();
-    onSelect((selectedIndex - 1 + outputs.length) % outputs.length);
+    onSelect((selectedIndex - 1 + items.length) % items.length);
   };
 
   const handleNext = (e: React.MouseEvent) => {
     e.stopPropagation();
-    onSelect((selectedIndex + 1) % outputs.length);
+    onSelect((selectedIndex + 1) % items.length);
   };
 
   const stripHeight = dims.h + dims.pad * 2;
@@ -86,7 +86,6 @@ export function ThumbnailStrip({
       }}
       onClick={(e) => e.stopPropagation()}
     >
-      {/* Prev arrow */}
       <button
         onClick={handlePrev}
         style={{
@@ -109,7 +108,6 @@ export function ThumbnailStrip({
         <ChevronLeft size={dims.arrowSize} />
       </button>
 
-      {/* Thumbnail row */}
       <div
         ref={rowRef}
         className="no-scrollbar"
@@ -123,12 +121,10 @@ export function ThumbnailStrip({
           alignItems: 'center',
         }}
       >
-        {outputs.map((output, i) => (
+        {items.map((item, i) => (
           <button
             key={i}
             onClick={(e) => { e.stopPropagation(); onSelect(i); }}
-            onMouseEnter={(e) => { e.stopPropagation(); onHover(i); }}
-            onMouseLeave={(e) => { e.stopPropagation(); onHoverEnd(); }}
             style={{
               flexShrink: 0,
               width: dims.w,
@@ -144,9 +140,9 @@ export function ThumbnailStrip({
               transition: 'opacity 0.15s, outline-color 0.15s',
             }}
           >
-            {isVideoWorkflow ? (
+            {item.isVideo ? (
               <video
-                src={output.url}
+                src={item.url}
                 preload="metadata"
                 muted
                 playsInline
@@ -154,8 +150,8 @@ export function ThumbnailStrip({
               />
             ) : (
               <img
-                src={output.url}
-                alt={output.filename}
+                src={item.url}
+                alt={item.filename}
                 style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
               />
             )}
@@ -163,7 +159,6 @@ export function ThumbnailStrip({
         ))}
       </div>
 
-      {/* Next arrow */}
       <button
         onClick={handleNext}
         style={{

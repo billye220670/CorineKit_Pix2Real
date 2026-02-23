@@ -298,7 +298,7 @@ export function PhotoWall() {
           )}
 
           <button
-            onClick={isMultiSelectMode ? handleBatchDelete : clearCurrentImages}
+            onClick={isMultiSelectMode ? handleBatchDelete : () => { if (window.confirm('清空当前所有图片？')) clearCurrentImages(); }}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -346,11 +346,13 @@ export function PhotoWall() {
       {/* Scrollable photo wall */}
       <div style={{ flex: 1, overflow: 'auto', padding: 'var(--spacing-lg)' }}>
         <div style={{
-          columnWidth: VIEW_CONFIG[viewSize].columnWidth,
-          columnGap: 'var(--spacing-md)',
+          display: 'grid',
+          gridTemplateColumns: `repeat(auto-fill, minmax(${VIEW_CONFIG[viewSize].columnWidth}, 1fr))`,
+          gap: 'var(--spacing-md)',
+          alignItems: 'start',
         }}>
           {images.map((img) => (
-            <div key={img.id} id={`card-${img.id}`} style={{ breakInside: 'avoid', marginBottom: 'var(--spacing-md)' }}>
+            <div key={img.id} id={`card-${img.id}`}>
               <ImageCard
                 image={img}
                 isMultiSelectMode={isMultiSelectMode}

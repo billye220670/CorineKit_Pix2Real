@@ -1,5 +1,5 @@
 import { useCallback, useState, useRef } from 'react';
-import { X, Play, Check, AlertCircle } from 'lucide-react';
+import { X, Play, RotateCcw, Check, AlertCircle } from 'lucide-react';
 import { useWorkflowStore } from '../hooks/useWorkflowStore.js';
 import { useWebSocket } from '../hooks/useWebSocket.js';
 import { ProgressOverlay } from './ProgressOverlay.js';
@@ -34,7 +34,6 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
 
   const [isHovered, setIsHovered] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [hoverOutputIdx, setHoverOutputIdx] = useState<number | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressFired = useRef(false);
@@ -48,8 +47,18 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
   const canExecute = !!clientId && !isProcessing;
 
   const outputs = task?.outputs ?? [];
-  const effectiveIdx = hoverOutputIdx ?? selectedOutputIdx;
-  const displayOutput = outputs[effectiveIdx] ?? null;
+  const displayOutput = selectedOutputIdx === -1 ? null : (outputs[selectedOutputIdx] ?? null);
+
+  // Strip items: original always first, then generated outputs
+  const originalIsVideo = image.file.type.startsWith('video/');
+  const stripItems = outputs.length > 0
+    ? [
+        { filename: 'original', url: image.previewUrl, isVideo: originalIsVideo },
+        ...outputs.map((o) => ({ ...o, isVideo: isVideoWorkflow })),
+      ]
+    : [];
+  // Map store index (-1 = original) to strip index (0 = original)
+  const stripSelectedIndex = selectedOutputIdx === -1 ? 0 : selectedOutputIdx + 1;
 
   const cancelLongPress = useCallback(() => {
     if (longPressTimer.current) {
@@ -222,8 +231,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
                 left: 0,
                 width: '100%',
                 display: 'block',
-                opacity: hoverOutputIdx !== null ? 1 : (isHovered ? 0 : 1),
-                transition: 'opacity 0.2s ease',
+                opacity: 1,
                 pointerEvents: 'none',
               }}
             />
@@ -237,22 +245,6 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
             progress={progress}
             onCancel={status === 'queued' ? handleCancelQueue : undefined}
           />
-        )}
-
-        {/* Done badge */}
-        {status === 'done' && (
-          <div style={{
-            position: 'absolute',
-            top: 'var(--spacing-sm)',
-            left: 'var(--spacing-sm)',
-            backgroundColor: 'var(--color-success)',
-            color: '#fff',
-            padding: 'var(--spacing-xs)',
-            display: 'flex',
-            alignItems: 'center',
-          }}>
-            <Check size={16} />
-          </div>
         )}
 
         {/* Error badge */}
@@ -316,15 +308,18 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
           </div>
         )}
 
-        {/* Thumbnail strip for multiple outputs */}
-        {outputs.length > 1 && (
+        {/* Thumbnail strip: original + generated outputs */}
+        {stripItems.length > 0 && (
           <ThumbnailStrip
-            outputs={outputs}
-            selectedIndex={selectedOutputIdx}
-            onSelect={(i) => setSelectedOutputIndex(image.id, i)}
-            onHover={(i) => setHoverOutputIdx(i)}
-            onHoverEnd={() => setHoverOutputIdx(null)}
-            isVideoWorkflow={isVideoWorkflow}
+            items={stripItems}
+            selectedIndex={stripSelectedIndex}
+            onSelect={(i) => {
+              if (i === 0) {
+                setSelectedOutputIndex(image.id, -1);
+              } else {
+                setSelectedOutputIndex(image.id, i - 1);
+              }
+            }}
           />
         )}
       </div>
@@ -377,7 +372,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              backgroundColor: 'var(--color-primary)',
+              backgroundColor: status === 'done' ? 'var(--color-success)' : 'var(--color-primary)',
               color: '#ffffff',
               border: 'none',
               borderRadius: 0,
@@ -385,7 +380,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
               opacity: canExecute ? 1 : 0.5,
             }}
           >
-            <Play size={13} />
+            {status === 'done' ? <RotateCcw size={13} /> : <Play size={13} />}
           </button>
         </div>
       </div>
