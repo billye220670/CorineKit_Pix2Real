@@ -6,6 +6,7 @@ import { ProgressOverlay } from './ProgressOverlay.js';
 import { ThumbnailStrip } from './ThumbnailStrip.js';
 import { useMaskStore } from '../hooks/useMaskStore.js';
 import { maskKey, TAB_MASK_MODE } from '../config/maskConfig.js';
+import { showToast } from '../hooks/useToast.js';
 import type { ImageItem } from '../types/index.js';
 
 interface ImageCardProps {
@@ -16,7 +17,6 @@ interface ImageCardProps {
   onLongPress: () => void;
   onToggleSelect: () => void;
 }
-
 export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, onLongPress, onToggleSelect }: ImageCardProps) {
   const activeTab = useWorkflowStore((s) => s.activeTab);
   const workflows = useWorkflowStore((s) => s.workflows);
@@ -53,6 +53,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
   const currentMaskKey = maskKey(image.id, currentMaskOutputIndex);
   const hasMask = useMaskStore((s) => !!s.masks[currentMaskKey]);
   const deleteMask = useMaskStore((s) => s.deleteMask);
+  const openEditor = useMaskStore((s) => s.openEditor);
 
   const [maskMenuOpen, setMaskMenuOpen] = useState(false);
 
@@ -69,7 +70,6 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
     : [];
   // Map store index (-1 = original) to strip index (0 = original)
   const stripSelectedIndex = selectedOutputIdx === -1 ? 0 : selectedOutputIdx + 1;
-
   const cancelLongPress = useCallback(() => {
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current);
@@ -129,12 +129,11 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
   const handleDragEnd = useCallback(() => {
     setIsDragging(false);
   }, []);
-
   const handleCancelQueue = useCallback(async () => {
     const promptId = task?.promptId;
     if (!promptId) return;
     try {
-      await fetch(`/api/workflow/cancel-queue/${promptId}`, { method: 'POST' });
+    await fetch(`/api/workflow/cancel-queue/${promptId}`, { method: 'POST' });
     } catch {
       // best-effort; reset UI regardless
     }
@@ -172,7 +171,33 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
       console.error('Execute error:', err);
     }
   }, [clientId, image, activeTab, prompts, startTask, sendMessage]);
+  const openMaskEditor = useCallback(() => {
+    if (tabMaskMode === 'none') return;
 
+    if (tabMaskMode === 'B') {
+      if (selectedOutputIdx < 0 || !outputs[selectedOutputIdx]) {
+        showToast("请先执行工作流以获得结果图，再打开蒙版编辑器");
+        return;
+      }
+      openEditor({
+        imageId: image.id,
+        outputIndex: selectedOutputIdx,
+        mode: 'B',
+        originalUrl: image.previewUrl,
+        resultUrl: outputs[selectedOutputIdx].url,
+        resultFilename: outputs[selectedOutputIdx].filename,
+      });
+      return;
+    }
+
+    // Mode A
+    openEditor({
+      imageId: image.id,
+      outputIndex: -1,
+      mode: 'A',
+      originalUrl: image.previewUrl,
+    });
+  }, [tabMaskMode, selectedOutputIdx, outputs, image, openEditor]);
   return (
     <div
       draggable={!isProcessing}
@@ -206,6 +231,11 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
           src={image.previewUrl}
           alt={image.originalName}
           style={{ width: '100%', display: 'block' }}
+          onDoubleClick={(e) => {
+            if (isVideoWorkflow) return;
+            e.stopPropagation();
+            openMaskEditor();
+          }}
         />
 
         {/* Output overlay */}
@@ -244,10 +274,14 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
                 opacity: 1,
                 pointerEvents: 'none',
               }}
+              onDoubleClick={(e) => {
+                if (isVideoWorkflow) return;
+                e.stopPropagation();
+                openMaskEditor();
+              }}
             />
           )
         )}
-
         {/* Progress overlay */}
         {(status === 'queued' || status === 'processing') && (
           <ProgressOverlay
@@ -344,10 +378,10 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
                     onClick={(e) => {
                       e.stopPropagation();
                       setMaskMenuOpen(false);
-                      // TODO: open editor (Task 3)
+                      openMaskEditor();
                     }}
                   >
-                    {hasMask ? '编辑蒙版' : '新建蒙版'}
+                    {hasMask ? "编辑蒙版" : "新建蒙版"}
                   </button>
                   <button
                     disabled={!hasMask}
@@ -375,8 +409,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
               </>
             )}
           </div>
-        )}
-        {/* Remove button — hidden in multi-select mode */}
+        )}        {/* Remove button — hidden in multi-select mode */}
         {!isProcessing && !isMultiSelectMode && isHovered && (
           <button
             onClick={(e) => { e.stopPropagation(); removeImage(image.id); }}
@@ -450,7 +483,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
         <div style={{ display: 'flex', gap: 'var(--spacing-sm)', alignItems: 'flex-start' }}>
           {needsPrompt && (
             <textarea
-              placeholder={activeTab === 3 ? '输入提示词（留空使用默认）' : '额外提示词（可选）'}
+              placeholder={activeTab === 3 ? "输入提示词（留空使用默认）" : "额外提示词（可选）"}
               value={prompts[image.id] || ''}
               onChange={(e) => setPrompt(image.id, e.target.value)}
               disabled={isProcessing}
@@ -474,7 +507,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
           <button
             onClick={(e) => { e.stopPropagation(); handleExecute(); }}
             disabled={!canExecute}
-            title={status === 'done' ? '重新生成' : '执行'}
+            title={status === 'done' ? "重新生成" : "执行"}
             style={{
               flexShrink: 0,
               height: 28,
