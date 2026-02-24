@@ -8,6 +8,7 @@ import { PhotoWall } from './PhotoWall.js';
 import { ThemeToggle } from './ThemeToggle.js';
 import { Upload, Trash2, ListOrdered } from 'lucide-react';
 import { Toast } from './Toast.js';
+import { MaskEditor } from './MaskEditor.js';
 import { QueuePanel } from './QueuePanel.js';
 
 interface SysStats { vram: number | null; ram: number; }
@@ -415,6 +416,7 @@ export function App() {
       )}
 
       <Toast />
+      <MaskEditor />
     </div>
   );
 }
