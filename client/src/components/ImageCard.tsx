@@ -1,9 +1,11 @@
 import { useCallback, useState, useRef } from 'react';
-import { X, Play, RotateCcw, Check, AlertCircle } from 'lucide-react';
+import { X, Play, RotateCcw, Check, AlertCircle, Layers, ChevronDown } from 'lucide-react';
 import { useWorkflowStore } from '../hooks/useWorkflowStore.js';
 import { useWebSocket } from '../hooks/useWebSocket.js';
 import { ProgressOverlay } from './ProgressOverlay.js';
 import { ThumbnailStrip } from './ThumbnailStrip.js';
+import { useMaskStore } from '../hooks/useMaskStore.js';
+import { maskKey, TAB_MASK_MODE } from '../config/maskConfig.js';
 import type { ImageItem } from '../types/index.js';
 
 interface ImageCardProps {
@@ -45,6 +47,14 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
   const isVideoWorkflow = activeTab === 3 || activeTab === 4;
   const isProcessing = status === 'processing' || status === 'queued';
   const canExecute = !!clientId && !isProcessing;
+  const tabMaskMode = TAB_MASK_MODE[activeTab] ?? 'none';
+  const showMaskUI = tabMaskMode !== 'none';
+  const currentMaskOutputIndex = tabMaskMode === 'B' ? selectedOutputIdx : -1;
+  const currentMaskKey = maskKey(image.id, currentMaskOutputIndex);
+  const hasMask = useMaskStore((s) => !!s.masks[currentMaskKey]);
+  const deleteMask = useMaskStore((s) => s.deleteMask);
+
+  const [maskMenuOpen, setMaskMenuOpen] = useState(false);
 
   const outputs = task?.outputs ?? [];
   const displayOutput = selectedOutputIdx === -1 ? null : (outputs[selectedOutputIdx] ?? null);
@@ -266,6 +276,106 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
           </div>
         )}
 
+        {/* Mask icon overlay + dropdown */}
+        {showMaskUI && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 6,
+              left: 6,
+              zIndex: 10,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 2,
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                background: 'rgba(0,0,0,0.45)',
+                borderRadius: 6,
+                padding: '2px 4px',
+                gap: 2,
+                cursor: 'pointer',
+                userSelect: 'none',
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setMaskMenuOpen((v) => !v);
+              }}
+            >
+              <Layers size={14} color={hasMask ? '#4ade80' : '#9ca3af'} />
+              <ChevronDown size={11} color="#d1d5db" />
+            </div>
+
+            {maskMenuOpen && (
+              <>
+                <div
+                  style={{ position: 'fixed', inset: 0, zIndex: 9 }}
+                  onClick={() => setMaskMenuOpen(false)}
+                />
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 24,
+                    left: 0,
+                    zIndex: 20,
+                    background: 'var(--card-bg, #1e1e1e)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: 6,
+                    minWidth: 140,
+                    overflow: 'hidden',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+                  }}
+                >
+                  <button
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      padding: '7px 12px',
+                      textAlign: 'left',
+                      background: 'none',
+                      border: 'none',
+                      color: '#e5e7eb',
+                      fontSize: 13,
+                      cursor: 'pointer',
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMaskMenuOpen(false);
+                      // TODO: open editor (Task 3)
+                    }}
+                  >
+                    {hasMask ? '编辑蒙版' : '新建蒙版'}
+                  </button>
+                  <button
+                    disabled={!hasMask}
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      padding: '7px 12px',
+                      textAlign: 'left',
+                      background: 'none',
+                      border: 'none',
+                      color: hasMask ? '#f87171' : '#6b7280',
+                      fontSize: 13,
+                      cursor: hasMask ? 'pointer' : 'not-allowed',
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!hasMask) return;
+                      deleteMask(currentMaskKey);
+                      setMaskMenuOpen(false);
+                    }}
+                  >
+                    删除蒙版
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
         {/* Remove button — hidden in multi-select mode */}
         {!isProcessing && !isMultiSelectMode && isHovered && (
           <button
