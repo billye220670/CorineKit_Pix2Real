@@ -363,7 +363,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
               zIndex: 10,
               display: 'flex',
               alignItems: 'center',
-              gap: 2,
+              gap: 4,
             }}
           >
             <div
@@ -451,33 +451,27 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
                 </div>
               </>
             )}
-          </div>
-        )}
 
-        {/* 后位 LoRA toggle — workflow 5 only, bottom-left of image */}
-        {activeTab === 5 && (
-          <button
-            onClick={(e) => { e.stopPropagation(); toggleBackPose(image.id); }}
-            title={backPose ? '后位模式：开启' : '后位模式：关闭'}
-            style={{
-              position: 'absolute',
-              bottom: 6,
-              left: 6,
-              zIndex: 10,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 28,
-              height: 28,
-              background: backPose ? 'rgba(59,130,246,0.85)' : 'rgba(0,0,0,0.45)',
-              border: backPose ? '1px solid rgba(147,197,253,0.6)' : '1px solid rgba(255,255,255,0.15)',
-              borderRadius: 6,
-              cursor: 'pointer',
-              padding: 0,
-            }}
-          >
-            <Footprints size={14} color={backPose ? '#dbeafe' : '#9ca3af'} />
-          </button>
+            {/* 后位 LoRA toggle — workflow 5 only */}
+            {activeTab === 5 && (
+              <button
+                onClick={(e) => { e.stopPropagation(); toggleBackPose(image.id); }}
+                title={backPose ? '后位模式：开启' : '后位模式：关闭'}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '2px 4px',
+                  background: backPose ? 'rgba(59,130,246,0.85)' : 'rgba(0,0,0,0.45)',
+                  border: backPose ? '1px solid rgba(147,197,253,0.6)' : '1px solid rgba(255,255,255,0.15)',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                }}
+              >
+                <Footprints size={14} color={backPose ? '#dbeafe' : '#9ca3af'} />
+              </button>
+            )}
+          </div>
         )}
 
         {/* Remove button — hidden in multi-select mode */}
