@@ -38,6 +38,7 @@ export function PhotoWall() {
   const flashingImageId = useWorkflowStore((s) => s.flashingImageId);
   const deleteMask = useMaskStore((s) => s.deleteMask);
   const masks = useMaskStore((s) => s.masks);
+  const backPoseToggles = useWorkflowStore((s) => s.tabData[s.activeTab]?.backPoseToggles ?? {});
   const { sendMessage } = useWebSocket();
 
   const [viewSize, setViewSize] = useState<ViewSize>(getInitialViewSize);
@@ -47,6 +48,22 @@ export function PhotoWall() {
   const selectedCount = selectedImageIds.length;
   const allSelected = images.length > 0 && selectedCount === images.length;
   const someSelected = selectedCount > 0 && selectedCount < images.length;
+
+  const maskEntryToBlob = useCallback(async (entry: import('../hooks/useMaskStore.js').MaskEntry): Promise<Blob> => {
+    const { data, workingWidth: w, workingHeight: h } = entry;
+    const oc = new OffscreenCanvas(w, h);
+    const ctx = oc.getContext('2d')!;
+    const id = new ImageData(w, h);
+    for (let i = 0; i < data.length; i += 4) {
+      const v = data[i + 3] > 0 ? 255 : 0;
+      id.data[i]     = v;
+      id.data[i + 1] = v;
+      id.data[i + 2] = v;
+      id.data[i + 3] = 255;
+    }
+    ctx.putImageData(id, 0, 0);
+    return oc.convertToBlob({ type: 'image/png' });
+  }, []);
 
   const handleSelectAll = useCallback(() => {
     if (allSelected) {
@@ -58,13 +75,17 @@ export function PhotoWall() {
 
   const hasIdle = images.some((img) => {
     const task = tasks[img.id];
-    return !task || task.status === 'idle';
+    if (task && task.status !== 'idle') return false;
+    if (activeTab === 5 && !masks[maskKey(img.id, -1)]) return false;
+    return true;
   });
 
   const hasIdleSelected = images.some((img) => {
     if (!selectedImageIds.includes(img.id)) return false;
     const task = tasks[img.id];
-    return !task || task.status === 'idle';
+    if (task && task.status !== 'idle') return false;
+    if (activeTab === 5 && !masks[maskKey(img.id, -1)]) return false;
+    return true;
   });
 
   const handleViewSizeChange = useCallback((size: ViewSize) => {
@@ -95,30 +116,51 @@ export function PhotoWall() {
       const task = tasks[img.id];
       if (task && task.status !== 'idle') continue;
 
+      // ── Workflow 5: 解除装备 ──────────────────────────────────────
+      if (activeTab === 5) {
+        const maskEntry = masks[maskKey(img.id, -1)];
+        if (!maskEntry) continue; // skip: no mask painted for this image
+
+        const maskBlob = await maskEntryToBlob(maskEntry);
+        const backPose = backPoseToggles[img.id] ?? false;
+
+        const formData = new FormData();
+        formData.append('image',    img.file);
+        formData.append('mask',     maskBlob, 'mask.png');
+        formData.append('clientId', clientId);
+        formData.append('prompt',   prompts[img.id] || '');
+        formData.append('backPose', String(backPose));
+
+        try {
+          const res = await fetch(`/api/workflow/5/execute?clientId=${clientId}`, {
+            method: 'POST',
+            body: formData,
+          });
+          if (!res.ok) { console.error('Execute failed:', await res.text()); continue; }
+          const data = await res.json();
+          startTask(img.id, data.promptId);
+          sendMessage({ type: 'register', promptId: data.promptId, workflowId: 5 });
+        } catch (err) {
+          console.error('Execute error:', err);
+        }
+        continue;
+      }
+
+      // ── Generic workflows ─────────────────────────────────────────
       const formData = new FormData();
-      formData.append('image', img.file);
+      formData.append('image',    img.file);
       formData.append('clientId', clientId);
-      formData.append('prompt', prompts[img.id] || '');
+      formData.append('prompt',   prompts[img.id] || '');
 
       try {
         const res = await fetch(`/api/workflow/${activeTab}/execute?clientId=${clientId}`, {
           method: 'POST',
           body: formData,
         });
-
-        if (!res.ok) {
-          console.error('Execute failed:', await res.text());
-          continue;
-        }
-
+        if (!res.ok) { console.error('Execute failed:', await res.text()); continue; }
         const data = await res.json();
         startTask(img.id, data.promptId);
-
-        sendMessage({
-          type: 'register',
-          promptId: data.promptId,
-          workflowId: activeTab,
-        });
+        sendMessage({ type: 'register', promptId: data.promptId, workflowId: activeTab });
       } catch (err) {
         console.error('Execute error:', err);
       }
@@ -382,11 +424,17 @@ export function PhotoWall() {
       </div>
 
       {/* Scrollable photo wall */}
-      <div style={{ flex: 1, overflow: 'auto', padding: 'var(--spacing-lg)' }}>
-        <div style={{
-          columns: `auto ${VIEW_CONFIG[viewSize].columnWidth}`,
-          columnGap: 'var(--spacing-md)',
-        }}>
+      <div
+        style={{ flex: 1, overflow: 'auto', padding: 'var(--spacing-lg)' }}
+        onClick={(e) => { if (isMultiSelectMode && e.target === e.currentTarget) clearSelection(); }}
+      >
+        <div
+          style={{
+            columns: `auto ${VIEW_CONFIG[viewSize].columnWidth}`,
+            columnGap: 'var(--spacing-md)',
+          }}
+          onClick={(e) => { if (isMultiSelectMode && e.target === e.currentTarget) clearSelection(); }}
+        >
           {images.map((img) => (
             <div key={img.id} id={`card-${img.id}`} style={{ breakInside: 'avoid', marginBottom: 'var(--spacing-md)' }}>
               <ImageCard
