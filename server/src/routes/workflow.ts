@@ -5,13 +5,19 @@ import { fileURLToPath } from 'url';
 import { exec } from 'child_process';
 import multer from 'multer';
 import { getAdapter, adapters } from '../adapters/index.js';
+import { workflow5Adapter } from '../adapters/Workflow5Adapter.js';
 import { uploadImage, uploadVideo, queuePrompt, deleteQueueItem, getSystemStats, getQueue, prioritizeQueueItem, getHistory, getImageBuffer } from '../services/comfyui.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const releaseMemoryTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-释放内存.json');
+const removeEquipTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-解除装备Fixed.json');
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
+const uploadFields = multer({ storage: multer.memoryStorage() }).fields([
+  { name: 'image', maxCount: 1 },
+  { name: 'mask', maxCount: 1 },
+]);
 
 // GET /api/workflows - list all workflows
 router.get('/', (_req, res) => {
@@ -22,6 +28,60 @@ router.get('/', (_req, res) => {
     basePrompt: a.basePrompt,
   }));
   res.json(list);
+});
+
+// POST /api/workflow/5/execute — 解除装备: requires both original image and mask
+router.post('/5/execute', uploadFields, async (req, res) => {
+  try {
+    const files = req.files as Record<string, Express.Multer.File[]> | undefined;
+    const imageFile = files?.['image']?.[0];
+    const maskFile  = files?.['mask']?.[0];
+
+    if (!imageFile) {
+      res.status(400).json({ error: 'No image file provided' });
+      return;
+    }
+    if (!maskFile) {
+      res.status(400).json({ error: 'No mask file provided' });
+      return;
+    }
+
+    const clientId = (req.query.clientId as string | undefined) || req.body.clientId;
+    if (!clientId) {
+      res.status(400).json({ error: 'clientId is required' });
+      return;
+    }
+
+    const backPose  = req.body.backPose === 'true';
+    const userPrompt: string = req.body.prompt || '';
+
+    // Upload both files to ComfyUI
+    const originalFilename = await uploadImage(imageFile.buffer, imageFile.originalname);
+    const maskFilename     = await uploadImage(maskFile.buffer,  maskFile.originalname);
+
+    // Patch template
+    const template = JSON.parse(fs.readFileSync(removeEquipTemplatePath, 'utf-8'));
+    template['313'].inputs.image   = originalFilename;
+    template['385'].inputs.image   = maskFilename;
+    template['389'].inputs.boolean = backPose;
+    template['315'].inputs.seed    = Math.floor(Math.random() * 1125899906842624);
+    // Prompt: user text replaces default entirely; empty = keep JSON default
+    if (userPrompt.trim()) {
+      template['314'].inputs.text = userPrompt.trim();
+    }
+
+    const result = await queuePrompt(template, clientId);
+
+    res.json({
+      promptId:     result.prompt_id,
+      clientId,
+      workflowId:   5,
+      workflowName: workflow5Adapter.name,
+    });
+  } catch (err: any) {
+    console.error('[Workflow 5 Execute Error]', err);
+    res.status(500).json({ error: err.message || 'Internal server error' });
+  }
 });
 
 // POST /api/workflow/:id/execute - execute single image
