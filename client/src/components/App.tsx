@@ -65,6 +65,7 @@ export function App() {
   const currentVramRef = useRef<number | null>(null);
   const currentRamRef = useRef<number>(0);
   const [isQueueOpen, setIsQueueOpen] = useState(false);
+  const [queueCount, setQueueCount] = useState(0);
   const queueWrapperRef = useRef<HTMLDivElement>(null);
   useWebSocket();
 
@@ -83,6 +84,22 @@ export function App() {
           targetStatsRef.current = data;
         }
       } catch { /* ComfyUI not ready yet */ }
+    };
+    poll();
+    const timer = setInterval(poll, 2000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Queue count polling — drives the badge on the queue button
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const res = await fetch('/api/workflow/queue');
+        if (res.ok) {
+          const data = await res.json() as { running: unknown[]; pending: unknown[] };
+          setQueueCount(data.running.length + data.pending.length);
+        }
+      } catch { /* ComfyUI not ready */ }
     };
     poll();
     const timer = setInterval(poll, 2000);
@@ -282,6 +299,28 @@ export function App() {
             >
               <ListOrdered size={14} />
               管理队列
+              {queueCount > 0 && (
+                <span style={{
+                  position: 'absolute',
+                  top: '-6px',
+                  right: '-6px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minWidth: '16px',
+                  height: '16px',
+                  padding: '0 4px',
+                  borderRadius: '8px',
+                  backgroundColor: 'var(--color-primary)',
+                  color: '#fff',
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  lineHeight: 1,
+                  pointerEvents: 'none',
+                }}>
+                  {queueCount}
+                </span>
+              )}
             </button>
             {isQueueOpen && <QueuePanel onClose={() => setIsQueueOpen(false)} />}
           </div>

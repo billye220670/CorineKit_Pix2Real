@@ -1,7 +1,9 @@
 import { useState, useCallback } from 'react';
 import { useWorkflowStore } from '../hooks/useWorkflowStore.js';
+import { useMaskStore } from '../hooks/useMaskStore.js';
+import { maskKey } from '../config/maskConfig.js';
 import { ImageCard } from './ImageCard.js';
-import { Play, Trash2, FolderOpen, LayoutGrid, Type, Check, Minus } from 'lucide-react';
+import { Play, Trash2, FolderOpen, LayoutGrid, Type, Check, Minus, Eraser } from 'lucide-react';
 import { useWebSocket } from '../hooks/useWebSocket.js';
 
 type ViewSize = 'small' | 'medium' | 'large';
@@ -34,6 +36,8 @@ export function PhotoWall() {
   const toggleImageSelection = useWorkflowStore((s) => s.toggleImageSelection);
   const clearSelection = useWorkflowStore((s) => s.clearSelection);
   const flashingImageId = useWorkflowStore((s) => s.flashingImageId);
+  const deleteMask = useMaskStore((s) => s.deleteMask);
+  const masks = useMaskStore((s) => s.masks);
   const { sendMessage } = useWebSocket();
 
   const [viewSize, setViewSize] = useState<ViewSize>(getInitialViewSize);
@@ -122,15 +126,30 @@ export function PhotoWall() {
   };
 
   const handleBatchDelete = useCallback(() => {
+    if (!window.confirm(`确认删除所选的 ${selectedImageIds.length} 张图片？`)) return;
     removeImages(selectedImageIds);
   }, [selectedImageIds, removeImages]);
 
   const handleBulkReplacePrompts = useCallback(() => {
-    if (!bulkPrompt.trim()) return;
+    const isEmpty = !bulkPrompt.trim();
+    const msg = isEmpty
+      ? `确认将所选 ${selectedImageIds.length} 张图片的提示词全部清空？`
+      : `确认将所选 ${selectedImageIds.length} 张图片的提示词替换为「${bulkPrompt}」？`;
+    if (!window.confirm(msg)) return;
     const updates: Record<string, string> = {};
     selectedImageIds.forEach((id) => { updates[id] = bulkPrompt; });
     setPrompts(updates);
   }, [bulkPrompt, selectedImageIds, setPrompts]);
+
+  const handleBatchDeleteMasks = useCallback(() => {
+    const keysToDelete = Object.keys(masks).filter((k) =>
+      selectedImageIds.some((id) => k === maskKey(id, -1) || k.startsWith(id + ':'))
+    );
+    const count = keysToDelete.length;
+    if (count === 0) { window.alert('所选图片没有蒙版。'); return; }
+    if (!window.confirm(`确认删除所选 ${selectedImageIds.length} 张图片下的全部蒙版（共 ${count} 个）？`)) return;
+    keysToDelete.forEach((k) => deleteMask(k));
+  }, [masks, selectedImageIds, deleteMask]);
 
   const showExecuteButton = isMultiSelectMode ? hasIdleSelected : hasIdle;
 
@@ -192,21 +211,18 @@ export function PhotoWall() {
               />
               <button
                 onClick={handleBulkReplacePrompts}
-                disabled={!bulkPrompt.trim()}
-                title="替换所有选中图片的提示词"
+                title="替换所有选中图片的提示词（可为空以清空）"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   gap: 'var(--spacing-xs)',
                   padding: 'var(--spacing-xs) var(--spacing-sm)',
                   backgroundColor: 'transparent',
-                  color: bulkPrompt.trim() ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-                  border: '1px solid',
-                  borderColor: bulkPrompt.trim() ? 'var(--color-primary)' : 'var(--color-border)',
+                  color: 'var(--color-primary)',
+                  border: '1px solid var(--color-primary)',
                   borderRadius: 0,
                   fontSize: '12px',
-                  cursor: bulkPrompt.trim() ? 'pointer' : 'not-allowed',
-                  opacity: bulkPrompt.trim() ? 1 : 0.5,
+                  cursor: 'pointer',
                   flexShrink: 0,
                 }}
               >
@@ -272,6 +288,28 @@ export function PhotoWall() {
               }}
             >
               取消多选
+            </button>
+          )}
+
+          {isMultiSelectMode && (
+            <button
+              onClick={handleBatchDeleteMasks}
+              title="删除所选图片下的所有蒙版"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 'var(--spacing-xs)',
+                padding: 'var(--spacing-xs) var(--spacing-sm)',
+                backgroundColor: 'transparent',
+                color: 'var(--color-warning, #e8a020)',
+                border: '1px solid var(--color-warning, #e8a020)',
+                borderRadius: 0,
+                fontSize: '12px',
+                cursor: 'pointer',
+              }}
+            >
+              <Eraser size={12} />
+              删除蒙版
             </button>
           )}
 
