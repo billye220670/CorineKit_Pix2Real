@@ -1,6 +1,6 @@
 // client/src/components/MaskEditor.tsx
 import { useCallback, useRef, useState, useEffect } from 'react';
-import { X } from 'lucide-react';
+import { X, Eye, EyeOff } from 'lucide-react';
 import { useMaskStore } from '../hooks/useMaskStore.js';
 import { maskKey } from '../config/maskConfig.js';
 import { MaskCanvas, type ModeASubMode, type MaskCanvasHandle } from './MaskCanvas.js';
@@ -157,8 +157,17 @@ export function MaskEditor() {
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
   const [showExport, setShowExport] = useState(false);
+  const [showMaskOverlay, setShowMaskOverlay] = useState(false);
   const tKeyDown = useRef(false);
   const canvasHandleRef = useRef<MaskCanvasHandle | null>(null);
+
+  // Stable callback — does not change reference between renders, which keeps
+  // pushSnapshot/restoreSnapshot in MaskCanvas stable and prevents undo/invert
+  // effects from double-firing when React re-renders the editor.
+  const handleHistoryChange = useCallback((canUndo: boolean, canRedo: boolean) => {
+    setCanUndo(canUndo);
+    setCanRedo(canRedo);
+  }, []);
 
   const handleClose = useCallback(() => {
     if (editorState && canvasHandleRef.current) {
@@ -210,7 +219,7 @@ export function MaskEditor() {
 
   return (
     <div
-      style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', userSelect: 'none' }}
       onWheel={handleWheel}
     >
       <div
@@ -250,6 +259,16 @@ export function MaskEditor() {
               {subModeLabels[subMode]} ▾
             </button>
           )}
+          {isModeB && (
+            <button
+              onClick={() => setShowMaskOverlay((v) => !v)}
+              title={showMaskOverlay ? '隐藏蒙版叠加' : '显示蒙版叠加'}
+              style={{ background: showMaskOverlay ? 'rgba(220,40,40,0.25)' : 'rgba(255,255,255,0.07)', border: `1px solid ${showMaskOverlay ? 'rgba(220,40,40,0.6)' : 'rgba(255,255,255,0.12)'}`, borderRadius: 6, color: showMaskOverlay ? '#fca5a5' : '#d1d5db', fontSize: 12, padding: '4px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
+            >
+              {showMaskOverlay ? <EyeOff size={13} /> : <Eye size={13} />}
+              蒙版可见
+            </button>
+          )}
           <button onClick={() => setClearSignal((v) => v + 1)} style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#d1d5db', fontSize: 12, padding: '4px 10px', cursor: 'pointer' }}>清空蒙版</button>
           <button onClick={() => setInvertSignal((v) => v + 1)} style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#d1d5db', fontSize: 12, padding: '4px 10px', cursor: 'pointer' }}>反转蒙版</button>
         </div>
@@ -267,11 +286,12 @@ export function MaskEditor() {
               redoSignal={redoSignal}
               clearSignal={clearSignal}
               invertSignal={invertSignal}
-              onHistoryChange={(u, r) => { setCanUndo(u); setCanRedo(r); }}
+              onHistoryChange={handleHistoryChange}
               brushSize={brushSize}
               brushHardness={brushHardness}
               brushOpacity={brushOpacity}
               canvasHandleRef={canvasHandleRef}
+              showMaskOverlay={showMaskOverlay}
             />
           </div>
 

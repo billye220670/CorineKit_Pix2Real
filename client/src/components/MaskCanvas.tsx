@@ -31,8 +31,10 @@ interface MaskCanvasProps {
   brushSize: number;
   brushHardness: number;
   brushOpacity: number;
+  showMaskOverlay?: boolean;
   canvasHandleRef: React.MutableRefObject<MaskCanvasHandle | null>;
 }
+
 export function MaskCanvas({
   editorState,
   subMode,
@@ -46,6 +48,7 @@ export function MaskCanvas({
   brushSize,
   brushHardness,
   brushOpacity,
+  showMaskOverlay,
   canvasHandleRef,
 }: MaskCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -67,6 +70,7 @@ export function MaskCanvas({
 
   const isDrawing = useRef(false);
   const isErasing = useRef(false);
+  const tKeyDown = useRef(false); // tracks T key for opacity scroll modifier
   const lastPos = useRef<{ x: number; y: number } | null>(null);
   const mousePos = useRef({ x: -999, y: -999 });
   const insideViewport = useRef(false);
@@ -76,6 +80,30 @@ export function MaskCanvas({
 
   const rafId = useRef(0);
   const dirty = useRef(true);
+
+  // Stroke layer refs for non-accumulating soft brush.
+  // On each mouseDown (paint mode), strokeBaseCanvas = snapshot of maskCanvas,
+  // strokeLayerCanvas = blank canvas for this stroke's contribution.
+  // Each stamp applies pixel-wise max alpha to strokeLayerCanvas, then
+  // maskCanvas is recomposed as strokeBase + strokeLayer.
+  // This prevents soft brush edges from hardening when stamps overlap.
+  const strokeBaseCanvas = useRef<OffscreenCanvas | null>(null);
+  const strokeLayerCanvas = useRef<OffscreenCanvas | null>(null);
+
+  // Always-current refs for brush props and subMode.
+  // These allow stampBrush, strokeBetween, and render to be stable useCallbacks
+  // that never change reference, preventing unnecessary effect re-fires.
+  const brushSizeRef = useRef(brushSize);
+  const brushHardnessRef = useRef(brushHardness);
+  const brushOpacityRef = useRef(brushOpacity);
+  const subModeRef = useRef(subMode);
+  const showMaskOverlayRef = useRef(showMaskOverlay ?? false);
+
+  brushSizeRef.current = brushSize;
+  brushHardnessRef.current = brushHardness;
+  brushOpacityRef.current = brushOpacity;
+  subModeRef.current = subMode;
+  showMaskOverlayRef.current = showMaskOverlay ?? false;
 
   // Expose handle for parent to read mask data
   canvasHandleRef.current = {
@@ -145,63 +173,90 @@ export function MaskCanvas({
     onHistoryChange(idx > 0, idx < historyStack.current.length - 1);
   }, [onHistoryChange]);
 
+  // Applies a brush stamp to the stroke layer using pixel-wise max alpha.
+  // This is the core of the non-accumulating soft brush: for any pixel,
+  // the opacity in the current stroke equals the MAX opacity any single stamp
+  // reached at that pixel — identical to Photoshop's non-build-up brush mode.
+  const applyStampMaxAlpha = useCallback((stamp: OffscreenCanvas, destX: number, destY: number) => {
+    const sl = strokeLayerCanvas.current;
+    if (!sl) return;
+    const x0 = Math.max(0, destX);
+    const y0 = Math.max(0, destY);
+    const x1 = Math.min(sl.width, destX + stamp.width);
+    const y1 = Math.min(sl.height, destY + stamp.height);
+    const rw = x1 - x0;
+    const rh = y1 - y0;
+    if (rw <= 0 || rh <= 0) return;
+    const stampData = stamp.getContext('2d')!.getImageData(x0 - destX, y0 - destY, rw, rh);
+    const slctx = sl.getContext('2d')!;
+    const slData = slctx.getImageData(x0, y0, rw, rh);
+    for (let i = 0; i < slData.data.length; i += 4) {
+      const srcAlpha = stampData.data[i + 3];
+      if (srcAlpha > slData.data[i + 3]) {
+        slData.data[i]     = 255; // R
+        slData.data[i + 1] = 255; // G
+        slData.data[i + 2] = 255; // B
+        slData.data[i + 3] = srcAlpha;
+      }
+    }
+    slctx.putImageData(slData, x0, y0);
+  }, []); // stable: reads refs only
+
+  // stampBrush reads brush props from refs so it is stable (empty deps).
+  // This prevents the event-handler useEffect from re-firing on every brush change.
   const stampBrush = useCallback((cx: number, cy: number) => {
     const mc = maskCanvas.current;
     if (!mc) return;
     const mctx = mc.getContext('2d')!;
-    const r = brushSize;
+    const r = brushSizeRef.current;
     const stamp = new OffscreenCanvas(r * 2 + 2, r * 2 + 2);
     const sc = stamp.getContext('2d')!;
     const cx2 = r + 1, cy2 = r + 1;
     const grad = sc.createRadialGradient(cx2, cy2, 0, cx2, cy2, r);
-    const hardEdge = 0.01 + brushHardness * 0.99;
-    grad.addColorStop(0, 'rgba(255,255,255,' + brushOpacity + ')');
-    grad.addColorStop(hardEdge, 'rgba(255,255,255,' + brushOpacity + ')');
+    const hardEdge = 0.01 + brushHardnessRef.current * 0.99;
+    grad.addColorStop(0, 'rgba(255,255,255,' + brushOpacityRef.current + ')');
+    grad.addColorStop(hardEdge, 'rgba(255,255,255,' + brushOpacityRef.current + ')');
     grad.addColorStop(1, 'rgba(255,255,255,0)');
     sc.fillStyle = grad;
     sc.fillRect(0, 0, stamp.width, stamp.height);
-    mctx.save();
-    mctx.globalCompositeOperation = isErasing.current ? 'destination-out' : 'source-over';
-    mctx.drawImage(stamp, cx - r - 1, cy - r - 1);
-    mctx.restore();
+    const destX = Math.floor(cx - r - 1);
+    const destY = Math.floor(cy - r - 1);
+    if (isErasing.current) {
+      // Erase directly on maskCanvas — no accumulation problem when removing alpha
+      mctx.save();
+      mctx.globalCompositeOperation = 'destination-out';
+      mctx.drawImage(stamp, destX, destY);
+      mctx.restore();
+    } else {
+      const sl = strokeLayerCanvas.current;
+      const sb = strokeBaseCanvas.current;
+      if (sl && sb) {
+        // Max-alpha composite: prevents soft edges from hardening on overlap
+        applyStampMaxAlpha(stamp, destX, destY);
+        // Recompose maskCanvas = strokeBase (unchanged) + strokeLayer (max-blended)
+        mctx.clearRect(0, 0, mc.width, mc.height);
+        mctx.drawImage(sb, 0, 0);
+        mctx.drawImage(sl, 0, 0);
+      } else {
+        // Fallback if stroke layer was not initialized (e.g. mode just switched)
+        mctx.save();
+        mctx.globalCompositeOperation = 'source-over';
+        mctx.drawImage(stamp, destX, destY);
+        mctx.restore();
+      }
+    }
     dirty.current = true;
-  }, [brushSize, brushHardness, brushOpacity]);
+  }, [applyStampMaxAlpha]); // stable: applyStampMaxAlpha is stable
 
   const strokeBetween = useCallback((ax: number, ay: number, bx: number, by: number) => {
     const dist = Math.hypot(bx - ax, by - ay);
-    const step = Math.max(1, brushSize * 0.25);
+    const step = Math.max(1, brushSizeRef.current * 0.25);
     const steps = Math.max(1, Math.ceil(dist / step));
     for (let i = 0; i <= steps; i++) {
       const t = i / steps;
       stampBrush(ax + (bx - ax) * t, ay + (by - ay) * t);
     }
-  }, [brushSize, stampBrush]);
-
-  const renderModeAOverlay = (
-    ctx: CanvasRenderingContext2D,
-    mc: OffscreenCanvas,
-    w: number, h: number
-  ) => {
-    const tmp = new OffscreenCanvas(w, h);
-    const tc = tmp.getContext('2d')!;
-    if (subMode === 'dark-overlay') {
-      tc.fillStyle = 'rgba(20,20,20,0.72)';
-      tc.fillRect(0, 0, w, h);
-      tc.globalCompositeOperation = 'destination-in';
-      tc.drawImage(mc, 0, 0);
-    } else if (subMode === 'brighten') {
-      tc.fillStyle = 'rgba(0,0,0,0.55)';
-      tc.fillRect(0, 0, w, h);
-      tc.globalCompositeOperation = 'destination-out';
-      tc.drawImage(mc, 0, 0);
-    } else {
-      tc.fillStyle = 'rgba(220,40,40,0.60)';
-      tc.fillRect(0, 0, w, h);
-      tc.globalCompositeOperation = 'destination-in';
-      tc.drawImage(mc, 0, 0);
-    }
-    ctx.drawImage(tmp, 0, 0);
-  };
+  }, [stampBrush]); // stable since stampBrush is stable
 
   const renderModeBBlend = (
     ctx: CanvasRenderingContext2D,
@@ -219,6 +274,8 @@ export function MaskCanvas({
     ctx.drawImage(tmp, 0, 0);
   };
 
+  // render reads subMode and brushSize from refs so it only needs editorState.mode in deps.
+  // Keeping render stable avoids cancelling/rescheduling the RAF on every brush change.
   const render = useCallback(() => {
     rafId.current = requestAnimationFrame(render);
     if (!dirty.current) return;
@@ -253,7 +310,27 @@ export function MaskCanvas({
       ctx2.save();
       ctx2.translate(x, y);
       ctx2.scale(scale, scale);
-      renderModeAOverlay(ctx2, mc, w, h);
+      // Inline overlay using subModeRef.current so this callback is stable
+      const sm = subModeRef.current;
+      const tmp = new OffscreenCanvas(w, h);
+      const tc = tmp.getContext('2d')!;
+      if (sm === 'dark-overlay') {
+        tc.fillStyle = 'rgba(20,20,20,0.72)';
+        tc.fillRect(0, 0, w, h);
+        tc.globalCompositeOperation = 'destination-in';
+        tc.drawImage(mc, 0, 0);
+      } else if (sm === 'brighten') {
+        tc.fillStyle = 'rgba(0,0,0,0.55)';
+        tc.fillRect(0, 0, w, h);
+        tc.globalCompositeOperation = 'destination-out';
+        tc.drawImage(mc, 0, 0);
+      } else {
+        tc.fillStyle = 'rgba(220,40,40,0.60)';
+        tc.fillRect(0, 0, w, h);
+        tc.globalCompositeOperation = 'destination-in';
+        tc.drawImage(mc, 0, 0);
+      }
+      ctx2.drawImage(tmp, 0, 0);
       ctx2.restore();
     } else {
       const result = resultImageRef.current;
@@ -263,12 +340,26 @@ export function MaskCanvas({
         ctx1.drawImage(orig, 0, 0, w, h);
       }
       ctx1.restore();
+      // Optional red mask overlay in Mode B so the user can see painted areas
+      if (showMaskOverlayRef.current) {
+        ctx2.save();
+        ctx2.translate(x, y);
+        ctx2.scale(scale, scale);
+        const tmp = new OffscreenCanvas(w, h);
+        const tc = tmp.getContext('2d')!;
+        tc.fillStyle = 'rgba(220,40,40,0.55)';
+        tc.fillRect(0, 0, w, h);
+        tc.globalCompositeOperation = 'destination-in';
+        tc.drawImage(mc, 0, 0);
+        ctx2.drawImage(tmp, 0, 0);
+        ctx2.restore();
+      }
     }
 
     // Brush cursor on canvas3
     if (insideViewport.current) {
       const { x: mx, y: my } = mousePos.current;
-      const radiusScreen = brushSize * scale;
+      const radiusScreen = brushSizeRef.current * scale;
       ctx3.beginPath();
       ctx3.arc(mx, my, Math.max(1, radiusScreen), 0, Math.PI * 2);
       ctx3.strokeStyle = isErasing.current ? 'rgba(248,113,113,0.9)' : 'rgba(255,255,255,0.9)';
@@ -280,7 +371,7 @@ export function MaskCanvas({
       ctx3.fill();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editorState.mode, subMode, brushSize]);
+  }, [editorState.mode]); // subMode and brushSize read from refs above
 
   useEffect(() => {
     let cancelled = false;
@@ -326,6 +417,9 @@ export function MaskCanvas({
       onReady(ww, wh, orig.naturalWidth, orig.naturalHeight);
       fitView();
       dirty.current = true;
+      // Focus the event layer so keyboard shortcuts (Shift, F, T) work immediately
+      // without requiring the user to click the canvas first.
+      eventLayerRef.current?.focus();
     }
     init();
     return () => { cancelled = true; };
@@ -336,9 +430,16 @@ export function MaskCanvas({
     const el = containerRef.current;
     if (!el) return;
     const ro = new ResizeObserver(() => {
-      const { clientWidth: w, clientHeight: h } = el;
+      const { clientWidth: cw, clientHeight: ch } = el;
       [canvas1Ref, canvas2Ref, canvas3Ref].forEach(ref => {
-        if (ref.current) { ref.current.width = w; ref.current.height = h; }
+        if (ref.current) {
+          // Only reset dimensions when they actually change; setting width/height
+          // unconditionally clears the canvas even when size hasn't changed.
+          if (ref.current.width !== cw || ref.current.height !== ch) {
+            ref.current.width = cw;
+            ref.current.height = ch;
+          }
+        }
       });
       fitView();
     });
@@ -348,11 +449,37 @@ export function MaskCanvas({
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
-      if (e.key === 'Shift') { isErasing.current = true; dirty.current = true; }
+      if (e.key === 'Shift') {
+        isErasing.current = true;
+        dirty.current = true;
+        // If switching to erase mid-stroke, maskCanvas is already the correct composite
+        // (recomposed on each stamp). Null the stroke layers so subsequent erase stamps
+        // go directly to maskCanvas via the fallback path.
+        if (isDrawing.current) {
+          strokeBaseCanvas.current = null;
+          strokeLayerCanvas.current = null;
+        }
+      }
       if (e.key === 'f' || e.key === 'F') fitView();
+      if (e.key === 't' || e.key === 'T') tKeyDown.current = true;
     };
     const up = (e: KeyboardEvent) => {
-      if (e.key === 'Shift') { isErasing.current = false; dirty.current = true; }
+      if (e.key === 'Shift') {
+        isErasing.current = false;
+        dirty.current = true;
+        // If switching back to paint mid-stroke, reinitialize stroke layers from
+        // the current maskCanvas state (which includes any erasing just done).
+        if (isDrawing.current) {
+          const mc = maskCanvas.current;
+          if (mc) {
+            const sb = new OffscreenCanvas(mc.width, mc.height);
+            sb.getContext('2d')!.drawImage(mc, 0, 0);
+            strokeBaseCanvas.current = sb;
+            strokeLayerCanvas.current = new OffscreenCanvas(mc.width, mc.height);
+          }
+        }
+      }
+      if (e.key === 't' || e.key === 'T') tKeyDown.current = false;
     };
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
@@ -384,13 +511,23 @@ export function MaskCanvas({
     };
 
     const onDown = (e: MouseEvent) => {
+      e.preventDefault(); // prevent text selection on shift+click
       if (e.button === 1) {
-        e.preventDefault();
         isPanning.current = true;
         panStart.current = { x: e.clientX, y: e.clientY, tx: transform.current.x, ty: transform.current.y };
         return;
       }
       if (e.button !== 0) return;
+      // Initialize stroke layers for non-accumulating soft brush (paint mode only)
+      if (!isErasing.current) {
+        const mc = maskCanvas.current;
+        if (mc) {
+          const sb = new OffscreenCanvas(mc.width, mc.height);
+          sb.getContext('2d')!.drawImage(mc, 0, 0);
+          strokeBaseCanvas.current = sb;
+          strokeLayerCanvas.current = new OffscreenCanvas(mc.width, mc.height);
+        }
+      }
       isDrawing.current = true;
       const rect = el.getBoundingClientRect();
       const cp = screenToCanvas(e.clientX - rect.left, e.clientY - rect.top);
@@ -403,11 +540,17 @@ export function MaskCanvas({
       if (!isDrawing.current) return;
       isDrawing.current = false;
       lastPos.current = null;
+      // Clean up stroke layers
+      strokeBaseCanvas.current = null;
+      strokeLayerCanvas.current = null;
       pushSnapshot();
     };
 
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
+      // When Alt or T is held, MaskEditor's outer handleWheel manages brush size/opacity.
+      // Returning here prevents the canvas from also zooming at the same time.
+      if (e.altKey || tKeyDown.current) return;
       const rect = el.getBoundingClientRect();
       const sx = e.clientX - rect.left;
       const sy = e.clientY - rect.top;
@@ -438,6 +581,8 @@ export function MaskCanvas({
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
+  // stampBrush, strokeBetween, and pushSnapshot are all stable after mount,
+  // so this effect runs exactly once and never needs to re-register listeners.
   }, [stampBrush, strokeBetween, pushSnapshot]);
 
   useEffect(() => {
@@ -479,9 +624,10 @@ export function MaskCanvas({
     pushSnapshot();
   }, [invertSignal, pushSnapshot]);
 
+  // Trigger a re-render when subMode, brushSize, or showMaskOverlay changes so the display updates.
   useEffect(() => {
     dirty.current = true;
-  }, [subMode, brushSize]);
+  }, [subMode, brushSize, showMaskOverlay]);
 
   useEffect(() => {
     rafId.current = requestAnimationFrame(render);
@@ -497,7 +643,7 @@ export function MaskCanvas({
       <canvas ref={canvas1Ref} style={canvasStyle} />
       <canvas ref={canvas2Ref} style={{ ...canvasStyle, pointerEvents: 'none' }} />
       <canvas ref={canvas3Ref} style={{ ...canvasStyle, pointerEvents: 'none' }} />
-      <div ref={eventLayerRef} style={{ ...canvasStyle, cursor: 'none' }} />
+      <div ref={eventLayerRef} tabIndex={0} style={{ ...canvasStyle, cursor: 'none', outline: 'none' }} />
     </div>
   );
 }

@@ -175,7 +175,11 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
     if (tabMaskMode === 'none') return;
 
     if (tabMaskMode === 'B') {
-      if (selectedOutputIdx < 0 || !outputs[selectedOutputIdx]) {
+      if (selectedOutputIdx < 0) {
+        showToast("原图无法编辑蒙版，请先在缩略图中选择一张结果图");
+        return;
+      }
+      if (!outputs[selectedOutputIdx]) {
         showToast("请先执行工作流以获得结果图，再打开蒙版编辑器");
         return;
       }

@@ -346,13 +346,11 @@ export function PhotoWall() {
       {/* Scrollable photo wall */}
       <div style={{ flex: 1, overflow: 'auto', padding: 'var(--spacing-lg)' }}>
         <div style={{
-          display: 'grid',
-          gridTemplateColumns: `repeat(auto-fill, minmax(${VIEW_CONFIG[viewSize].columnWidth}, 1fr))`,
-          gap: 'var(--spacing-md)',
-          alignItems: 'start',
+          columns: `auto ${VIEW_CONFIG[viewSize].columnWidth}`,
+          columnGap: 'var(--spacing-md)',
         }}>
           {images.map((img) => (
-            <div key={img.id} id={`card-${img.id}`}>
+            <div key={img.id} id={`card-${img.id}`} style={{ breakInside: 'avoid', marginBottom: 'var(--spacing-md)' }}>
               <ImageCard
                 image={img}
                 isMultiSelectMode={isMultiSelectMode}
