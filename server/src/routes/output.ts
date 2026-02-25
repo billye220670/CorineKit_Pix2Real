@@ -14,6 +14,7 @@ const WORKFLOW_DIRS: Record<number, string> = {
   2: '2-精修放大',
   3: '3-快速生成视频',
   4: '4-视频放大',
+  5: '5-解除装备',
 };
 
 // GET /api/output/:workflowId - list output files
