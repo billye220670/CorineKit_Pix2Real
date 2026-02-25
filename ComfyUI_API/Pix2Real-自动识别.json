@@ -1,0 +1,161 @@
+{
+  "244": {
+    "inputs": {
+      "grow": 20,
+      "blur": 50,
+      "mask": [
+        "251",
+        0
+      ]
+    },
+    "class_type": "INPAINT_ExpandMask",
+    "_meta": {
+      "title": "扩展遮罩"
+    }
+  },
+  "247": {
+    "inputs": {
+      "image": "ComfyUI_00083_ (1).png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像"
+    }
+  },
+  "249": {
+    "inputs": {
+      "prompt": "Body",
+      "threshold": 0.4,
+      "keep_model_loaded": false,
+      "add_background": "none",
+      "detection_limit": -1,
+      "sam3_model": [
+        "252",
+        0
+      ],
+      "images": [
+        "253",
+        0
+      ]
+    },
+    "class_type": "easy sam3ImageSegmentation",
+    "_meta": {
+      "title": "SAM3 图像分割"
+    }
+  },
+  "250": {
+    "inputs": {
+      "prompt": "Head,Hands, neck, face, clothes, shoes, hat,socks,accessories",
+      "threshold": 0.4,
+      "keep_model_loaded": false,
+      "add_background": "none",
+      "detection_limit": -1,
+      "sam3_model": [
+        "252",
+        0
+      ],
+      "images": [
+        "253",
+        0
+      ]
+    },
+    "class_type": "easy sam3ImageSegmentation",
+    "_meta": {
+      "title": "SAM3 图像分割"
+    }
+  },
+  "251": {
+    "inputs": {
+      "masks_a": [
+        "249",
+        0
+      ],
+      "masks_b": [
+        "374",
+        0
+      ]
+    },
+    "class_type": "Masks Subtract",
+    "_meta": {
+      "title": "遮罩相减"
+    }
+  },
+  "252": {
+    "inputs": {
+      "model": "sam3-fp16.safetensors",
+      "segmentor": "image",
+      "device": "cuda",
+      "precision": "fp16"
+    },
+    "class_type": "easy sam3ModelLoader",
+    "_meta": {
+      "title": "加载 SAM3 模型"
+    }
+  },
+  "253": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "megapixels": 1.2,
+      "resolution_steps": 1,
+      "image": [
+        "247",
+        0
+      ]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {
+      "title": "缩放图像（像素）"
+    }
+  },
+  "366": {
+    "inputs": {
+      "masks_a": [
+        "244",
+        0
+      ]
+    },
+    "class_type": "Masks Subtract",
+    "_meta": {
+      "title": "遮罩相减"
+    }
+  },
+  "374": {
+    "inputs": {
+      "grow": 6,
+      "blur": 0,
+      "mask": [
+        "250",
+        0
+      ]
+    },
+    "class_type": "INPAINT_ExpandMask",
+    "_meta": {
+      "title": "扩展遮罩"
+    }
+  },
+  "393": {
+    "inputs": {
+      "mask": [
+        "366",
+        0
+      ]
+    },
+    "class_type": "MaskToImage",
+    "_meta": {
+      "title": "遮罩转换为图像"
+    }
+  },
+  "394": {
+    "inputs": {
+      "filename_prefix": "Mask_",
+      "images": [
+        "393",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "保存图像"
+    }
+  }
+}
