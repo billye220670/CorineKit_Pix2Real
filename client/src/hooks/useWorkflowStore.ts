@@ -7,6 +7,7 @@ const WORKFLOWS = [
   { id: 2, name: '精修放大', needsPrompt: false },
   { id: 3, name: '快速生成视频', needsPrompt: true },
   { id: 4, name: '视频放大', needsPrompt: false },
+  { id: 5, name: '解除装备', needsPrompt: true },
 ];
 
 interface TabData {
@@ -15,10 +16,11 @@ interface TabData {
   tasks: Record<string, TaskInfo>;
   imagePromptMap: Record<string, string>;
   selectedOutputIndex: Record<string, number>;
+  backPoseToggles: Record<string, boolean>;
 }
 
 function emptyTabData(): TabData {
-  return { images: [], prompts: {}, tasks: {}, imagePromptMap: {}, selectedOutputIndex: {} };
+  return { images: [], prompts: {}, tasks: {}, imagePromptMap: {}, selectedOutputIndex: {}, backPoseToggles: {} };
 }
 
 interface WorkflowStore {
@@ -41,6 +43,7 @@ interface WorkflowStore {
   toggleImageSelection: (id: string) => void;
   setSelectedImageIds: (ids: string[]) => void;
   clearSelection: () => void;
+  toggleBackPose: (imageId: string) => void;
 
   flashingImageId: string | null;
   setFlashingImage: (id: string | null) => void;
@@ -76,6 +79,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     2: emptyTabData(),
     3: emptyTabData(),
     4: emptyTabData(),
+    5: emptyTabData(),
   },
   clientId: null,
   selectedImageIds: [],
@@ -95,6 +99,23 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   setSelectedImageIds: (ids) => set({ selectedImageIds: ids }),
 
   clearSelection: () => set({ selectedImageIds: [] }),
+
+  toggleBackPose: (imageId) => {
+    set((state) => {
+      const tab = state.activeTab;
+      const prev = state.tabData[tab] || emptyTabData();
+      const current = prev.backPoseToggles[imageId] ?? false;
+      return {
+        tabData: {
+          ...state.tabData,
+          [tab]: {
+            ...prev,
+            backPoseToggles: { ...prev.backPoseToggles, [imageId]: !current },
+          },
+        },
+      };
+    });
+  },
 
   flashingImageId: null,
   setFlashingImage: (id) => set({ flashingImageId: id }),
@@ -177,6 +198,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       const { [id]: _t, ...restTasks } = prev.tasks;
       const { [id]: _m, ...restMap } = prev.imagePromptMap;
       const { [id]: _s, ...restSelectedOutputIndex } = prev.selectedOutputIndex;
+      const { [id]: _b, ...restBackPoseToggles } = prev.backPoseToggles;
       return {
         tabData: {
           ...state.tabData,
@@ -186,6 +208,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
             tasks: restTasks,
             imagePromptMap: restMap,
             selectedOutputIndex: restSelectedOutputIndex,
+            backPoseToggles: restBackPoseToggles,
           },
         },
       };
@@ -208,6 +231,9 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
             tasks: Object.fromEntries(Object.entries(prev.tasks).filter(([k]) => !idSet.has(k))),
             imagePromptMap: Object.fromEntries(Object.entries(prev.imagePromptMap).filter(([k]) => !idSet.has(k))),
             selectedOutputIndex: Object.fromEntries(Object.entries(prev.selectedOutputIndex).filter(([k]) => !idSet.has(k))),
+            backPoseToggles: Object.fromEntries(
+              Object.entries(prev.backPoseToggles).filter(([k]) => !idSet.has(k))
+            ),
           },
         },
         selectedImageIds: state.selectedImageIds.filter((i) => !idSet.has(i)),
