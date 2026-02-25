@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -234,6 +234,38 @@ router.post('/:id/open-folder', (req, res) => {
   });
 
   res.json({ ok: true, path: outputDir });
+});
+
+
+// POST /api/workflow/export-blend — save Mode B blended result to output dir
+router.post('/export-blend', express.json({ limit: '50mb' }), async (req, res) => {
+  try {
+    const { tabId, filename, imageDataBase64 } = req.body as {
+      tabId: number;
+      filename: string;
+      imageDataBase64: string;
+    };
+
+    const adapter = getAdapter(tabId);
+    if (!adapter) {
+      res.status(400).json({ error: 'Unknown workflow: ' + tabId });
+      return;
+    }
+
+    // Sanitise filename — allow alphanumeric, underscore, hyphen, dot, space, and CJK characters
+    const safeName = path.basename(filename).replace(/[^\w\-. \u4e00-\u9fff]/g, '_');
+    const outputDir = path.resolve(__dirname, '../../../output', adapter.outputDir);
+    if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+
+    const filePath = path.join(outputDir, safeName);
+    const buffer = Buffer.from(imageDataBase64, 'base64');
+    fs.writeFileSync(filePath, buffer);
+
+    res.json({ ok: true, savedPath: filePath });
+  } catch (err) {
+    console.error('[export-blend]', err);
+    res.status(500).json({ error: String(err) });
+  }
 });
 
 export default router;
