@@ -16,6 +16,7 @@ function clampWorkingSize(w: number, h: number): [number, number] {
 
 export interface MaskCanvasHandle {
   getMaskEntry: () => MaskEntry | null;
+  applyMaskFromUrl: (url: string) => Promise<void>;
 }
 
 interface MaskCanvasProps {
@@ -119,6 +120,32 @@ export function MaskCanvas({
         originalWidth: originalSize.current.w || mc.width,
         originalHeight: originalSize.current.h || mc.height,
       };
+    },
+    applyMaskFromUrl: async (url: string) => {
+      const mc = maskCanvas.current;
+      if (!mc || workingSize.current.w === 0) return;
+      const img = await new Promise<HTMLImageElement>((res, rej) => {
+        const i = new Image();
+        i.crossOrigin = 'anonymous';
+        i.onload = () => res(i);
+        i.onerror = rej;
+        i.src = url;
+      });
+      const tmp = new OffscreenCanvas(mc.width, mc.height);
+      const tc = tmp.getContext('2d')!;
+      tc.drawImage(img, 0, 0, mc.width, mc.height);
+      const id = tc.getImageData(0, 0, mc.width, mc.height);
+      // ComfyUI MaskToImage outputs grayscale RGB: convert luminance → alpha channel
+      for (let i = 0; i < id.data.length; i += 4) {
+        const lum = Math.round(id.data[i] * 0.299 + id.data[i + 1] * 0.587 + id.data[i + 2] * 0.114);
+        id.data[i]     = 255;
+        id.data[i + 1] = 255;
+        id.data[i + 2] = 255;
+        id.data[i + 3] = lum;
+      }
+      mc.getContext('2d')!.putImageData(id, 0, 0);
+      dirty.current = true;
+      pushSnapshot();
     },
   };
 

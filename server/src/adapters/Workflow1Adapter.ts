@@ -4,7 +4,7 @@ import { fileURLToPath } from 'url';
 import type { WorkflowAdapter } from './BaseAdapter.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const templatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-真人精修.json');
+const templatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-👻真人精修NEW.json');
 
 export const workflow1Adapter: WorkflowAdapter = {
   id: 1,

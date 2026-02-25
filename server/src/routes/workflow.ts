@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 import { exec } from 'child_process';
 import multer from 'multer';
 import { getAdapter, adapters } from '../adapters/index.js';
-import { uploadImage, uploadVideo, queuePrompt, deleteQueueItem, getSystemStats, getQueue, prioritizeQueueItem } from '../services/comfyui.js';
+import { uploadImage, uploadVideo, queuePrompt, deleteQueueItem, getSystemStats, getQueue, prioritizeQueueItem, getHistory, getImageBuffer } from '../services/comfyui.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const releaseMemoryTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-释放内存.json');
@@ -265,6 +265,57 @@ router.post('/export-blend', express.json({ limit: '50mb' }), async (req, res) =
   } catch (err) {
     console.error('[export-blend]', err);
     res.status(500).json({ error: String(err) });
+  }
+});
+
+const autoRecognizeTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-自动识别Fixed.json');
+
+// POST /api/workflow/mask/auto-recognize — run SAM segmentation and return mask PNG
+router.post('/mask/auto-recognize', upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) {
+      res.status(400).json({ error: 'No image file provided' });
+      return;
+    }
+
+    const internalClientId = `mask-auto-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+    const comfyFilename = await uploadImage(req.file.buffer, req.file.originalname);
+
+    const template = JSON.parse(fs.readFileSync(autoRecognizeTemplatePath, 'utf-8'));
+    template['247'].inputs.image = comfyFilename;
+
+    const queued = await queuePrompt(template, internalClientId);
+    const promptId = queued.prompt_id;
+
+    // Poll history until ComfyUI marks it complete (timeout 120 s)
+    const deadline = Date.now() + 120_000;
+    let history;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 800));
+      try {
+        const h = await getHistory(promptId);
+        if (h?.status?.completed) { history = h; break; }
+      } catch { /* not ready yet */ }
+    }
+
+    if (!history) {
+      res.status(504).json({ error: '自动识别超时，请重试' });
+      return;
+    }
+
+    const outputFile = history.outputs['394']?.images?.[0];
+    if (!outputFile) {
+      res.status(500).json({ error: 'ComfyUI 未返回蒙版图像' });
+      return;
+    }
+
+    const imgBuffer = await getImageBuffer(outputFile.filename, outputFile.subfolder, outputFile.type);
+    res.setHeader('Content-Type', 'image/png');
+    res.send(imgBuffer);
+  } catch (err: any) {
+    console.error('[Mask Auto-recognize Error]', err);
+    res.status(500).json({ error: err.message || 'Internal server error' });
   }
 });
 

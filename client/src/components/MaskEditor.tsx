@@ -158,6 +158,7 @@ export function MaskEditor() {
   const [canRedo, setCanRedo] = useState(false);
   const [showExport, setShowExport] = useState(false);
   const [showMaskOverlay, setShowMaskOverlay] = useState(false);
+  const [autoFilling, setAutoFilling] = useState(false);
   const tKeyDown = useRef(false);
   const canvasHandleRef = useRef<MaskCanvasHandle | null>(null);
 
@@ -184,6 +185,47 @@ export function MaskEditor() {
     setSubMode((cur) => subModeOrder[(subModeOrder.indexOf(cur) + 1) % subModeOrder.length]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const handleAutoFill = useCallback(async () => {
+    if (!editorState || !canvasHandleRef.current) return;
+
+    // Check if canvas already has painted content
+    const entry = canvasHandleRef.current.getMaskEntry();
+    if (entry) {
+      let hasContent = false;
+      for (let i = 3; i < entry.data.length; i += 4) {
+        if (entry.data[i] > 0) { hasContent = true; break; }
+      }
+      if (hasContent && !confirm('当前画布已有蒙版内容，确认要替换吗？')) return;
+    }
+
+    setAutoFilling(true);
+    try {
+      const imgRes = await fetch(editorState.originalUrl);
+      if (!imgRes.ok) throw new Error('无法获取原图');
+      const blob = await imgRes.blob();
+      const ext = blob.type === 'image/png' ? '.png' : blob.type === 'image/webp' ? '.webp' : '.jpg';
+      const formData = new FormData();
+      formData.append('image', blob, 'original' + ext);
+
+      const res = await fetch('/api/workflow/mask/auto-recognize', { method: 'POST', body: formData });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText);
+      }
+      const maskBlob = await res.blob();
+      const maskUrl = URL.createObjectURL(maskBlob);
+      try {
+        await canvasHandleRef.current.applyMaskFromUrl(maskUrl);
+      } finally {
+        URL.revokeObjectURL(maskUrl);
+      }
+    } catch (e) {
+      alert('识别失败: ' + String(e));
+    } finally {
+      setAutoFilling(false);
+    }
+  }, [editorState]);
 
   // Keyboard: Ctrl+Z/Y handled here so they work anywhere in the modal
   useEffect(() => {
@@ -297,6 +339,13 @@ export function MaskEditor() {
 
           {/* Right panel */}
           <div style={{ width: 168, borderLeft: '1px solid rgba(255,255,255,0.08)', padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <button
+              onClick={handleAutoFill}
+              disabled={autoFilling}
+              style={{ background: autoFilling ? 'rgba(37,99,235,0.5)' : 'rgba(37,99,235,0.9)', border: 'none', borderRadius: 6, color: '#fff', fontSize: 13, fontWeight: 600, padding: '8px 0', cursor: autoFilling ? 'not-allowed' : 'pointer', width: '100%' }}
+            >
+              {autoFilling ? '识别中…' : '识别并填充'}
+            </button>
             <BrushSlider label="大小" value={brushSize} min={1} max={500} display={brushSize + 'px'} onChange={setBrushSize} />
             <BrushSlider label="硬度" value={Math.round(brushHardness * 100)} min={0} max={100} display={Math.round(brushHardness * 100) + '%'} onChange={(v) => setBrushHardness(v / 100)} />
             <BrushSlider label="不透明度" value={Math.round(brushOpacity * 100)} min={0} max={100} display={Math.round(brushOpacity * 100) + '%'} onChange={(v) => setBrushOpacity(v / 100)} />
