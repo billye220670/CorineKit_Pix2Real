@@ -1,5 +1,5 @@
 import { useCallback, useState, useRef } from 'react';
-import { X, Play, RotateCcw, Check, AlertCircle, Layers, ChevronDown } from 'lucide-react';
+import { X, Play, RotateCcw, Check, AlertCircle, Layers, ChevronDown, Footprints } from 'lucide-react';
 import { useWorkflowStore } from '../hooks/useWorkflowStore.js';
 import { useWebSocket } from '../hooks/useWebSocket.js';
 import { ProgressOverlay } from './ProgressOverlay.js';
@@ -54,6 +54,9 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
   const hasMask = useMaskStore((s) => !!s.masks[currentMaskKey]);
   const deleteMask = useMaskStore((s) => s.deleteMask);
   const openEditor = useMaskStore((s) => s.openEditor);
+  const maskEntryForMode = useMaskStore((s) => s.masks[maskKey(image.id, -1)]);
+  const backPose         = useWorkflowStore((s) => s.tabData[s.activeTab]?.backPoseToggles?.[image.id] ?? false);
+  const toggleBackPose   = useWorkflowStore((s) => s.toggleBackPose);
 
   const [maskMenuOpen, setMaskMenuOpen] = useState(false);
 
@@ -140,37 +143,73 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
     resetTask(image.id);
   }, [task, image.id, resetTask]);
 
+  const maskEntryToBlob = useCallback(async (entry: import('../hooks/useMaskStore.js').MaskEntry): Promise<Blob> => {
+    const { data, workingWidth: w, workingHeight: h } = entry;
+    const oc = new OffscreenCanvas(w, h);
+    const ctx = oc.getContext('2d')!;
+    const id = new ImageData(w, h);
+    for (let i = 0; i < data.length; i += 4) {
+      const v = data[i + 3] > 0 ? 255 : 0;
+      id.data[i]     = v;
+      id.data[i + 1] = v;
+      id.data[i + 2] = v;
+      id.data[i + 3] = 255;
+    }
+    ctx.putImageData(id, 0, 0);
+    return oc.convertToBlob({ type: 'image/png' });
+  }, []);
+
   const handleExecute = useCallback(async () => {
     if (!clientId) return;
 
+    // ── Workflow 5: 解除装备 ──────────────────────────────────────────
+    if (activeTab === 5) {
+      if (!maskEntryForMode) {
+        showToast('请先在蒙版编辑器中绘制蒙版');
+        return;
+      }
+      const maskBlob = await maskEntryToBlob(maskEntryForMode);
+      const formData = new FormData();
+      formData.append('image',    image.file);
+      formData.append('mask',     maskBlob, 'mask.png');
+      formData.append('clientId', clientId);
+      formData.append('prompt',   prompts[image.id] || '');
+      formData.append('backPose', String(backPose));
+
+      try {
+        const res = await fetch(`/api/workflow/5/execute?clientId=${clientId}`, {
+          method: 'POST',
+          body: formData,
+        });
+        if (!res.ok) { console.error('Execute failed:', await res.text()); return; }
+        const data = await res.json();
+        startTask(image.id, data.promptId);
+        sendMessage({ type: 'register', promptId: data.promptId, workflowId: 5 });
+      } catch (err) {
+        console.error('Execute error:', err);
+      }
+      return;
+    }
+
+    // ── Generic workflows ─────────────────────────────────────────────
     const formData = new FormData();
-    formData.append('image', image.file);
+    formData.append('image',    image.file);
     formData.append('clientId', clientId);
-    formData.append('prompt', prompts[image.id] || '');
+    formData.append('prompt',   prompts[image.id] || '');
 
     try {
       const res = await fetch(`/api/workflow/${activeTab}/execute?clientId=${clientId}`, {
         method: 'POST',
         body: formData,
       });
-
-      if (!res.ok) {
-        console.error('Execute failed:', await res.text());
-        return;
-      }
-
+      if (!res.ok) { console.error('Execute failed:', await res.text()); return; }
       const data = await res.json();
       startTask(image.id, data.promptId);
-
-      sendMessage({
-        type: 'register',
-        promptId: data.promptId,
-        workflowId: activeTab,
-      });
+      sendMessage({ type: 'register', promptId: data.promptId, workflowId: activeTab });
     } catch (err) {
       console.error('Execute error:', err);
     }
-  }, [clientId, image, activeTab, prompts, startTask, sendMessage]);
+  }, [clientId, image, activeTab, prompts, startTask, sendMessage, maskEntryForMode, backPose, maskEntryToBlob]);
   const openMaskEditor = useCallback(() => {
     if (tabMaskMode === 'none') return;
 
@@ -413,7 +452,35 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
               </>
             )}
           </div>
-        )}        {/* Remove button — hidden in multi-select mode */}
+        )}
+
+        {/* 后位 LoRA toggle — workflow 5 only, bottom-left of image */}
+        {activeTab === 5 && (
+          <button
+            onClick={(e) => { e.stopPropagation(); toggleBackPose(image.id); }}
+            title={backPose ? '后位模式：开启' : '后位模式：关闭'}
+            style={{
+              position: 'absolute',
+              bottom: 6,
+              left: 6,
+              zIndex: 10,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 28,
+              height: 28,
+              background: backPose ? 'rgba(59,130,246,0.85)' : 'rgba(0,0,0,0.45)',
+              border: backPose ? '1px solid rgba(147,197,253,0.6)' : '1px solid rgba(255,255,255,0.15)',
+              borderRadius: 6,
+              cursor: 'pointer',
+              padding: 0,
+            }}
+          >
+            <Footprints size={14} color={backPose ? '#dbeafe' : '#9ca3af'} />
+          </button>
+        )}
+
+        {/* Remove button — hidden in multi-select mode */}
         {!isProcessing && !isMultiSelectMode && isHovered && (
           <button
             onClick={(e) => { e.stopPropagation(); removeImage(image.id); }}
@@ -487,7 +554,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
         <div style={{ display: 'flex', gap: 'var(--spacing-sm)', alignItems: 'flex-start' }}>
           {needsPrompt && (
             <textarea
-              placeholder={activeTab === 3 ? "输入提示词（留空使用默认）" : "额外提示词（可选）"}
+              placeholder={activeTab === 5 ? "留空使用默认提示词" : activeTab === 3 ? "输入提示词（留空使用默认）" : "额外提示词（可选）"}
               value={prompts[image.id] || ''}
               onChange={(e) => setPrompt(image.id, e.target.value)}
               disabled={isProcessing}
