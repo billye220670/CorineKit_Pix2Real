@@ -201,15 +201,18 @@ export function PhotoWall() {
 
   const handleDeleteZoneDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     const drag = dragging;
     setDragging(null);
-    if (!drag) return;
 
-    if (drag.type === 'card') {
-      const toDelete = selectedImageIds.includes(drag.imageId)
+    // Fallback: read imageId from dataTransfer in case dragging state is stale
+    const fallbackCardId = e.dataTransfer.getData('application/x-workflow-image');
+
+    if (drag?.type === 'card' || (!drag && fallbackCardId)) {
+      const imageId = drag?.imageId ?? fallbackCardId;
+      const toDelete = selectedImageIds.includes(imageId)
         ? selectedImageIds
-        : [drag.imageId];
-      // Clean up all masks associated with each deleted image
+        : [imageId];
       for (const imgId of toDelete) {
         Object.keys(masks).forEach((k) => {
           if (k.startsWith(`${imgId}:`)) deleteMask(k);
@@ -217,7 +220,7 @@ export function PhotoWall() {
       }
       removeImages(toDelete);
       clearSelection();
-    } else if (drag.type === 'output') {
+    } else if (drag?.type === 'output') {
       removeOutput(drag.imageId, drag.outputIndex);
       // Clean up Mode B mask for this specific output index
       deleteMask(maskKey(drag.imageId, drag.outputIndex));
@@ -459,13 +462,14 @@ export function PhotoWall() {
       >
         <div
           style={{
-            columns: `auto ${VIEW_CONFIG[viewSize].columnWidth}`,
-            columnGap: 'var(--spacing-md)',
+            display: 'grid',
+            gridTemplateColumns: `repeat(auto-fill, minmax(${VIEW_CONFIG[viewSize].columnWidth}, 1fr))`,
+            gap: 'var(--spacing-md)',
           }}
           onClick={(e) => { if (isMultiSelectMode && e.target === e.currentTarget) clearSelection(); }}
         >
           {images.map((img) => (
-            <div key={img.id} id={`card-${img.id}`} style={{ breakInside: 'avoid', marginBottom: 'var(--spacing-md)' }}>
+            <div key={img.id} id={`card-${img.id}`}>
               <ImageCard
                 image={img}
                 isMultiSelectMode={isMultiSelectMode}
