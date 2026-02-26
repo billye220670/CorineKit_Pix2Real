@@ -8,14 +8,14 @@ export function showToast(message: string) {
 }
 
 export function useToastMessage() {
-  const [message, setMessage] = useState<string | null>(null);
+  const [state, setState] = useState<{ message: string | null; key: number }>({ message: null, key: 0 });
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const handler: Listener = (msg) => {
       if (timerRef.current !== null) clearTimeout(timerRef.current);
-      setMessage(msg);
-      timerRef.current = setTimeout(() => setMessage(null), 1500);
+      setState((prev) => ({ message: msg, key: prev.key + 1 }));
+      timerRef.current = setTimeout(() => setState((prev) => ({ ...prev, message: null })), 2000);
     };
     listeners.add(handler);
     return () => {
@@ -24,5 +24,5 @@ export function useToastMessage() {
     };
   }, []);
 
-  return message;
+  return state;
 }

@@ -11,6 +11,8 @@ interface ThumbnailStripProps {
   items: StripItem[];
   selectedIndex: number;
   onSelect: (index: number) => void;
+  onOutputDragStart?: (outputIndex: number) => void;
+  onOutputDragEnd?: () => void;
 }
 
 interface ThumbDims {
@@ -31,6 +33,8 @@ export function ThumbnailStrip({
   items,
   selectedIndex,
   onSelect,
+  onOutputDragStart,
+  onOutputDragEnd,
 }: ThumbnailStripProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const rowRef = useRef<HTMLDivElement>(null);
@@ -122,40 +126,67 @@ export function ThumbnailStrip({
         }}
       >
         {items.map((item, i) => (
-          <button
-            key={i}
-            onClick={(e) => { e.stopPropagation(); onSelect(i); }}
-            style={{
-              flexShrink: 0,
-              width: dims.w,
-              height: dims.h,
-              padding: 0,
-              border: 'none',
-              cursor: 'pointer',
-              outline: i === selectedIndex ? '2px solid var(--color-primary)' : '1.5px solid rgba(255,255,255,0.25)',
-              outlineOffset: 0,
-              opacity: i === selectedIndex ? 1 : 0.65,
-              overflow: 'hidden',
-              backgroundColor: 'transparent',
-              transition: 'opacity 0.15s, outline-color 0.15s',
-            }}
-          >
-            {item.isVideo ? (
-              <video
-                src={item.url}
-                preload="metadata"
-                muted
-                playsInline
-                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-              />
-            ) : (
-              <img
-                src={item.url}
-                alt={item.filename}
-                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          <>
+            {/* Vertical divider between original (i=0) and first result (i=1) */}
+            {i === 1 && (
+              <div
+                key="divider"
+                style={{
+                  flexShrink: 0,
+                  width: 1,
+                  height: dims.h * 0.75,
+                  backgroundColor: 'rgba(255,255,255,0.3)',
+                  margin: `0 ${Math.max(2, dims.gap - 2)}px`,
+                  alignSelf: 'center',
+                }}
               />
             )}
-          </button>
+            <button
+              key={i}
+              draggable={i > 0 && !!onOutputDragStart}
+              onDragStart={i > 0 && onOutputDragStart ? (e) => {
+                e.stopPropagation();
+                e.dataTransfer.setData('application/x-thumb-output', String(i - 1));
+                e.dataTransfer.effectAllowed = 'move';
+                onOutputDragStart(i - 1);
+              } : undefined}
+              onDragEnd={i > 0 && onOutputDragEnd ? (e) => {
+                e.stopPropagation();
+                onOutputDragEnd();
+              } : undefined}
+              onClick={(e) => { e.stopPropagation(); onSelect(i); }}
+              style={{
+                flexShrink: 0,
+                width: dims.w,
+                height: dims.h,
+                padding: 0,
+                border: 'none',
+                cursor: i > 0 && onOutputDragStart ? 'grab' : 'pointer',
+                outline: i === selectedIndex ? '2px solid var(--color-primary)' : '1.5px solid rgba(255,255,255,0.25)',
+                outlineOffset: 0,
+                opacity: i === selectedIndex ? 1 : 0.65,
+                overflow: 'hidden',
+                backgroundColor: 'transparent',
+                transition: 'opacity 0.15s, outline-color 0.15s',
+              }}
+            >
+              {item.isVideo ? (
+                <video
+                  src={item.url}
+                  preload="metadata"
+                  muted
+                  playsInline
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                />
+              ) : (
+                <img
+                  src={item.url}
+                  alt={item.filename}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                />
+              )}
+            </button>
+          </>
         ))}
       </div>
 

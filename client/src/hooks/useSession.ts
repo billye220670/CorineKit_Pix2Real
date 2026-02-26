@@ -84,10 +84,12 @@ async function fetchMaskEntry(url: string): Promise<MaskEntry> {
   };
 }
 
+const NAMES_KEY = 'pix2real_session_names';
+
 export interface UseSessionReturn {
   sessionId: string;
   lastSavedAt: Date | null;
-  newSession: () => void;
+  newSession: (name?: string) => void;
 }
 
 export function useSession(): UseSessionReturn {
@@ -313,9 +315,14 @@ export function useSession(): UseSessionReturn {
   }, [serializeState]);
 
   // ── New session ──────────────────────────────────────────────────────────
-  const newSession = useCallback(() => {
+  const newSession = useCallback((name?: string) => {
     const id = generateSessionId();
     localStorage.setItem(SESSION_ID_KEY, id);
+    if (name?.trim()) {
+      const names = JSON.parse(localStorage.getItem(NAMES_KEY) ?? '{}');
+      names[id] = name.trim();
+      localStorage.setItem(NAMES_KEY, JSON.stringify(names));
+    }
     setSessionId(id);
     sessionIdRef.current = id;
     uploadedImages.current.clear();

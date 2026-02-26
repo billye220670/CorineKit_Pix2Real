@@ -59,6 +59,7 @@ interface WorkflowStore {
   completeTask: (promptId: string, outputs: Array<{ filename: string; url: string }>) => void;
   failTask: (promptId: string, error: string) => void;
   resetTask: (imageId: string) => void;
+  removeOutput: (imageId: string, outputIndex: number) => void;
 
   // Computed helpers
   needsPrompt: () => boolean;
@@ -440,6 +441,35 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
           [tab]: { ...prev, tasks: restTasks, imagePromptMap: restMap, selectedOutputIndex: restSelectedOutputIndex },
         },
       };
+    });
+  },
+
+  removeOutput: (imageId, outputIndex) => {
+    set((state) => {
+      const newTabData = { ...state.tabData };
+      for (const tabKey of Object.keys(newTabData)) {
+        const tab = Number(tabKey);
+        const prev = newTabData[tab];
+        if (!prev) continue;
+        const task = prev.tasks[imageId];
+        if (!task) continue;
+        const newOutputs = task.outputs.filter((_, i) => i !== outputIndex);
+        const prevSel = prev.selectedOutputIndex[imageId] ?? 0;
+        const newSel = prevSel >= newOutputs.length ? Math.max(-1, newOutputs.length - 1) : prevSel;
+        newTabData[tab] = {
+          ...prev,
+          tasks: {
+            ...prev.tasks,
+            [imageId]: { ...task, outputs: newOutputs },
+          },
+          selectedOutputIndex: {
+            ...prev.selectedOutputIndex,
+            [imageId]: newSel,
+          },
+        };
+        break;
+      }
+      return { tabData: newTabData };
     });
   },
 

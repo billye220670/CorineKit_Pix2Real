@@ -1,21 +1,28 @@
 import { useToastMessage } from '../hooks/useToast.js';
 
 export function Toast() {
-  const message = useToastMessage();
+  const { message, key } = useToastMessage();
   if (!message) return null;
   return (
-    <div style={{
-      position: 'fixed',
-      top: 'var(--spacing-lg)',
-      right: 'var(--spacing-lg)',
-      zIndex: 9999,
-      backgroundColor: 'var(--color-primary)',
-      color: '#fff',
-      padding: 'var(--spacing-sm) var(--spacing-md)',
-      fontSize: '13px',
-      fontWeight: 500,
-      pointerEvents: 'none',
-    }}>
+    <div
+      key={key}
+      className="toast-enter"
+      style={{
+        position: 'fixed',
+        top: 'var(--spacing-lg)',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: 9999,
+        backgroundColor: 'var(--color-primary)',
+        color: '#fff',
+        padding: '10px 20px',
+        fontSize: '13px',
+        fontWeight: 500,
+        pointerEvents: 'none',
+        whiteSpace: 'nowrap',
+        boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
+      }}
+    >
       {message}
     </div>
   );

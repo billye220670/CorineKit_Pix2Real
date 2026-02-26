@@ -237,8 +237,8 @@ export function App() {
       }}>
         <TabSwitcher />
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
-          {/* Release memory button + stats — stats sit outside the button so queue-disabled state doesn't dim them */}
-          <div style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}>
+          {/* ── 显存 + 队列 ── wrapped in one border box */}
+          <div style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--color-border)', height: 32 }}>
             <button
               onClick={handleReleaseMemory}
               disabled={!clientId || releasing || hasAnyProcessing}
@@ -257,13 +257,14 @@ export function App() {
                 cursor: (!clientId || releasing || hasAnyProcessing) ? 'not-allowed' : 'pointer',
                 opacity: (!clientId || releasing || hasAnyProcessing) ? 0.45 : 1,
                 whiteSpace: 'nowrap',
+                height: '100%',
               }}
             >
               <Trash2 size={14} />
               {releasing ? '释放中...' : '释放显存'}
             </button>
             {displayStats && (
-              <span style={{ display: 'flex', alignItems: 'center', gap: 5, paddingLeft: 6, paddingRight: 10, borderLeft: '1px solid var(--color-border)' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 5, paddingLeft: 6, paddingRight: 6, borderLeft: '1px solid var(--color-border)', borderRight: '1px solid var(--color-border)', height: '100%' }}>
                 {displayStats.vram !== null && (
                   <span style={{ fontSize: '11px', fontWeight: 700, color: usageColor(displayStats.vram) }}>
                     显存{displayStats.vram}%
@@ -277,55 +278,54 @@ export function App() {
                 </span>
               </span>
             )}
-          </div>
-
-          {/* Queue manager */}
-          <div ref={queueWrapperRef} style={{ position: 'relative' }}>
-            <button
-              onClick={() => setIsQueueOpen((v) => !v)}
-              title="管理任务队列"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 'var(--spacing-xs)',
-                padding: 'var(--spacing-sm) var(--spacing-md)',
-                backgroundColor: isQueueOpen ? 'var(--color-surface-hover)' : 'transparent',
-                color: isQueueOpen ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-                border: '1px solid',
-                borderColor: isQueueOpen ? 'var(--color-primary)' : 'var(--color-border)',
-                borderRadius: 0,
-                fontSize: '12px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              <ListOrdered size={14} />
-              管理队列
-              {queueCount > 0 && (
-                <span style={{
-                  position: 'absolute',
-                  top: '-6px',
-                  right: '-6px',
-                  display: 'inline-flex',
+            {/* Queue manager — shares the same border box */}
+            <div ref={queueWrapperRef} style={{ position: 'relative', height: '100%' }}>
+              <button
+                onClick={() => setIsQueueOpen((v) => !v)}
+                title="管理任务队列"
+                style={{
+                  display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center',
-                  minWidth: '16px',
-                  height: '16px',
-                  padding: '0 4px',
-                  borderRadius: '8px',
-                  backgroundColor: 'var(--color-primary)',
-                  color: '#fff',
-                  fontSize: '10px',
-                  fontWeight: 700,
-                  lineHeight: 1,
-                  pointerEvents: 'none',
-                }}>
-                  {queueCount}
-                </span>
-              )}
-            </button>
-            {isQueueOpen && <QueuePanel onClose={() => setIsQueueOpen(false)} />}
+                  gap: 'var(--spacing-xs)',
+                  padding: 'var(--spacing-sm) var(--spacing-md)',
+                  backgroundColor: isQueueOpen ? 'var(--color-surface-hover)' : 'transparent',
+                  color: isQueueOpen ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                  border: 'none',
+                  borderRadius: 0,
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  height: '100%',
+                }}
+              >
+                <ListOrdered size={14} />
+                管理队列
+                {queueCount > 0 && (
+                  <span style={{
+                    position: 'absolute',
+                    top: '-6px',
+                    right: '-6px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    minWidth: '16px',
+                    height: '16px',
+                    padding: '0 4px',
+                    borderRadius: '8px',
+                    backgroundColor: 'var(--color-primary)',
+                    color: '#fff',
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    lineHeight: 1,
+                    pointerEvents: 'none',
+                  }}>
+                    {queueCount}
+                  </span>
+                )}
+              </button>
+              {isQueueOpen && <QueuePanel onClose={() => setIsQueueOpen(false)} />}
+            </div>
           </div>
 
           <SessionBar sessionId={sessionId} lastSavedAt={lastSavedAt} onNewSession={newSession} />

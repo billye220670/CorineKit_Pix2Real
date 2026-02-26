@@ -73,3 +73,13 @@ img {
 }
 
 .no-scrollbar::-webkit-scrollbar { display: none; }
+
+@keyframes toast-fly-in {
+  0%   { transform: translateY(-120%); opacity: 0; }
+  60%  { transform: translateY(6px);   opacity: 1; }
+  100% { transform: translateY(0);     opacity: 1; }
+}
+
+.toast-enter {
+  animation: toast-fly-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}

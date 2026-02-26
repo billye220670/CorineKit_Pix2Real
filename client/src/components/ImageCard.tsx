@@ -1,5 +1,5 @@
 import { useCallback, useState, useRef } from 'react';
-import { X, Play, RotateCcw, Check, AlertCircle, Layers, ChevronDown, Footprints } from 'lucide-react';
+import { X, Play, RotateCcw, Check, AlertCircle, Layers, ChevronDown, Flower } from 'lucide-react';
 import { useWorkflowStore } from '../hooks/useWorkflowStore.js';
 import { useWebSocket } from '../hooks/useWebSocket.js';
 import { ProgressOverlay } from './ProgressOverlay.js';
@@ -7,6 +7,7 @@ import { ThumbnailStrip } from './ThumbnailStrip.js';
 import { useMaskStore } from '../hooks/useMaskStore.js';
 import { maskKey, TAB_MASK_MODE } from '../config/maskConfig.js';
 import { showToast } from '../hooks/useToast.js';
+import { useDragStore } from '../hooks/useDragStore.js';
 import type { ImageItem } from '../types/index.js';
 
 interface ImageCardProps {
@@ -57,6 +58,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
   const maskEntryForMode = useMaskStore((s) => s.masks[maskKey(image.id, -1)]);
   const backPose         = useWorkflowStore((s) => s.tabData[s.activeTab]?.backPoseToggles?.[image.id] ?? false);
   const toggleBackPose   = useWorkflowStore((s) => s.toggleBackPose);
+  const setDragging      = useDragStore((s) => s.setDragging);
 
   const [maskMenuOpen, setMaskMenuOpen] = useState(false);
 
@@ -125,13 +127,15 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
   const handleDragStart = useCallback((e: React.DragEvent) => {
     cancelLongPress();
     e.dataTransfer.setData('application/x-workflow-image', image.id);
-    e.dataTransfer.effectAllowed = 'copy';
+    e.dataTransfer.effectAllowed = 'move';
+    setDragging({ type: 'card', imageId: image.id });
     setIsDragging(true);
-  }, [image.id, cancelLongPress]);
+  }, [image.id, cancelLongPress, setDragging]);
 
   const handleDragEnd = useCallback(() => {
     setIsDragging(false);
-  }, []);
+    setDragging(null);
+  }, [setDragging]);
   const handleCancelQueue = useCallback(async () => {
     const promptId = task?.promptId;
     if (!promptId) return;
@@ -468,31 +472,10 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
                   cursor: 'pointer',
                 }}
               >
-                <Footprints size={14} color={backPose ? '#dbeafe' : '#9ca3af'} />
+                <Flower size={14} color={backPose ? '#dbeafe' : '#9ca3af'} />
               </button>
             )}
           </div>
-        )}
-
-        {/* Remove button — hidden in multi-select mode */}
-        {!isProcessing && !isMultiSelectMode && isHovered && (
-          <button
-            onClick={(e) => { e.stopPropagation(); removeImage(image.id); }}
-            style={{
-              position: 'absolute',
-              top: 'var(--spacing-sm)',
-              right: 'var(--spacing-sm)',
-              padding: 'var(--spacing-xs)',
-              backgroundColor: 'rgba(0,0,0,0.5)',
-              color: '#fff',
-              border: 'none',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-            }}
-          >
-            <X size={14} />
-          </button>
         )}
 
         {/* Multi-select checkmark overlay */}
@@ -528,6 +511,10 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
                 setSelectedOutputIndex(image.id, i - 1);
               }
             }}
+            onOutputDragStart={(outputIndex) => {
+              setDragging({ type: 'output', imageId: image.id, outputIndex });
+            }}
+            onOutputDragEnd={() => setDragging(null)}
           />
         )}
       </div>

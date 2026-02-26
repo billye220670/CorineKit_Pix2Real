@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useWorkflowStore } from '../hooks/useWorkflowStore.js';
 import { useMaskStore } from '../hooks/useMaskStore.js';
+import { useDragStore } from '../hooks/useDragStore.js';
 import { maskKey } from '../config/maskConfig.js';
 import { ImageCard } from './ImageCard.js';
 import { Play, Trash2, FolderOpen, LayoutGrid, Type, Check, Minus, Eraser } from 'lucide-react';
@@ -29,6 +30,7 @@ export function PhotoWall() {
   const tasks = useWorkflowStore((s) => s.tabData[s.activeTab]?.tasks ?? {});
   const clearCurrentImages = useWorkflowStore((s) => s.clearCurrentImages);
   const removeImages = useWorkflowStore((s) => s.removeImages);
+  const removeOutput = useWorkflowStore((s) => s.removeOutput);
   const setPrompts = useWorkflowStore((s) => s.setPrompts);
   const selectedImageIds = useWorkflowStore((s) => s.selectedImageIds);
   const setSelectedImageIds = useWorkflowStore((s) => s.setSelectedImageIds);
@@ -39,6 +41,8 @@ export function PhotoWall() {
   const deleteMask = useMaskStore((s) => s.deleteMask);
   const masks = useMaskStore((s) => s.masks);
   const backPoseToggles = useWorkflowStore((s) => s.tabData[s.activeTab]?.backPoseToggles ?? {});
+  const dragging = useDragStore((s) => s.dragging);
+  const setDragging = useDragStore((s) => s.setDragging);
   const { sendMessage } = useWebSocket();
 
   const [viewSize, setViewSize] = useState<ViewSize>(getInitialViewSize);
@@ -194,6 +198,31 @@ export function PhotoWall() {
   }, [masks, selectedImageIds, deleteMask]);
 
   const showExecuteButton = isMultiSelectMode ? hasIdleSelected : hasIdle;
+
+  const handleDeleteZoneDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    const drag = dragging;
+    setDragging(null);
+    if (!drag) return;
+
+    if (drag.type === 'card') {
+      const toDelete = selectedImageIds.includes(drag.imageId)
+        ? selectedImageIds
+        : [drag.imageId];
+      // Clean up all masks associated with each deleted image
+      for (const imgId of toDelete) {
+        Object.keys(masks).forEach((k) => {
+          if (k.startsWith(`${imgId}:`)) deleteMask(k);
+        });
+      }
+      removeImages(toDelete);
+      clearSelection();
+    } else if (drag.type === 'output') {
+      removeOutput(drag.imageId, drag.outputIndex);
+      // Clean up Mode B mask for this specific output index
+      deleteMask(maskKey(drag.imageId, drag.outputIndex));
+    }
+  }, [dragging, selectedImageIds, masks, removeImages, removeOutput, deleteMask, clearSelection, setDragging]);
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -358,7 +387,7 @@ export function PhotoWall() {
           {!isMultiSelectMode && (
             <button
               onClick={handleOpenFolder}
-              title="打开输出文件夹"
+              title="打开输出目录"
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -373,7 +402,7 @@ export function PhotoWall() {
               }}
             >
               <FolderOpen size={12} />
-              打开文件夹
+              打开输出目录
             </button>
           )}
 
@@ -449,6 +478,40 @@ export function PhotoWall() {
           ))}
         </div>
       </div>
+
+      {/* Drag-to-delete zone — shown at bottom center while any card or output is being dragged */}
+      {dragging && (
+        <div
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={handleDeleteZoneDrop}
+          style={{
+            position: 'fixed',
+            bottom: 28,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 500,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '12px 28px',
+            backgroundColor: 'rgba(239,68,68,0.12)',
+            border: '2px dashed rgba(239,68,68,0.55)',
+            color: 'rgba(239,68,68,0.9)',
+            fontSize: '13px',
+            fontWeight: 600,
+            pointerEvents: 'all',
+            backdropFilter: 'blur(4px)',
+            animation: 'toast-fly-in 0.22s cubic-bezier(0.22,1,0.36,1) both',
+          }}
+        >
+          <Trash2 size={15} />
+          {dragging.type === 'card'
+            ? (selectedImageIds.length > 1 && selectedImageIds.includes(dragging.imageId)
+                ? `松开删除 ${selectedImageIds.length} 张图片`
+                : '松开删除此图片')
+            : '松开删除此结果'}
+        </div>
+      )}
     </div>
   );
 }
