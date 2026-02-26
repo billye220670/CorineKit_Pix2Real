@@ -26,6 +26,7 @@ interface MaskStore {
   getMask: (key: string) => MaskEntry | undefined;
   openEditor: (state: MaskEditorOpenState) => void;
   closeEditor: () => void;
+  restoreAllMasks: (masks: Record<string, MaskEntry>) => void;
 }
 
 export const useMaskStore = create<MaskStore>((set, get) => ({
@@ -45,4 +46,5 @@ export const useMaskStore = create<MaskStore>((set, get) => ({
 
   openEditor: (state) => set({ editorState: state }),
   closeEditor: () => set({ editorState: null }),
+  restoreAllMasks: (masks) => set({ masks }),
 }));

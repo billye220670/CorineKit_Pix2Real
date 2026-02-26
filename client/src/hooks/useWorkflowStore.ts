@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { ImageItem, TaskInfo, TaskStatus } from '../types/index.js';
+import type { SerializedTabData } from '../services/sessionService.js';
 
 const WORKFLOWS = [
   { id: 0, name: '二次元转真人', needsPrompt: true },
@@ -62,6 +63,9 @@ interface WorkflowStore {
   // Computed helpers
   needsPrompt: () => boolean;
   isProcessing: () => boolean;
+
+  // Session restore
+  restoreSession: (activeTab: number, tabData: Record<number, SerializedTabData>, restoredImages: Record<number, ImageItem[]>) => void;
 }
 
 let imageCounter = 0;
@@ -442,6 +446,41 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   needsPrompt: () => {
     const { activeTab, workflows } = get();
     return workflows[activeTab]?.needsPrompt ?? false;
+  },
+
+  restoreSession: (activeTab, serializedTabData, restoredImages) => {
+    const newTabData: Record<number, TabData> = {};
+    for (let tab = 0; tab <= 5; tab++) {
+      const ser = serializedTabData[tab];
+      if (!ser) {
+        newTabData[tab] = emptyTabData();
+        continue;
+      }
+      const images = restoredImages[tab] ?? [];
+      const tasks: Record<string, TaskInfo> = {};
+      for (const [imageId, t] of Object.entries(ser.tasks)) {
+        tasks[imageId] = {
+          promptId: t.promptId,
+          status: (t.status === 'done' || t.status === 'error') ? t.status as TaskStatus : 'done',
+          progress: t.progress,
+          outputs: t.outputs,
+          error: t.error,
+        };
+      }
+      const imagePromptMap: Record<string, string> = {};
+      for (const [imageId, t] of Object.entries(ser.tasks)) {
+        imagePromptMap[imageId] = t.promptId;
+      }
+      newTabData[tab] = {
+        images,
+        prompts: ser.prompts,
+        tasks,
+        imagePromptMap,
+        selectedOutputIndex: ser.selectedOutputIndex,
+        backPoseToggles: ser.backPoseToggles,
+      };
+    }
+    set({ activeTab, tabData: newTabData });
   },
 
   isProcessing: () => {

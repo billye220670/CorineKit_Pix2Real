@@ -3,6 +3,8 @@ export interface ImageItem {
   file: File;
   previewUrl: string;
   originalName: string;
+  /** Persistent URL pointing to the session-stored copy of this image (set after session save/restore). */
+  sessionUrl?: string;
 }
 
 export interface WorkflowInfo {

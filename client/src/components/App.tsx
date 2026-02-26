@@ -2,10 +2,12 @@ import { useEffect, useCallback, useState, useRef } from 'react';
 import { useWorkflowStore } from '../hooks/useWorkflowStore.js';
 import { useWebSocket } from '../hooks/useWebSocket.js';
 import { useImageImporter } from '../hooks/useImageImporter.js';
+import { useSession } from '../hooks/useSession.js';
 import { TabSwitcher } from './TabSwitcher.js';
 import { DropZone } from './DropZone.js';
 import { PhotoWall } from './PhotoWall.js';
 import { ThemeToggle } from './ThemeToggle.js';
+import { SessionBar } from './SessionBar.js';
 import { Upload, Trash2, ListOrdered } from 'lucide-react';
 import { Toast } from './Toast.js';
 import { MaskEditor } from './MaskEditor.js';
@@ -58,6 +60,7 @@ export function App() {
     )
   );
   const { importFiles, dialog, overwrite, keepBoth, cancel } = useImageImporter();
+  const { sessionId, lastSavedAt, newSession } = useSession();
   const [releasing, setReleasing] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [displayStats, setDisplayStats] = useState<SysStats | null>(null);
@@ -325,6 +328,7 @@ export function App() {
             {isQueueOpen && <QueuePanel onClose={() => setIsQueueOpen(false)} />}
           </div>
 
+          <SessionBar sessionId={sessionId} lastSavedAt={lastSavedAt} onNewSession={newSession} />
           <ThemeToggle />
         </div>
       </header>

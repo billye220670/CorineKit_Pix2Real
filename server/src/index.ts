@@ -7,8 +7,10 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import workflowRouter from './routes/workflow.js';
 import outputRouter from './routes/output.js';
+import sessionRouter from './routes/session.js';
 import { connectWebSocket, getHistory, getImageBuffer } from './services/comfyui.js';
 import { getAdapter } from './adapters/index.js';
+import { sessionsBase, pruneOldSessions } from './services/sessionManager.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const outputBase = path.resolve(__dirname, '../../output');
@@ -29,6 +31,13 @@ for (const dir of OUTPUT_DIRS) {
   }
 }
 
+// Ensure sessions directory exists
+if (!fs.existsSync(sessionsBase)) {
+  fs.mkdirSync(sessionsBase, { recursive: true });
+}
+// Clean up old sessions on startup (keep 5)
+pruneOldSessions(5);
+
 const app = express();
 const server = createServer(app);
 
@@ -43,9 +52,11 @@ app.use(express.json({ limit: '50mb' }));
 // Routes
 app.use('/api/workflow', workflowRouter);
 app.use('/api/output', outputRouter);
+app.use('/api/session', sessionRouter);
 
-// Static serve output directory
+// Static serve output and sessions directories
 app.use('/output', express.static(outputBase));
+app.use('/api/session-files', express.static(sessionsBase));
 
 // WebSocket server
 const wss = new WebSocketServer({ server, path: '/ws' });
