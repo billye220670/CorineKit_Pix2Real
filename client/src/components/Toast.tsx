@@ -1,12 +1,11 @@
 import { useToastMessage } from '../hooks/useToast.js';
 
 export function Toast() {
-  const { message, key } = useToastMessage();
+  const { message, key, isExiting } = useToastMessage();
   if (!message) return null;
   return (
     <div
       key={key}
-      className="toast-enter"
       style={{
         position: 'fixed',
         top: 'var(--spacing-lg)',
@@ -21,6 +20,9 @@ export function Toast() {
         pointerEvents: 'none',
         whiteSpace: 'nowrap',
         boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
+        animation: isExiting
+          ? 'toast-fly-out 0.28s ease forwards'
+          : 'toast-fly-in 0.22s cubic-bezier(0.22,1,0.36,1) both',
       }}
     >
       {message}

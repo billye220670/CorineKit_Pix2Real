@@ -5,7 +5,7 @@ import { useImageImporter } from '../hooks/useImageImporter.js';
 import { useSession } from '../hooks/useSession.js';
 import { Sidebar } from './Sidebar.js';
 import { DropZone } from './DropZone.js';
-import { PhotoWall } from './PhotoWall.js';
+import { PhotoWall, VIEW_CONFIG, type ViewSize } from './PhotoWall.js';
 import { ThemeToggle } from './ThemeToggle.js';
 import { SessionBar } from './SessionBar.js';
 import { StatusBar } from './StatusBar.js';
@@ -47,6 +47,19 @@ export function App() {
   const { importFiles, dialog, overwrite, keepBoth, cancel } = useImageImporter();
   const { sessionId, lastSavedAt, newSession } = useSession();
   const [isDragOver, setIsDragOver] = useState(false);
+  const [viewSize, setViewSize] = useState<ViewSize>(() => {
+    const saved = localStorage.getItem('viewSize');
+    if (saved === 'small' || saved === 'medium' || saved === 'large') return saved;
+    return 'medium';
+  });
+  const cycleViewSize = useCallback(() => {
+    const next: Record<ViewSize, ViewSize> = { small: 'medium', medium: 'large', large: 'small' };
+    setViewSize((cur) => {
+      const nextSize = next[cur];
+      localStorage.setItem('viewSize', nextSize);
+      return nextSize;
+    });
+  }, []);
   useWebSocket();
 
   useEffect(() => {
@@ -162,7 +175,7 @@ export function App() {
           {images.length === 0 ? (
             <DropZone fullscreen importFiles={importFiles} onDropHandled={() => setIsDragOver(false)} />
           ) : (
-            <PhotoWall />
+            <PhotoWall viewSize={viewSize} />
           )}
 
           {/* Fullscreen drop overlay */}
@@ -191,7 +204,7 @@ export function App() {
       </div>
 
       {/* Status bar */}
-      <StatusBar lastSavedAt={lastSavedAt} />
+      <StatusBar lastSavedAt={lastSavedAt} viewLabel={VIEW_CONFIG[viewSize].label} onCycleViewSize={cycleViewSize} />
 
       {/* Duplicate filename confirmation dialog */}
       {dialog && (

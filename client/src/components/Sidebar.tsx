@@ -34,6 +34,10 @@ export function Sidebar() {
   const [queueCount, setQueueCount] = useState(0);
   const queueWrapperRef = useRef<HTMLDivElement>(null);
   const asideRef = useRef<HTMLElement>(null);
+  const navRef = useRef<HTMLElement>(null);
+  const buttonRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
+  const hasInitialized = useRef(false);
+  const [indicatorStyle, setIndicatorStyle] = useState<{ top: number; height: number; animate: boolean } | null>(null);
 
   // Native dragover listener — React's synthetic events can miss preventDefault()
   // for drag events; binding directly to the DOM element is reliable.
@@ -65,6 +69,21 @@ export function Sidebar() {
     const timer = setInterval(poll, 2000);
     return () => clearInterval(timer);
   }, []);
+
+  // Compute floating indicator position for active tab
+  useEffect(() => {
+    const nav = navRef.current;
+    const btn = buttonRefs.current.get(activeTab);
+    if (!nav || !btn) return;
+    const navRect = nav.getBoundingClientRect();
+    const btnRect = btn.getBoundingClientRect();
+    setIndicatorStyle({
+      top: btnRect.top - navRect.top + nav.scrollTop,
+      height: btnRect.height,
+      animate: hasInitialized.current,
+    });
+    hasInitialized.current = true;
+  }, [activeTab]);
 
   const openQueue = useCallback(() => {
     setIsQueueClosing(false);
@@ -160,7 +179,26 @@ export function Sidebar() {
       }}
     >
       {/* Workflow groups */}
-      <nav style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '8px 0' }}>
+      <nav ref={navRef} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '8px 0', position: 'relative' }}>
+        {/* Floating active indicator */}
+        {indicatorStyle && (
+          <div
+            style={{
+              position: 'absolute',
+              left: 8,
+              right: 8,
+              top: indicatorStyle.top,
+              height: indicatorStyle.height,
+              backgroundColor: 'rgba(33, 150, 243, 0.13)',
+              borderRadius: 8,
+              transition: indicatorStyle.animate
+                ? 'top 0.22s cubic-bezier(0.4, 0, 0.2, 1), height 0.22s cubic-bezier(0.4, 0, 0.2, 1)'
+                : 'none',
+              pointerEvents: 'none',
+              zIndex: 0,
+            }}
+          />
+        )}
         {GROUPS.map((group) => (
           <div key={group.label} style={{ marginBottom: 4 }}>
             {/* Group label */}
@@ -188,6 +226,10 @@ export function Sidebar() {
               return (
                 <button
                   key={id}
+                  ref={(el) => {
+                    if (el) buttonRefs.current.set(id, el);
+                    else buttonRefs.current.delete(id);
+                  }}
                   onClick={() => setActiveTab(id)}
                   onDragOver={(e) => {
                     e.preventDefault();
@@ -201,6 +243,7 @@ export function Sidebar() {
                   onDrop={(e) => handleDrop(e, id)}
                   style={{
                     position: 'relative',
+                    zIndex: 1,
                     display: 'flex',
                     alignItems: 'center',
                     gap: 8,
@@ -208,7 +251,6 @@ export function Sidebar() {
                     margin: '2px 8px',
                     padding: '9px 12px',
                     backgroundColor: isDragOver ? 'var(--color-surface-hover)' : 'transparent',
-                    boxShadow: isActive ? '0 0 0 1.5px var(--color-primary) inset' : 'none',
                     color: isActive ? 'var(--color-primary)' : 'var(--color-text-secondary)',
                     border: 'none',
                     borderRadius: 8,
@@ -217,7 +259,7 @@ export function Sidebar() {
                     cursor: 'pointer',
                     textAlign: 'left',
                     opacity: isActive ? 1 : 0.75,
-                    transition: 'background-color 0.15s, box-shadow 0.15s, color 0.15s, opacity 0.15s',
+                    transition: 'background-color 0.15s, color 0.15s, opacity 0.15s',
                   }}
                 >
                   <Icon size={14} style={{ flexShrink: 0 }} />
@@ -268,7 +310,7 @@ export function Sidebar() {
             backgroundColor: isQueueOpen ? 'var(--color-surface-hover)' : 'transparent',
             color: 'var(--color-text)',
             border: '1px solid var(--color-border)',
-            borderRadius: 16,
+            borderRadius: 6,
             fontSize: '13px',
             fontWeight: 300,
             cursor: 'pointer',

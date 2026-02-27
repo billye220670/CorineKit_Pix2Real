@@ -25,9 +25,10 @@ export function ThemeToggle() {
         justifyContent: 'center',
         padding: 'var(--spacing-sm)',
         color: 'var(--color-text)',
-        border: '1px solid var(--color-border)',
+        border: 'none',
         borderRadius: 0,
         backgroundColor: 'transparent',
+        opacity: 0.55,
       }}
       title={dark ? '切换到亮色主题' : '切换到暗色主题'}
     >

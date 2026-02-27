@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { CheckCircle2, FolderOpen, Trash2, Fan, HardDrive } from 'lucide-react';
+import { CheckCircle2, FolderOpen, Trash2, Fan, HardDrive, LayoutGrid } from 'lucide-react';
 import { useWorkflowStore } from '../hooks/useWorkflowStore.js';
 
 interface StatusBarProps {
   lastSavedAt: Date | null;
+  viewLabel: string;
+  onCycleViewSize: () => void;
 }
 
 interface SysStats { vram: number | null; ram: number; }
@@ -30,7 +32,7 @@ const Divider = () => (
   <div style={{ width: 1, alignSelf: 'stretch', margin: '4px 0', backgroundColor: 'var(--color-border)', flexShrink: 0 }} />
 );
 
-export function StatusBar({ lastSavedAt }: StatusBarProps) {
+export function StatusBar({ lastSavedAt, viewLabel, onCycleViewSize }: StatusBarProps) {
   const clientId = useWorkflowStore((s) => s.clientId);
   const activeTab = useWorkflowStore((s) => s.activeTab);
   const hasAnyProcessing = useWorkflowStore((s) =>
@@ -163,6 +165,17 @@ export function StatusBar({ lastSavedAt }: StatusBarProps) {
 
       {/* ── Spacer ── */}
       <div style={{ flex: 1 }} />
+
+      {/* ── View size toggle ── */}
+      <Divider />
+      <button
+        onClick={onCycleViewSize}
+        title="切换视图大小"
+        style={btnStyle}
+      >
+        <LayoutGrid size={11} />
+        {viewLabel}
+      </button>
 
       {/* ── Right: release memory ── */}
       <Divider />

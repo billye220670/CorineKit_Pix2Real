@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useWorkflowStore } from '../hooks/useWorkflowStore.js';
 import { useMaskStore } from '../hooks/useMaskStore.js';
 import { useDragStore } from '../hooks/useDragStore.js';
@@ -43,6 +43,16 @@ export function PhotoWall({ viewSize }: PhotoWallProps) {
   const { sendMessage } = useWebSocket();
 
   const [bulkPrompt, setBulkPrompt] = useState('');
+  const [isOverDeleteZone, setIsOverDeleteZone] = useState(false);
+  const deleteZoneDragCount = useRef(0);
+
+  // Reset hover state when drag ends
+  useEffect(() => {
+    if (!dragging) {
+      deleteZoneDragCount.current = 0;
+      setIsOverDeleteZone(false);
+    }
+  }, [dragging]);
 
   const isMultiSelectMode = selectedImageIds.length > 0;
   const selectedCount = selectedImageIds.length;
@@ -387,6 +397,7 @@ export function PhotoWall({ viewSize }: PhotoWallProps) {
       {/* Scrollable photo wall */}
       <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
         <div
+          className="photowall-bg"
           style={{ position: 'absolute', inset: 0, overflow: 'auto', padding: 'var(--spacing-lg)' }}
           onClick={(e) => { if (isMultiSelectMode && e.target === e.currentTarget) clearSelection(); }}
         >
@@ -415,36 +426,67 @@ export function PhotoWall({ viewSize }: PhotoWallProps) {
 
       {/* Drag-to-delete zone — shown at bottom center while any card or output is being dragged */}
       {dragging && (
-        <div
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={handleDeleteZoneDrop}
-          style={{
-            position: 'fixed',
-            bottom: 56,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 500,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '12px 28px',
-            backgroundColor: 'rgba(239,68,68,0.12)',
-            border: '2px dashed rgba(239,68,68,0.55)',
-            color: 'rgba(239,68,68,0.9)',
-            fontSize: '13px',
-            fontWeight: 600,
-            pointerEvents: 'all',
-            backdropFilter: 'blur(4px)',
-            animation: 'toast-fly-in 0.22s cubic-bezier(0.22,1,0.36,1) both',
-          }}
-        >
-          <Trash2 size={15} />
-          {dragging.type === 'card'
-            ? (selectedImageIds.length > 1 && selectedImageIds.includes(dragging.imageId)
-                ? `松开删除 ${selectedImageIds.length} 张图片`
-                : '松开删除此图片')
-            : '松开删除此结果'}
-        </div>
+        <>
+          {/* Bottom gradient for readability behind the delete zone */}
+          <div
+            style={{
+              position: 'fixed',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: 180,
+              background: 'linear-gradient(to top, rgba(0,0,0,0.65) 0%, transparent 100%)',
+              pointerEvents: 'none',
+              zIndex: 499,
+              animation: 'fade-in 0.22s ease both',
+            }}
+          />
+          <div
+            onDragOver={(e) => e.preventDefault()}
+            onDragEnter={() => {
+              deleteZoneDragCount.current++;
+              setIsOverDeleteZone(true);
+            }}
+            onDragLeave={() => {
+              deleteZoneDragCount.current--;
+              if (deleteZoneDragCount.current <= 0) {
+                deleteZoneDragCount.current = 0;
+                setIsOverDeleteZone(false);
+              }
+            }}
+            onDrop={handleDeleteZoneDrop}
+            style={{
+              position: 'fixed',
+              bottom: 40,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              zIndex: 500,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              padding: '18px 56px',
+              minWidth: 340,
+              justifyContent: 'center',
+              backgroundColor: isOverDeleteZone ? 'rgba(239,68,68,0.28)' : 'rgba(239,68,68,0.1)',
+              border: `2px dashed ${isOverDeleteZone ? 'rgba(239,68,68,1)' : 'rgba(239,68,68,0.5)'}`,
+              borderRadius: 12,
+              color: isOverDeleteZone ? '#ff6b6b' : 'rgba(239,68,68,0.85)',
+              fontSize: '14px',
+              fontWeight: 600,
+              pointerEvents: 'all',
+              backdropFilter: 'blur(6px)',
+              transition: 'background-color 0.15s, border-color 0.15s, color 0.15s',
+              animation: 'delete-zone-in 0.22s cubic-bezier(0.22,1,0.36,1) both',
+            }}
+          >
+            <Trash2 size={18} />
+            {dragging.type === 'card'
+              ? (selectedImageIds.length > 1 && selectedImageIds.includes(dragging.imageId)
+                  ? `松开删除 ${selectedImageIds.length} 张图片`
+                  : '松开删除此图片')
+              : '松开删除此结果'}
+          </div>
+        </>
       )}
     </div>
   );

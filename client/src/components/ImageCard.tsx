@@ -36,10 +36,12 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
   const { sendMessage } = useWebSocket();
 
   const [isHovered, setIsHovered] = useState(false);
+  const [isCardHovered, setIsCardHovered] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressFired = useRef(false);
+  const mouseDownFromInput = useRef(false);
 
   const task = tasks[image.id];
   const status = task?.status || 'idle';
@@ -83,7 +85,9 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
   }, []);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.button !== 0 || isProcessing) return;
+    const fromInput = !!(e.target as HTMLElement).closest('textarea, input, select');
+    mouseDownFromInput.current = fromInput;
+    if (e.button !== 0 || isProcessing || fromInput) return;
     longPressFired.current = false;
     longPressTimer.current = setTimeout(() => {
       longPressFired.current = true;
@@ -94,10 +98,12 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
 
   const handleMouseUp = useCallback(() => {
     cancelLongPress();
+    mouseDownFromInput.current = false;
   }, [cancelLongPress]);
 
   const handleMouseLeaveOuter = useCallback(() => {
     cancelLongPress();
+    setIsCardHovered(false);
   }, [cancelLongPress]);
 
   const handleMouseEnter = useCallback(() => {
@@ -125,6 +131,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
   }, [isMultiSelectMode, onToggleSelect]);
 
   const handleDragStart = useCallback((e: React.DragEvent) => {
+    if (mouseDownFromInput.current) { e.preventDefault(); return; }
     cancelLongPress();
     e.dataTransfer.setData('application/x-workflow-image', image.id);
     e.dataTransfer.effectAllowed = 'move';
@@ -253,6 +260,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
       onMouseDown={handleMouseDown}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseLeaveOuter}
+      onMouseEnter={() => setIsCardHovered(true)}
       className={isFlashing ? 'card-flash-anim' : undefined}
       onAnimationEnd={() => { if (isFlashing) setFlashingImage(null); }}
       style={{
@@ -261,9 +269,14 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
         borderRadius: 10,
         overflow: 'hidden',
         opacity: isDragging ? 0.5 : 1,
-        cursor: isDragging ? 'grabbing' : isProcessing ? 'default' : 'grab',
-        transition: 'opacity 0.15s, box-shadow 0.15s',
-        boxShadow: isSelected ? '0 0 0 2px var(--color-primary)' : 'none',
+        cursor: isDragging ? 'grabbing' : 'default',
+        transform: isCardHovered && !isDragging ? 'translateY(-3px)' : 'none',
+        transition: 'opacity 0.15s, box-shadow 0.2s ease, transform 0.2s ease',
+        boxShadow: isSelected
+          ? '0 0 0 2px var(--color-primary)'
+          : isCardHovered && !isDragging
+            ? '0 8px 24px rgba(0,0,0,0.2)'
+            : 'none',
         userSelect: 'none',
       }}
     >
@@ -377,7 +390,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
                 alignItems: 'center',
                 background: 'rgba(0,0,0,0.45)',
                 borderRadius: 6,
-                padding: '2px 4px',
+                padding: '5px 7px',
                 gap: 2,
                 cursor: 'pointer',
                 userSelect: 'none',
@@ -553,6 +566,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
               disabled={isProcessing}
               rows={1}
               onClick={(e) => e.stopPropagation()}
+              onDragStart={(e) => e.stopPropagation()}
               style={{
                 flex: 1,
                 height: 28,
