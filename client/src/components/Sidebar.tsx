@@ -322,15 +322,17 @@ export function Sidebar() {
           管理队列
           {queueCount > 0 && (
             <span style={{
-              marginLeft: 'auto',
+              position: 'absolute',
+              top: -6,
+              right: -6,
               display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',
-              minWidth: 18,
-              height: 18,
-              padding: '0 5px',
-              borderRadius: 9,
-              backgroundColor: 'var(--color-primary)',
+              minWidth: 16,
+              height: 16,
+              padding: '0 4px',
+              borderRadius: 8,
+              backgroundColor: '#2196F3',
               color: '#fff',
               fontSize: '10px',
               fontWeight: 700,

@@ -388,7 +388,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                background: 'rgba(0,0,0,0.45)',
+                background: 'rgba(0,0,0,0.68)',
                 borderRadius: 6,
                 padding: '5px 7px',
                 gap: 2,
@@ -479,8 +479,8 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  padding: '2px 4px',
-                  background: backPose ? 'rgba(59,130,246,0.85)' : 'rgba(0,0,0,0.45)',
+                  padding: '5px 7px',
+                  background: backPose ? 'rgba(59,130,246,0.9)' : 'rgba(0,0,0,0.68)',
                   border: backPose ? '1px solid rgba(147,197,253,0.6)' : '1px solid rgba(255,255,255,0.15)',
                   borderRadius: 6,
                   cursor: 'pointer',
@@ -497,7 +497,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
           <div style={{
             position: 'absolute',
             inset: 0,
-            backgroundColor: 'rgba(0,0,0,0.38)',
+            backgroundColor: 'rgba(0,0,0,0.55)',
             pointerEvents: 'none',
             transition: 'background-color 0.15s',
           }} />

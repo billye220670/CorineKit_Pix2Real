@@ -213,7 +213,6 @@ export function PhotoWall({ viewSize }: PhotoWallProps) {
       {/* Toolbar — only visible in multi-select mode */}
       {isMultiSelectMode && <div style={{
         display: 'flex',
-        justifyContent: 'space-between',
         alignItems: 'center',
         gap: 'var(--spacing-sm)',
         padding: 'var(--spacing-sm) var(--spacing-lg)',
@@ -221,7 +220,48 @@ export function PhotoWall({ viewSize }: PhotoWallProps) {
         backgroundColor: 'var(--color-surface)',
         flexShrink: 0,
       }}>
-        {/* Left: multi-select bulk prompt (only in multi-select mode) */}
+        {/* 全选按钮 */}
+        {isMultiSelectMode && (
+          <button
+            onClick={handleSelectAll}
+            title={allSelected ? '取消全选' : '全选'}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 'var(--spacing-xs)',
+              padding: 'var(--spacing-xs) var(--spacing-sm)',
+              backgroundColor: 'transparent',
+              color: 'var(--color-text-secondary)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 6,
+              fontSize: '12px',
+              cursor: 'pointer',
+              flexShrink: 0,
+            }}
+          >
+            {/* Three-state checkbox visual */}
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 13,
+              height: 13,
+              border: '1.5px solid currentColor',
+              borderRadius: 2,
+              backgroundColor: allSelected ? 'currentColor' : 'transparent',
+              flexShrink: 0,
+            }}>
+              {allSelected && <Check size={9} color="var(--color-surface)" strokeWidth={3} />}
+              {someSelected && <Minus size={9} strokeWidth={3} />}
+            </span>
+            全选
+          </button>
+        )}
+
+        {/* 分割线 1 */}
+        <div style={{ width: 1, height: 20, backgroundColor: 'var(--color-border)', marginLeft: 4, marginRight: 4 }} />
+
+        {/* Left: multi-select bulk prompt */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
           {isMultiSelectMode && (
             <>
@@ -252,8 +292,8 @@ export function PhotoWall({ viewSize }: PhotoWallProps) {
                   gap: 'var(--spacing-xs)',
                   padding: 'var(--spacing-xs) var(--spacing-sm)',
                   backgroundColor: 'transparent',
-                  color: 'var(--color-primary)',
-                  border: '1px solid var(--color-primary)',
+                  color: 'var(--color-text-secondary)',
+                  border: '1px solid var(--color-border)',
                   borderRadius: 6,
                   fontSize: '12px',
                   cursor: 'pointer',
@@ -267,64 +307,11 @@ export function PhotoWall({ viewSize }: PhotoWallProps) {
           )}
         </div>
 
-        {/* Right: action buttons */}
+        {/* 分隔符 - 伸缩，将左侧按钮推向左边 */}
+        <div style={{ flex: 1 }} />
+
+        {/* Right: 清空蒙版和执行按钮 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
-          {isMultiSelectMode && (
-            <button
-              onClick={handleSelectAll}
-              title={allSelected ? '取消全选' : '全选'}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 'var(--spacing-xs)',
-                padding: 'var(--spacing-xs) var(--spacing-sm)',
-                backgroundColor: 'transparent',
-                color: 'var(--color-primary)',
-                border: '1px solid var(--color-primary)',
-                borderRadius: 0,
-                fontSize: '12px',
-                cursor: 'pointer',
-              }}
-            >
-              {/* Three-state checkbox visual */}
-              <span style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: 13,
-                height: 13,
-                border: '1.5px solid currentColor',
-                borderRadius: 2,
-                backgroundColor: allSelected ? 'currentColor' : 'transparent',
-                flexShrink: 0,
-              }}>
-                {allSelected && <Check size={9} color="var(--color-surface)" strokeWidth={3} />}
-                {someSelected && <Minus size={9} strokeWidth={3} />}
-              </span>
-              全选
-            </button>
-          )}
-
-          {isMultiSelectMode && (
-            <button
-              onClick={clearSelection}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 'var(--spacing-xs)',
-                padding: 'var(--spacing-xs) var(--spacing-sm)',
-                backgroundColor: 'transparent',
-                color: 'var(--color-text-secondary)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 0,
-                fontSize: '12px',
-                cursor: 'pointer',
-              }}
-            >
-              取消多选
-            </button>
-          )}
-
           {isMultiSelectMode && (
             <button
               onClick={handleBatchDeleteMasks}
@@ -334,38 +321,23 @@ export function PhotoWall({ viewSize }: PhotoWallProps) {
                 alignItems: 'center',
                 gap: 'var(--spacing-xs)',
                 padding: 'var(--spacing-xs) var(--spacing-sm)',
-                backgroundColor: 'transparent',
-                color: 'var(--color-warning, #e8a020)',
-                border: '1px solid var(--color-warning, #e8a020)',
-                borderRadius: 0,
+                backgroundColor: '#f44336',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: 6,
                 fontSize: '12px',
                 cursor: 'pointer',
+                flexShrink: 0,
               }}
             >
               <Eraser size={12} />
-              删除蒙版
+              清空蒙版
             </button>
           )}
 
-          {isMultiSelectMode && (
-            <button
-              onClick={handleBatchDelete}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 'var(--spacing-xs)',
-                padding: 'var(--spacing-xs) var(--spacing-sm)',
-                backgroundColor: 'transparent',
-                color: 'var(--color-error)',
-                border: '1px solid var(--color-error)',
-                borderRadius: 0,
-                fontSize: '12px',
-                cursor: 'pointer',
-              }}
-            >
-              <Trash2 size={12} />
-              {`删除 ${selectedCount} 个`}
-            </button>
+          {/* 分割线 2 */}
+          {showExecuteButton && (
+            <div style={{ width: 1, height: 20, backgroundColor: 'var(--color-border)', marginLeft: 4, marginRight: 4 }} />
           )}
 
           {showExecuteButton && (
@@ -380,11 +352,12 @@ export function PhotoWall({ viewSize }: PhotoWallProps) {
                 backgroundColor: 'var(--color-primary)',
                 color: '#ffffff',
                 border: 'none',
-                borderRadius: 0,
+                borderRadius: 6,
                 fontSize: '12px',
                 fontWeight: 600,
                 cursor: 'pointer',
                 opacity: clientId ? 1 : 0.5,
+                flexShrink: 0,
               }}
             >
               <Play size={12} />

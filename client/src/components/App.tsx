@@ -72,6 +72,7 @@ export function App() {
   // Main-area drag handlers — only activate for external file drops, not ImageCard drags
   const handleMainDragOver = useCallback((e: React.DragEvent) => {
     if (e.dataTransfer.types.includes('application/x-workflow-image')) return;
+    if (e.dataTransfer.types.includes('application/x-thumb-output')) return;
     if (!e.dataTransfer.types.includes('Files')) return;
     e.preventDefault();
     setIsDragOver(true);
@@ -131,16 +132,12 @@ export function App() {
         flexShrink: 0,
         zIndex: 100,
       }}>
-        <span style={{
-          fontSize: '16px',
-          fontWeight: 700,
-          color: 'var(--color-text)',
-          border: '2px solid var(--color-text)',
-          padding: '2px 8px',
-          userSelect: 'none',
-        }}>
-          Pix2Real
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, userSelect: 'none' }}>
+          <img src="/logo.png" alt="logo" style={{ width: 28, height: 28, objectFit: 'contain' }} />
+          <span style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-text)' }}>
+            Pix2Real
+          </span>
+        </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
           <SessionBar sessionId={sessionId} onNewSession={newSession} />

@@ -134,7 +134,6 @@ export function SessionBar({ sessionId, onNewSession }: SessionBarProps) {
         border: '1px solid var(--color-border)',
         borderRadius: 6,
         overflow: 'hidden',
-        opacity: 0.75,
       }}>
         {/* New session button */}
         <button
@@ -146,8 +145,8 @@ export function SessionBar({ sessionId, onNewSession }: SessionBarProps) {
             gap: '4px',
             padding: '0 10px',
             height: '100%',
-            backgroundColor: 'transparent',
-            color: 'var(--color-text)',
+            backgroundColor: 'var(--color-primary)',
+            color: '#ffffff',
             border: 'none',
             fontSize: '13px',
             fontWeight: 300,
@@ -171,8 +170,8 @@ export function SessionBar({ sessionId, onNewSession }: SessionBarProps) {
             alignItems: 'center',
             padding: '0 8px',
             height: '100%',
-            backgroundColor: open ? 'var(--color-surface-hover)' : 'transparent',
-            color: open ? 'var(--color-primary)' : 'var(--color-text)',
+            backgroundColor: 'var(--color-primary)',
+            color: open ? '#ffffff' : '#ffffff',
             border: 'none',
             cursor: 'pointer',
           }}
