@@ -191,17 +191,17 @@ export function Sidebar() {
                     alignItems: 'center',
                     gap: 8,
                     width: '100%',
-                    padding: '8px 16px',
+                    padding: '11px 16px',
                     backgroundColor: isActive
                       ? 'var(--color-primary)'
                       : isDragOver
                       ? 'var(--color-surface-hover)'
                       : 'transparent',
-                    color: isActive ? '#ffffff' : 'var(--color-text)',
+                    color: isActive ? '#ffffff' : 'var(--color-text-secondary)',
                     border: 'none',
                     borderRadius: 0,
                     fontSize: '13px',
-                    fontWeight: isActive ? 600 : 400,
+                    fontWeight: isActive ? 500 : 300,
                     cursor: 'pointer',
                     textAlign: 'left',
                     transition: 'background-color 0.15s, color 0.15s',

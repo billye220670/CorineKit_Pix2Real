@@ -144,7 +144,7 @@ export function StatusBar({ lastSavedAt }: StatusBarProps) {
       userSelect: 'none',
     }}>
       {/* ── Left: autosave ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '0 12px', whiteSpace: 'nowrap', opacity: 0.75 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '0 12px', whiteSpace: 'nowrap', color: '#6dbf7e' }}>
         <CheckCircle2 size={11} style={{ flexShrink: 0 }} />
         {lastSavedAt ? `自动保存于 ${timeAgo(lastSavedAt)}` : '未保存'}
       </div>

@@ -28,7 +28,6 @@ export function PhotoWall() {
   const prompts = useWorkflowStore((s) => s.tabData[s.activeTab]?.prompts ?? {});
   const startTask = useWorkflowStore((s) => s.startTask);
   const tasks = useWorkflowStore((s) => s.tabData[s.activeTab]?.tasks ?? {});
-  const clearCurrentImages = useWorkflowStore((s) => s.clearCurrentImages);
   const removeImages = useWorkflowStore((s) => s.removeImages);
   const removeOutput = useWorkflowStore((s) => s.removeOutput);
   const setPrompts = useWorkflowStore((s) => s.setPrompts);
@@ -76,13 +75,6 @@ export function PhotoWall() {
       setSelectedImageIds(images.map((img) => img.id));
     }
   }, [allSelected, images, clearSelection, setSelectedImageIds]);
-
-  const hasIdle = images.some((img) => {
-    const task = tasks[img.id];
-    if (task && task.status !== 'idle') return false;
-    if (activeTab === 5 && !masks[maskKey(img.id, -1)]) return false;
-    return true;
-  });
 
   const hasIdleSelected = images.some((img) => {
     if (!selectedImageIds.includes(img.id)) return false;
@@ -189,7 +181,7 @@ export function PhotoWall() {
     keysToDelete.forEach((k) => deleteMask(k));
   }, [masks, selectedImageIds, deleteMask]);
 
-  const showExecuteButton = isMultiSelectMode ? hasIdleSelected : hasIdle;
+  const showExecuteButton = isMultiSelectMode && hasIdleSelected;
 
   const handleDeleteZoneDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -221,8 +213,8 @@ export function PhotoWall() {
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      {/* Toolbar */}
-      <div style={{
+      {/* Toolbar — only visible in multi-select mode */}
+      {isMultiSelectMode && <div style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
@@ -358,25 +350,26 @@ export function PhotoWall() {
             </button>
           )}
 
-          <button
-            onClick={isMultiSelectMode ? handleBatchDelete : () => { if (window.confirm('清空当前所有图片？')) clearCurrentImages(); }}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 'var(--spacing-xs)',
-              padding: 'var(--spacing-xs) var(--spacing-sm)',
-              backgroundColor: 'transparent',
-              color: isMultiSelectMode ? 'var(--color-error)' : 'var(--color-text-secondary)',
-              border: '1px solid',
-              borderColor: isMultiSelectMode ? 'var(--color-error)' : 'var(--color-border)',
-              borderRadius: 0,
-              fontSize: '12px',
-              cursor: 'pointer',
-            }}
-          >
-            <Trash2 size={12} />
-            {isMultiSelectMode ? `删除 ${selectedCount} 个` : '清空'}
-          </button>
+          {isMultiSelectMode && (
+            <button
+              onClick={handleBatchDelete}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 'var(--spacing-xs)',
+                padding: 'var(--spacing-xs) var(--spacing-sm)',
+                backgroundColor: 'transparent',
+                color: 'var(--color-error)',
+                border: '1px solid var(--color-error)',
+                borderRadius: 0,
+                fontSize: '12px',
+                cursor: 'pointer',
+              }}
+            >
+              <Trash2 size={12} />
+              {`删除 ${selectedCount} 个`}
+            </button>
+          )}
 
           {showExecuteButton && (
             <button
@@ -398,16 +391,16 @@ export function PhotoWall() {
               }}
             >
               <Play size={12} />
-              {isMultiSelectMode ? `执行 ${selectedCount} 个` : '全部执行'}
+              {`执行 ${selectedCount} 个`}
             </button>
           )}
         </div>
-      </div>
+      </div>}
 
       {/* Content area: scrollable photo wall + view-size overlay */}
       <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
         {/* View size toggle — floating overlay top-right */}
-        <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 10 }}>
+        <div style={{ position: 'absolute', top: 8, right: 20, zIndex: 10 }}>
           <button
             onClick={cycleViewSize}
             title="切换视图大小"
