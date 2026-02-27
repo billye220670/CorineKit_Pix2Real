@@ -130,7 +130,7 @@ export function App() {
         </span>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
-          <SessionBar sessionId={sessionId} lastSavedAt={lastSavedAt} onNewSession={newSession} />
+          <SessionBar sessionId={sessionId} onNewSession={newSession} />
           <ThemeToggle />
         </div>
       </header>

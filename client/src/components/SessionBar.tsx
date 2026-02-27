@@ -18,25 +18,12 @@ function getSessionLabel(id: string): string {
   return name || id.slice(0, 8) + '…';
 }
 
-function timeAgo(date: Date): string {
-  const secs = Math.floor((Date.now() - date.getTime()) / 1000);
-  if (secs < 5) return '刚刚';
-  if (secs < 60) return `${secs}秒前`;
-  const mins = Math.floor(secs / 60);
-  if (mins < 60) return `${mins}分钟前`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}小时前`;
-  return `${Math.floor(hrs / 24)}天前`;
-}
-
 interface SessionBarProps {
   sessionId: string;
-  lastSavedAt: Date | null;
   onNewSession: (name?: string) => void;
 }
 
-export function SessionBar({ sessionId, lastSavedAt, onNewSession }: SessionBarProps) {
-  const [tick, setTick] = useState(0);
+export function SessionBar({ sessionId, onNewSession }: SessionBarProps) {
   const [open, setOpen] = useState(false);
   const [sessions, setSessions] = useState<SessionMeta[]>([]);
   // New session naming
@@ -49,13 +36,6 @@ export function SessionBar({ sessionId, lastSavedAt, onNewSession }: SessionBarP
   const renameInputRef = useRef<HTMLInputElement>(null);
   // Wrapper ref for outside click detection
   const wrapperRef = useRef<HTMLDivElement>(null);
-
-  // Refresh "X分钟前" every 30s
-  useEffect(() => {
-    const t = setInterval(() => setTick((n) => n + 1), 30_000);
-    return () => clearInterval(t);
-  }, []);
-  void tick;
 
   // Focus name input when shown
   useEffect(() => {
@@ -135,20 +115,6 @@ export function SessionBar({ sessionId, lastSavedAt, onNewSession }: SessionBarP
         height: 32,
         border: '1px solid var(--color-border)',
       }}>
-        {/* Last saved timestamp */}
-        <span style={{
-          fontSize: '11px',
-          color: 'var(--color-text-secondary)',
-          opacity: 0.7,
-          whiteSpace: 'nowrap',
-          padding: '0 8px',
-        }}>
-          {lastSavedAt ? `已保存 ${timeAgo(lastSavedAt)}` : '未保存'}
-        </span>
-
-        {/* Divider */}
-        <div style={{ width: 1, height: '60%', backgroundColor: 'var(--color-border)' }} />
-
         {/* New session button */}
         <button
           onClick={handleNewSessionClick}
@@ -162,8 +128,8 @@ export function SessionBar({ sessionId, lastSavedAt, onNewSession }: SessionBarP
             backgroundColor: 'transparent',
             color: 'var(--color-text-secondary)',
             border: 'none',
-            fontSize: '12px',
-            fontWeight: 600,
+            fontSize: '13px',
+            fontWeight: 300,
             cursor: 'pointer',
             whiteSpace: 'nowrap',
           }}

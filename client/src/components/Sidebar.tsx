@@ -204,7 +204,8 @@ export function Sidebar() {
                     fontWeight: isActive ? 500 : 300,
                     cursor: 'pointer',
                     textAlign: 'left',
-                    transition: 'background-color 0.15s, color 0.15s',
+                    opacity: isActive ? 1 : 0.4,
+                    transition: 'background-color 0.15s, color 0.15s, opacity 0.15s',
                   }}
                 >
                   <Icon size={14} style={{ flexShrink: 0 }} />
@@ -257,7 +258,7 @@ export function Sidebar() {
             border: '1px solid var(--color-border)',
             borderRadius: 16,
             fontSize: '13px',
-            fontWeight: 600,
+            fontWeight: 300,
             cursor: 'pointer',
           }}
         >
