@@ -20,9 +20,10 @@ interface RawQueueItem {
 interface QueuePanelProps {
   onClose: () => void;
   popupStyle?: React.CSSProperties;
+  closing?: boolean;
 }
 
-export function QueuePanel({ onClose, popupStyle }: QueuePanelProps) {
+export function QueuePanel({ onClose, popupStyle, closing }: QueuePanelProps) {
   const [rows, setRows] = useState<QueueRow[]>([]);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const workflows = useWorkflowStore((s) => s.workflows);
@@ -131,7 +132,7 @@ export function QueuePanel({ onClose, popupStyle }: QueuePanelProps) {
   }, [setActiveTab, setFlashingImage]);
 
   return (
-    <div style={{
+    <div className={closing ? 'panel-exit-up' : 'panel-enter-up'} style={{
       position: 'absolute',
       top: 'calc(100% + 4px)',
       right: 0,
@@ -140,8 +141,10 @@ export function QueuePanel({ onClose, popupStyle }: QueuePanelProps) {
       ...popupStyle,
       backgroundColor: 'var(--color-surface)',
       border: '1px solid var(--color-border)',
+      borderRadius: 10,
       boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
       zIndex: 200,
+      overflow: 'hidden',
       display: 'flex',
       flexDirection: 'column',
     }}>

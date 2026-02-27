@@ -80,6 +80,21 @@ img {
   100% { transform: translateY(0);     opacity: 1; }
 }
 
-.toast-enter {
-  animation: toast-fly-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+textarea::placeholder {
+  color: var(--color-text-secondary);
+  opacity: 0.4;
+  font-weight: 300;
 }
+
+@keyframes panel-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes panel-out {
+  from { opacity: 1; transform: scale(1); }
+  to   { opacity: 0; transform: scale(0.95); }
+}
+.panel-enter    { animation: panel-in  0.18s cubic-bezier(0.22, 1, 0.36, 1) both; transform-origin: top right; }
+.panel-exit     { animation: panel-out 0.14s ease-in both;                         transform-origin: top right; }
+.panel-enter-up { animation: panel-in  0.18s cubic-bezier(0.22, 1, 0.36, 1) both; transform-origin: bottom left; }
+.panel-exit-up  { animation: panel-out 0.14s ease-in both;                         transform-origin: bottom left; }

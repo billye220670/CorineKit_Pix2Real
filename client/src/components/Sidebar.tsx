@@ -30,6 +30,7 @@ export function Sidebar() {
 
   const [dragOverTab, setDragOverTab] = useState<number | null>(null);
   const [isQueueOpen, setIsQueueOpen] = useState(false);
+  const [isQueueClosing, setIsQueueClosing] = useState(false);
   const [queueCount, setQueueCount] = useState(0);
   const queueWrapperRef = useRef<HTMLDivElement>(null);
   const asideRef = useRef<HTMLElement>(null);
@@ -65,17 +66,30 @@ export function Sidebar() {
     return () => clearInterval(timer);
   }, []);
 
+  const openQueue = useCallback(() => {
+    setIsQueueClosing(false);
+    setIsQueueOpen(true);
+  }, []);
+
+  const closeQueue = useCallback(() => {
+    setIsQueueClosing(true);
+    setTimeout(() => {
+      setIsQueueOpen(false);
+      setIsQueueClosing(false);
+    }, 150);
+  }, []);
+
   // Close queue panel when clicking outside
   useEffect(() => {
     if (!isQueueOpen) return;
     const handler = (e: MouseEvent) => {
       if (queueWrapperRef.current && !queueWrapperRef.current.contains(e.target as Node)) {
-        setIsQueueOpen(false);
+        closeQueue();
       }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [isQueueOpen]);
+  }, [isQueueOpen, closeQueue]);
 
   // Same drop logic as TabSwitcher — copies selected image(s) to target tab
   const handleDrop = useCallback(async (e: React.DragEvent, targetTab: number) => {
@@ -190,22 +204,20 @@ export function Sidebar() {
                     display: 'flex',
                     alignItems: 'center',
                     gap: 8,
-                    width: '100%',
-                    padding: '11px 16px',
-                    backgroundColor: isActive
-                      ? 'var(--color-primary)'
-                      : isDragOver
-                      ? 'var(--color-surface-hover)'
-                      : 'transparent',
-                    color: isActive ? '#ffffff' : 'var(--color-text-secondary)',
+                    width: 'calc(100% - 16px)',
+                    margin: '2px 8px',
+                    padding: '9px 12px',
+                    backgroundColor: isDragOver ? 'var(--color-surface-hover)' : 'transparent',
+                    boxShadow: isActive ? '0 0 0 1.5px var(--color-primary) inset' : 'none',
+                    color: isActive ? 'var(--color-primary)' : 'var(--color-text-secondary)',
                     border: 'none',
-                    borderRadius: 0,
+                    borderRadius: 8,
                     fontSize: '13px',
                     fontWeight: isActive ? 500 : 300,
                     cursor: 'pointer',
                     textAlign: 'left',
-                    opacity: isActive ? 1 : 0.4,
-                    transition: 'background-color 0.15s, color 0.15s, opacity 0.15s',
+                    opacity: isActive ? 1 : 0.75,
+                    transition: 'background-color 0.15s, box-shadow 0.15s, color 0.15s, opacity 0.15s',
                   }}
                 >
                   <Icon size={14} style={{ flexShrink: 0 }} />
@@ -222,7 +234,7 @@ export function Sidebar() {
                       width: 6,
                       height: 6,
                       borderRadius: '50%',
-                      backgroundColor: isActive ? '#ffffff' : 'var(--color-primary)',
+                      backgroundColor: 'var(--color-primary)',
                       flexShrink: 0,
                       animation: 'pulse 1.5s ease-in-out infinite',
                     }} />
@@ -244,7 +256,7 @@ export function Sidebar() {
         }}
       >
         <button
-          onClick={() => setIsQueueOpen((v) => !v)}
+          onClick={() => isQueueOpen ? closeQueue() : openQueue()}
           title="管理任务队列"
           style={{
             position: 'relative',
@@ -254,12 +266,14 @@ export function Sidebar() {
             width: '100%',
             padding: '7px 12px',
             backgroundColor: isQueueOpen ? 'var(--color-surface-hover)' : 'transparent',
-            color: isQueueOpen ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+            color: 'var(--color-text)',
             border: '1px solid var(--color-border)',
             borderRadius: 16,
             fontSize: '13px',
             fontWeight: 300,
             cursor: 'pointer',
+            opacity: isQueueOpen ? 1 : 0.75,
+            transition: 'background-color 0.15s, opacity 0.15s',
           }}
         >
           <ListOrdered size={14} style={{ flexShrink: 0 }} />
@@ -288,7 +302,8 @@ export function Sidebar() {
         {/* Queue panel opens upward */}
         {isQueueOpen && (
           <QueuePanel
-            onClose={() => setIsQueueOpen(false)}
+            onClose={closeQueue}
+            closing={isQueueClosing}
             popupStyle={{
               top: 'auto',
               bottom: 'calc(100% + 4px)',

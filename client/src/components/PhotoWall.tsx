@@ -4,24 +4,22 @@ import { useMaskStore } from '../hooks/useMaskStore.js';
 import { useDragStore } from '../hooks/useDragStore.js';
 import { maskKey } from '../config/maskConfig.js';
 import { ImageCard } from './ImageCard.js';
-import { Play, Trash2, LayoutGrid, Type, Check, Minus, Eraser } from 'lucide-react';
+import { Play, Trash2, Type, Check, Minus, Eraser } from 'lucide-react';
 import { useWebSocket } from '../hooks/useWebSocket.js';
 
-type ViewSize = 'small' | 'medium' | 'large';
+export type ViewSize = 'small' | 'medium' | 'large';
 
-const VIEW_CONFIG: Record<ViewSize, { columnWidth: string; label: string }> = {
+export const VIEW_CONFIG: Record<ViewSize, { columnWidth: string; label: string }> = {
   small: { columnWidth: '180px', label: '小' },
   medium: { columnWidth: '280px', label: '中' },
   large: { columnWidth: '600px', label: '大' },
 };
 
-function getInitialViewSize(): ViewSize {
-  const saved = localStorage.getItem('viewSize');
-  if (saved === 'small' || saved === 'medium' || saved === 'large') return saved;
-  return 'medium';
+interface PhotoWallProps {
+  viewSize: ViewSize;
 }
 
-export function PhotoWall() {
+export function PhotoWall({ viewSize }: PhotoWallProps) {
   const images = useWorkflowStore((s) => s.tabData[s.activeTab]?.images ?? []);
   const activeTab = useWorkflowStore((s) => s.activeTab);
   const clientId = useWorkflowStore((s) => s.clientId);
@@ -44,7 +42,6 @@ export function PhotoWall() {
   const setDragging = useDragStore((s) => s.setDragging);
   const { sendMessage } = useWebSocket();
 
-  const [viewSize, setViewSize] = useState<ViewSize>(getInitialViewSize);
   const [bulkPrompt, setBulkPrompt] = useState('');
 
   const isMultiSelectMode = selectedImageIds.length > 0;
@@ -83,16 +80,6 @@ export function PhotoWall() {
     if (activeTab === 5 && !masks[maskKey(img.id, -1)]) return false;
     return true;
   });
-
-  const handleViewSizeChange = useCallback((size: ViewSize) => {
-    setViewSize(size);
-    localStorage.setItem('viewSize', size);
-  }, []);
-
-  const cycleViewSize = useCallback(() => {
-    const next: Record<ViewSize, ViewSize> = { small: 'medium', medium: 'large', large: 'small' };
-    handleViewSizeChange(next[viewSize]);
-  }, [viewSize, handleViewSizeChange]);
 
   const handleBatchExecute = async () => {
     if (!clientId) return;
@@ -237,7 +224,7 @@ export function PhotoWall() {
                   height: 26,
                   padding: 'var(--spacing-xs) var(--spacing-sm)',
                   border: '1px solid var(--color-border)',
-                  borderRadius: 0,
+                  borderRadius: 6,
                   backgroundColor: 'var(--color-bg)',
                   color: 'var(--color-text)',
                   fontSize: '12px',
@@ -257,7 +244,7 @@ export function PhotoWall() {
                   backgroundColor: 'transparent',
                   color: 'var(--color-primary)',
                   border: '1px solid var(--color-primary)',
-                  borderRadius: 0,
+                  borderRadius: 6,
                   fontSize: '12px',
                   cursor: 'pointer',
                   flexShrink: 0,
@@ -397,33 +384,8 @@ export function PhotoWall() {
         </div>
       </div>}
 
-      {/* Content area: scrollable photo wall + view-size overlay */}
+      {/* Scrollable photo wall */}
       <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
-        {/* View size toggle — floating overlay top-right */}
-        <div style={{ position: 'absolute', top: 8, right: 20, zIndex: 10 }}>
-          <button
-            onClick={cycleViewSize}
-            title="切换视图大小"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-              padding: '4px 8px',
-              backgroundColor: 'var(--color-surface)',
-              color: 'var(--color-text-secondary)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 0,
-              fontSize: '12px',
-              cursor: 'pointer',
-              boxShadow: '0 1px 4px rgba(0,0,0,0.12)',
-            }}
-          >
-            <LayoutGrid size={12} />
-            {VIEW_CONFIG[viewSize].label}
-          </button>
-        </div>
-
-        {/* Scrollable photo wall */}
         <div
           style={{ position: 'absolute', inset: 0, overflow: 'auto', padding: 'var(--spacing-lg)' }}
           onClick={(e) => { if (isMultiSelectMode && e.target === e.currentTarget) clearSelection(); }}

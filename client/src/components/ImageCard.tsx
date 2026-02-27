@@ -258,6 +258,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
       style={{
         border: '1px solid var(--color-border)',
         backgroundColor: 'var(--color-surface)',
+        borderRadius: 10,
         overflow: 'hidden',
         opacity: isDragging ? 0.5 : 1,
         cursor: isDragging ? 'grabbing' : isProcessing ? 'default' : 'grab',
@@ -478,6 +479,17 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
           </div>
         )}
 
+        {/* Dim overlay for unselected cards in multi-select mode */}
+        {isMultiSelectMode && !isSelected && (
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            backgroundColor: 'rgba(0,0,0,0.38)',
+            pointerEvents: 'none',
+            transition: 'background-color 0.15s',
+          }} />
+        )}
+
         {/* Multi-select checkmark overlay */}
         {isMultiSelectMode && (
           <div style={{
@@ -546,11 +558,11 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
                 height: 28,
                 padding: 'var(--spacing-xs) var(--spacing-sm)',
                 border: '1px solid var(--color-border)',
-                borderRadius: 0,
+                borderRadius: 6,
                 backgroundColor: 'var(--color-bg)',
                 color: 'var(--color-text)',
                 fontSize: '12px',
-                resize: 'vertical',
+                resize: 'none',
                 outline: 'none',
                 fontFamily: 'inherit',
               }}
@@ -570,7 +582,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
               backgroundColor: status === 'done' ? 'var(--color-success)' : 'var(--color-primary)',
               color: '#ffffff',
               border: 'none',
-              borderRadius: 0,
+              borderRadius: 6,
               cursor: canExecute ? 'pointer' : 'not-allowed',
               opacity: canExecute ? 1 : 0.5,
             }}

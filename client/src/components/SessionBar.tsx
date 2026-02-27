@@ -28,12 +28,15 @@ export function SessionBar({ sessionId, onNewSession }: SessionBarProps) {
   const [sessions, setSessions] = useState<SessionMeta[]>([]);
   // New session naming
   const [showNameInput, setShowNameInput] = useState(false);
+  const [isNameInputClosing, setIsNameInputClosing] = useState(false);
   const [newName, setNewName] = useState('');
   const nameInputRef = useRef<HTMLInputElement>(null);
   // Inline rename
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const renameInputRef = useRef<HTMLInputElement>(null);
+  // History dropdown
+  const [isHistoryClosing, setIsHistoryClosing] = useState(false);
   // Wrapper ref for outside click detection
   const wrapperRef = useRef<HTMLDivElement>(null);
 
@@ -50,11 +53,6 @@ export function SessionBar({ sessionId, onNewSession }: SessionBarProps) {
   const loadSessions = useCallback(async () => {
     try { setSessions(await listSessions()); } catch { /* ignore */ }
   }, []);
-
-  const handleOpenDropdown = useCallback(async () => {
-    if (!open) await loadSessions();
-    setOpen((v) => !v);
-  }, [open, loadSessions]);
 
   const handleDelete = useCallback(async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -85,26 +83,46 @@ export function SessionBar({ sessionId, onNewSession }: SessionBarProps) {
   }, [renamingId, renameValue]);
 
   // ── New session ──
+  const closeNameInput = useCallback(() => {
+    setIsNameInputClosing(true);
+    setTimeout(() => {
+      setShowNameInput(false);
+      setIsNameInputClosing(false);
+      setNewName('');
+    }, 150);
+  }, []);
+
+  const closeHistory = useCallback(() => {
+    setIsHistoryClosing(true);
+    setTimeout(() => {
+      setOpen(false);
+      setIsHistoryClosing(false);
+    }, 150);
+  }, []);
+
   const handleNewSessionClick = useCallback(() => {
+    setIsNameInputClosing(false);
     setShowNameInput(true);
     setNewName('');
   }, []);
 
   const commitNewSession = useCallback(() => {
     const name = newName.trim();
-    setShowNameInput(false);
-    setNewName('');
     onNewSession(name || undefined);
-    if (name) {
-      // Name will be saved after the new sessionId is created — handled by parent via callback
-      // Store the pending name so parent can save it; simpler: pass name to onNewSession
-    }
-  }, [newName, onNewSession]);
+    closeNameInput();
+  }, [newName, onNewSession, closeNameInput]);
 
   const handleNameKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter') commitNewSession();
-    if (e.key === 'Escape') { setShowNameInput(false); setNewName(''); }
-  }, [commitNewSession]);
+    if (e.key === 'Escape') closeNameInput();
+  }, [commitNewSession, closeNameInput]);
+
+  const handleOpenDropdown = useCallback(async () => {
+    if (open) { closeHistory(); return; }
+    await loadSessions();
+    setIsHistoryClosing(false);
+    setOpen(true);
+  }, [open, loadSessions, closeHistory]);
 
   return (
     <div ref={wrapperRef} style={{ position: 'relative' }}>
@@ -114,6 +132,9 @@ export function SessionBar({ sessionId, onNewSession }: SessionBarProps) {
         alignItems: 'center',
         height: 32,
         border: '1px solid var(--color-border)',
+        borderRadius: 6,
+        overflow: 'hidden',
+        opacity: 0.75,
       }}>
         {/* New session button */}
         <button
@@ -126,7 +147,7 @@ export function SessionBar({ sessionId, onNewSession }: SessionBarProps) {
             padding: '0 10px',
             height: '100%',
             backgroundColor: 'transparent',
-            color: 'var(--color-text-secondary)',
+            color: 'var(--color-text)',
             border: 'none',
             fontSize: '13px',
             fontWeight: 300,
@@ -151,7 +172,7 @@ export function SessionBar({ sessionId, onNewSession }: SessionBarProps) {
             padding: '0 8px',
             height: '100%',
             backgroundColor: open ? 'var(--color-surface-hover)' : 'transparent',
-            color: open ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+            color: open ? 'var(--color-primary)' : 'var(--color-text)',
             border: 'none',
             cursor: 'pointer',
           }}
@@ -161,22 +182,23 @@ export function SessionBar({ sessionId, onNewSession }: SessionBarProps) {
       </div>
 
       {/* ── New session name input — appears below the bar ── */}
-      {showNameInput && (
+      {(showNameInput || isNameInputClosing) && (
         <>
-          <div onClick={() => { setShowNameInput(false); setNewName(''); }} style={{ position: 'fixed', inset: 0, zIndex: 299 }} />
-          <div style={{
+          <div onClick={closeNameInput} style={{ position: 'fixed', inset: 0, zIndex: 299 }} />
+          <div className={isNameInputClosing ? 'panel-exit' : 'panel-enter'} style={{
             position: 'absolute',
             top: 'calc(100% + 4px)',
             right: 0,
             zIndex: 300,
             backgroundColor: 'var(--color-surface)',
             border: '1px solid var(--color-border)',
+            borderRadius: 10,
             padding: '10px',
             display: 'flex',
             gap: '6px',
             alignItems: 'center',
             boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
-            minWidth: 220,
+            width: 260,
           }}>
             <input
               ref={nameInputRef}
@@ -187,9 +209,11 @@ export function SessionBar({ sessionId, onNewSession }: SessionBarProps) {
               placeholder="会话名称（留空使用 ID）"
               style={{
                 flex: 1,
+                minWidth: 0,
                 height: 28,
                 padding: '0 8px',
                 border: '1px solid var(--color-border)',
+                borderRadius: 6,
                 backgroundColor: 'var(--color-bg)',
                 color: 'var(--color-text)',
                 fontSize: '12px',
@@ -199,15 +223,16 @@ export function SessionBar({ sessionId, onNewSession }: SessionBarProps) {
             <button
               onClick={commitNewSession}
               style={{
+                flexShrink: 0,
                 height: 28,
-                padding: '0 10px',
+                padding: '0 12px',
                 backgroundColor: 'var(--color-primary)',
                 color: '#fff',
                 border: 'none',
+                borderRadius: 6,
                 fontSize: '12px',
                 fontWeight: 600,
                 cursor: 'pointer',
-                flexShrink: 0,
               }}
             >
               确认
@@ -217,18 +242,20 @@ export function SessionBar({ sessionId, onNewSession }: SessionBarProps) {
       )}
 
       {/* ── Session history dropdown ── */}
-      {open && (
+      {(open || isHistoryClosing) && (
         <>
-          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 199 }} />
-          <div style={{
+          <div onClick={closeHistory} style={{ position: 'fixed', inset: 0, zIndex: 199 }} />
+          <div className={isHistoryClosing ? 'panel-exit' : 'panel-enter'} style={{
             position: 'absolute',
             right: 0,
             top: 'calc(100% + 4px)',
             minWidth: 240,
             backgroundColor: 'var(--color-surface)',
             border: '1px solid var(--color-border)',
+            borderRadius: 10,
             boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
             zIndex: 200,
+            overflow: 'hidden',
           }}>
             <div style={{
               padding: '6px 10px',
