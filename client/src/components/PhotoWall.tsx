@@ -462,14 +462,13 @@ export function PhotoWall() {
       >
         <div
           style={{
-            display: 'grid',
-            gridTemplateColumns: `repeat(auto-fill, minmax(${VIEW_CONFIG[viewSize].columnWidth}, 1fr))`,
-            gap: 'var(--spacing-md)',
+            columns: `${VIEW_CONFIG[viewSize].columnWidth} auto`,
+            columnGap: 'var(--spacing-md)',
           }}
           onClick={(e) => { if (isMultiSelectMode && e.target === e.currentTarget) clearSelection(); }}
         >
           {images.map((img) => (
-            <div key={img.id} id={`card-${img.id}`}>
+            <div key={img.id} id={`card-${img.id}`} style={{ breakInside: 'avoid', marginBottom: 'var(--spacing-md)' }}>
               <ImageCard
                 image={img}
                 isMultiSelectMode={isMultiSelectMode}
