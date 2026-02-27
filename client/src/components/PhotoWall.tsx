@@ -4,7 +4,7 @@ import { useMaskStore } from '../hooks/useMaskStore.js';
 import { useDragStore } from '../hooks/useDragStore.js';
 import { maskKey } from '../config/maskConfig.js';
 import { ImageCard } from './ImageCard.js';
-import { Play, Trash2, FolderOpen, LayoutGrid, Type, Check, Minus, Eraser } from 'lucide-react';
+import { Play, Trash2, LayoutGrid, Type, Check, Minus, Eraser } from 'lucide-react';
 import { useWebSocket } from '../hooks/useWebSocket.js';
 
 type ViewSize = 'small' | 'medium' | 'large';
@@ -101,14 +101,6 @@ export function PhotoWall() {
     const next: Record<ViewSize, ViewSize> = { small: 'medium', medium: 'large', large: 'small' };
     handleViewSizeChange(next[viewSize]);
   }, [viewSize, handleViewSizeChange]);
-
-  const handleOpenFolder = useCallback(async () => {
-    try {
-      await fetch(`/api/workflow/${activeTab}/open-folder`, { method: 'POST' });
-    } catch (err) {
-      console.error('Open folder error:', err);
-    }
-  }, [activeTab]);
 
   const handleBatchExecute = async () => {
     if (!clientId) return;
@@ -240,29 +232,8 @@ export function PhotoWall() {
         backgroundColor: 'var(--color-surface)',
         flexShrink: 0,
       }}>
-        {/* Left: view size toggle + multi-select bulk prompt */}
+        {/* Left: multi-select bulk prompt (only in multi-select mode) */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
-          <button
-            onClick={cycleViewSize}
-            title="切换视图大小"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 'var(--spacing-xs)',
-              padding: 'var(--spacing-xs) var(--spacing-sm)',
-              backgroundColor: 'transparent',
-              color: 'var(--color-text-secondary)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 0,
-              fontSize: '12px',
-              cursor: 'pointer',
-              flexShrink: 0,
-            }}
-          >
-            <LayoutGrid size={12} />
-            {VIEW_CONFIG[viewSize].label}
-          </button>
-
           {isMultiSelectMode && (
             <>
               <input
@@ -387,28 +358,6 @@ export function PhotoWall() {
             </button>
           )}
 
-          {!isMultiSelectMode && (
-            <button
-              onClick={handleOpenFolder}
-              title="打开输出目录"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 'var(--spacing-xs)',
-                padding: 'var(--spacing-xs) var(--spacing-sm)',
-                backgroundColor: 'transparent',
-                color: 'var(--color-text-secondary)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 0,
-                fontSize: '12px',
-                cursor: 'pointer',
-              }}
-            >
-              <FolderOpen size={12} />
-              打开输出目录
-            </button>
-          )}
-
           <button
             onClick={isMultiSelectMode ? handleBatchDelete : () => { if (window.confirm('清空当前所有图片？')) clearCurrentImages(); }}
             style={{
@@ -455,11 +404,37 @@ export function PhotoWall() {
         </div>
       </div>
 
-      {/* Scrollable photo wall */}
-      <div
-        style={{ flex: 1, overflow: 'auto', padding: 'var(--spacing-lg)' }}
-        onClick={(e) => { if (isMultiSelectMode && e.target === e.currentTarget) clearSelection(); }}
-      >
+      {/* Content area: scrollable photo wall + view-size overlay */}
+      <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+        {/* View size toggle — floating overlay top-right */}
+        <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 10 }}>
+          <button
+            onClick={cycleViewSize}
+            title="切换视图大小"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              padding: '4px 8px',
+              backgroundColor: 'var(--color-surface)',
+              color: 'var(--color-text-secondary)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 0,
+              fontSize: '12px',
+              cursor: 'pointer',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.12)',
+            }}
+          >
+            <LayoutGrid size={12} />
+            {VIEW_CONFIG[viewSize].label}
+          </button>
+        </div>
+
+        {/* Scrollable photo wall */}
+        <div
+          style={{ position: 'absolute', inset: 0, overflow: 'auto', padding: 'var(--spacing-lg)' }}
+          onClick={(e) => { if (isMultiSelectMode && e.target === e.currentTarget) clearSelection(); }}
+        >
         <div
           style={{
             columns: `${VIEW_CONFIG[viewSize].columnWidth} auto`,
@@ -481,6 +456,7 @@ export function PhotoWall() {
           ))}
         </div>
       </div>
+      </div>{/* end content wrapper */}
 
       {/* Drag-to-delete zone — shown at bottom center while any card or output is being dragged */}
       {dragging && (
@@ -489,7 +465,7 @@ export function PhotoWall() {
           onDrop={handleDeleteZoneDrop}
           style={{
             position: 'fixed',
-            bottom: 28,
+            bottom: 56,
             left: '50%',
             transform: 'translateX(-50%)',
             zIndex: 500,

@@ -19,9 +19,10 @@ interface RawQueueItem {
 
 interface QueuePanelProps {
   onClose: () => void;
+  popupStyle?: React.CSSProperties;
 }
 
-export function QueuePanel({ onClose }: QueuePanelProps) {
+export function QueuePanel({ onClose, popupStyle }: QueuePanelProps) {
   const [rows, setRows] = useState<QueueRow[]>([]);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const workflows = useWorkflowStore((s) => s.workflows);
@@ -136,6 +137,7 @@ export function QueuePanel({ onClose }: QueuePanelProps) {
       right: 0,
       width: 380,
       maxHeight: 440,
+      ...popupStyle,
       backgroundColor: 'var(--color-surface)',
       border: '1px solid var(--color-border)',
       boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
