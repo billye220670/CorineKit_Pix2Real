@@ -23,6 +23,7 @@ export function PhotoWall({ viewSize }: PhotoWallProps) {
   const images = useWorkflowStore((s) => s.tabData[s.activeTab]?.images ?? []);
   const activeTab = useWorkflowStore((s) => s.activeTab);
   const clientId = useWorkflowStore((s) => s.clientId);
+  const sessionId = useWorkflowStore((s) => s.sessionId);
   const prompts = useWorkflowStore((s) => s.tabData[s.activeTab]?.prompts ?? {});
   const startTask = useWorkflowStore((s) => s.startTask);
   const tasks = useWorkflowStore((s) => s.tabData[s.activeTab]?.tasks ?? {});
@@ -124,7 +125,7 @@ export function PhotoWall({ viewSize }: PhotoWallProps) {
           if (!res.ok) { console.error('Execute failed:', await res.text()); continue; }
           const data = await res.json();
           startTask(img.id, data.promptId);
-          sendMessage({ type: 'register', promptId: data.promptId, workflowId: 5 });
+          sendMessage({ type: 'register', promptId: data.promptId, workflowId: 5, sessionId, tabId: 5 });
         } catch (err) {
           console.error('Execute error:', err);
         }
@@ -145,7 +146,7 @@ export function PhotoWall({ viewSize }: PhotoWallProps) {
         if (!res.ok) { console.error('Execute failed:', await res.text()); continue; }
         const data = await res.json();
         startTask(img.id, data.promptId);
-        sendMessage({ type: 'register', promptId: data.promptId, workflowId: activeTab });
+        sendMessage({ type: 'register', promptId: data.promptId, workflowId: activeTab, sessionId, tabId: activeTab });
       } catch (err) {
         console.error('Execute error:', err);
       }

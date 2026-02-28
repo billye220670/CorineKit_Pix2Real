@@ -96,6 +96,10 @@ export function useSession(): UseSessionReturn {
   const [sessionId, setSessionId] = useState<string>(() => getOrCreateSessionId());
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
 
+  // Keep the store in sync whenever sessionId changes
+  useEffect(() => {
+    useWorkflowStore.getState().setSessionId(sessionId);
+  }, [sessionId]);
   const sessionIdRef = useRef(sessionId);
   sessionIdRef.current = sessionId;
 

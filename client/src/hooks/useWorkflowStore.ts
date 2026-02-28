@@ -29,6 +29,7 @@ interface WorkflowStore {
   workflows: typeof WORKFLOWS;
   tabData: Record<number, TabData>;
   clientId: string | null;
+  sessionId: string | null;
   selectedImageIds: string[];
 
   setActiveTab: (tab: number) => void;
@@ -40,6 +41,7 @@ interface WorkflowStore {
   setPrompt: (imageId: string, prompt: string) => void;
   setPrompts: (updates: Record<string, string>) => void;
   setClientId: (id: string) => void;
+  setSessionId: (id: string) => void;
   enterMultiSelect: (id: string) => void;
   toggleImageSelection: (id: string) => void;
   setSelectedImageIds: (ids: string[]) => void;
@@ -87,6 +89,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     5: emptyTabData(),
   },
   clientId: null,
+  sessionId: null,
   selectedImageIds: [],
 
   setActiveTab: (tab) => set({ activeTab: tab, selectedImageIds: [] }),
@@ -287,6 +290,8 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   },
 
   setClientId: (id) => set({ clientId: id }),
+
+  setSessionId: (id) => set({ sessionId: id }),
 
   setSelectedOutputIndex: (imageId, index) => {
     set((state) => {

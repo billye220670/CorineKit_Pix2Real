@@ -22,6 +22,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
   const activeTab = useWorkflowStore((s) => s.activeTab);
   const workflows = useWorkflowStore((s) => s.workflows);
   const clientId = useWorkflowStore((s) => s.clientId);
+  const sessionId = useWorkflowStore((s) => s.sessionId);
   const prompts = useWorkflowStore((s) => s.tabData[s.activeTab]?.prompts ?? {});
   const tasks = useWorkflowStore((s) => s.tabData[s.activeTab]?.tasks ?? {});
   const removeImage = useWorkflowStore((s) => s.removeImage);
@@ -195,7 +196,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
         if (!res.ok) { console.error('Execute failed:', await res.text()); return; }
         const data = await res.json();
         startTask(image.id, data.promptId);
-        sendMessage({ type: 'register', promptId: data.promptId, workflowId: 5 });
+        sendMessage({ type: 'register', promptId: data.promptId, workflowId: 5, sessionId, tabId: 5 });
       } catch (err) {
         console.error('Execute error:', err);
       }
@@ -216,11 +217,11 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
       if (!res.ok) { console.error('Execute failed:', await res.text()); return; }
       const data = await res.json();
       startTask(image.id, data.promptId);
-      sendMessage({ type: 'register', promptId: data.promptId, workflowId: activeTab });
+      sendMessage({ type: 'register', promptId: data.promptId, workflowId: activeTab, sessionId, tabId: activeTab });
     } catch (err) {
       console.error('Execute error:', err);
     }
-  }, [clientId, image, activeTab, prompts, startTask, sendMessage, maskEntryForMode, backPose, maskEntryToBlob]);
+  }, [clientId, image, activeTab, prompts, startTask, sendMessage, maskEntryForMode, backPose, maskEntryToBlob, sessionId]);
   const openMaskEditor = useCallback(() => {
     if (tabMaskMode === 'none') return;
 

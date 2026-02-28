@@ -201,7 +201,7 @@ export function App() {
       </div>
 
       {/* Status bar */}
-      <StatusBar lastSavedAt={lastSavedAt} viewLabel={VIEW_CONFIG[viewSize].label} onCycleViewSize={cycleViewSize} />
+      <StatusBar lastSavedAt={lastSavedAt} sessionId={sessionId} viewLabel={VIEW_CONFIG[viewSize].label} onCycleViewSize={cycleViewSize} />
 
       {/* Duplicate filename confirmation dialog */}
       {dialog && (

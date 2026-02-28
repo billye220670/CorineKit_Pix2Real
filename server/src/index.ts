@@ -9,8 +9,7 @@ import workflowRouter from './routes/workflow.js';
 import outputRouter from './routes/output.js';
 import sessionRouter from './routes/session.js';
 import { connectWebSocket, getHistory, getImageBuffer } from './services/comfyui.js';
-import { getAdapter } from './adapters/index.js';
-import { sessionsBase, pruneOldSessions } from './services/sessionManager.js';
+import { sessionsBase, pruneOldSessions, saveOutputFile } from './services/sessionManager.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const outputBase = path.resolve(__dirname, '../../output');
@@ -66,8 +65,8 @@ function generateClientId(): string {
   return `pix2real_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
 }
 
-// Track prompt -> workflow mapping for output downloading
-const promptWorkflowMap = new Map<string, number>();
+// Track prompt -> workflow/session mapping for output downloading
+const promptWorkflowMap = new Map<string, { workflowId: number; sessionId: string; tabId: number }>();
 
 wss.on('connection', (clientWs) => {
   const clientId = generateClientId();
@@ -101,7 +100,7 @@ wss.on('connection', (clientWs) => {
       console.log(`[WS] Prompt ${promptId} completed`);
 
       try {
-        // Download outputs to local output directory
+        // Download outputs to session output directory
         const history = await getHistory(promptId);
         const outputs: Array<{ filename: string; url: string }> = [];
 
@@ -113,19 +112,10 @@ wss.on('connection', (clientWs) => {
                 if (img.type !== 'output') continue;
                 try {
                   const buffer = await getImageBuffer(img.filename, img.subfolder, img.type);
-                  // Determine which workflow directory to save to
-                  const workflowId = promptWorkflowMap.get(promptId);
-                  if (workflowId !== undefined) {
-                    const adapter = getAdapter(workflowId);
-                    if (adapter) {
-                      const outputDir = path.join(outputBase, adapter.outputDir);
-                      const outputPath = path.join(outputDir, img.filename);
-                      fs.writeFileSync(outputPath, buffer);
-                      outputs.push({
-                        filename: img.filename,
-                        url: `/api/output/${workflowId}/${encodeURIComponent(img.filename)}`,
-                      });
-                    }
+                  const info = promptWorkflowMap.get(promptId);
+                  if (info?.sessionId) {
+                    const url = saveOutputFile(info.sessionId, info.tabId, img.filename, buffer);
+                    outputs.push({ filename: img.filename, url });
                   }
                 } catch (err) {
                   console.error(`[WS] Failed to download output ${img.filename}:`, err);
@@ -138,18 +128,10 @@ wss.on('connection', (clientWs) => {
               for (const vid of nodeOutput.gifs) {
                 try {
                   const buffer = await getImageBuffer(vid.filename, vid.subfolder, vid.type);
-                  const workflowId = promptWorkflowMap.get(promptId);
-                  if (workflowId !== undefined) {
-                    const adapter = getAdapter(workflowId);
-                    if (adapter) {
-                      const outputDir = path.join(outputBase, adapter.outputDir);
-                      const outputPath = path.join(outputDir, vid.filename);
-                      fs.writeFileSync(outputPath, buffer);
-                      outputs.push({
-                        filename: vid.filename,
-                        url: `/api/output/${workflowId}/${encodeURIComponent(vid.filename)}`,
-                      });
-                    }
+                  const info = promptWorkflowMap.get(promptId);
+                  if (info?.sessionId) {
+                    const url = saveOutputFile(info.sessionId, info.tabId, vid.filename, buffer);
+                    outputs.push({ filename: vid.filename, url });
                   }
                 } catch (err) {
                   console.error(`[WS] Failed to download video ${vid.filename}:`, err);
@@ -194,12 +176,16 @@ wss.on('connection', (clientWs) => {
     },
   });
 
-  // Listen for messages from the client (e.g., register prompt -> workflow mapping)
+  // Listen for messages from the client (e.g., register prompt -> workflow/session mapping)
   clientWs.on('message', (raw) => {
     try {
       const msg = JSON.parse(raw.toString());
       if (msg.type === 'register' && msg.promptId && msg.workflowId !== undefined) {
-        promptWorkflowMap.set(msg.promptId, msg.workflowId);
+        promptWorkflowMap.set(msg.promptId, {
+          workflowId: msg.workflowId,
+          sessionId: msg.sessionId || '',
+          tabId: msg.tabId ?? msg.workflowId,
+        });
       }
     } catch {
       // ignore

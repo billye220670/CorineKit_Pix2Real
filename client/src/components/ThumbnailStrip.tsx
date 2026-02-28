@@ -89,6 +89,7 @@ export function ThumbnailStrip({
         alignItems: 'center',
       }}
       onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
     >
       <button
         onClick={handlePrev}

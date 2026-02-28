@@ -4,6 +4,7 @@ import { useWorkflowStore } from '../hooks/useWorkflowStore.js';
 
 interface StatusBarProps {
   lastSavedAt: Date | null;
+  sessionId: string;
   viewLabel: string;
   onCycleViewSize: () => void;
 }
@@ -28,11 +29,19 @@ function timeAgo(date: Date): string {
   return `${Math.floor(hrs / 24)}天前`;
 }
 
+function getSessionLabel(id: string): string {
+  try {
+    const names = JSON.parse(localStorage.getItem('pix2real_session_names') ?? '{}') as Record<string, string>;
+    if (names[id]) return names[id];
+  } catch { /* ignore */ }
+  return id.slice(0, 8) + '…';
+}
+
 const Divider = () => (
   <div style={{ width: 1, alignSelf: 'stretch', margin: '4px 0', backgroundColor: 'var(--color-border)', flexShrink: 0 }} />
 );
 
-export function StatusBar({ lastSavedAt, viewLabel, onCycleViewSize }: StatusBarProps) {
+export function StatusBar({ lastSavedAt, sessionId, viewLabel, onCycleViewSize }: StatusBarProps) {
   const clientId = useWorkflowStore((s) => s.clientId);
   const activeTab = useWorkflowStore((s) => s.activeTab);
   const hasAnyProcessing = useWorkflowStore((s) =>
@@ -113,11 +122,15 @@ export function StatusBar({ lastSavedAt, viewLabel, onCycleViewSize }: StatusBar
 
   const handleOpenFolder = useCallback(async () => {
     try {
-      await fetch(`/api/workflow/${activeTab}/open-folder`, { method: 'POST' });
+      await fetch(`/api/workflow/${activeTab}/open-folder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, tabId: activeTab }),
+      });
     } catch (err) {
       console.error('Open folder error:', err);
     }
-  }, [activeTab]);
+  }, [activeTab, sessionId]);
 
   const btnStyle: React.CSSProperties = {
     display: 'flex',
@@ -156,11 +169,13 @@ export function StatusBar({ lastSavedAt, viewLabel, onCycleViewSize }: StatusBar
       {/* ── Middle: open folder ── */}
       <button
         onClick={handleOpenFolder}
-        title="打开输出目录"
+        title={`打开输出目录: sessions/${sessionId}/tab-${activeTab}/output`}
         style={btnStyle}
       >
         <FolderOpen size={11} />
-        打开输出目录
+        <span style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {getSessionLabel(sessionId)}/tab-{activeTab}/output
+        </span>
       </button>
 
       {/* ── Spacer ── */}

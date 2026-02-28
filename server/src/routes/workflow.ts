@@ -7,6 +7,7 @@ import multer from 'multer';
 import { getAdapter, adapters } from '../adapters/index.js';
 import { workflow5Adapter } from '../adapters/Workflow5Adapter.js';
 import { uploadImage, uploadVideo, queuePrompt, deleteQueueItem, getSystemStats, getQueue, prioritizeQueueItem, getHistory, getImageBuffer } from '../services/comfyui.js';
+import { sessionsBase } from '../services/sessionManager.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const releaseMemoryTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-释放内存.json');
@@ -258,17 +259,23 @@ router.post('/queue/prioritize/:promptId', async (req, res) => {
   }
 });
 
-// POST /api/workflow/:id/open-folder - open output folder in OS file explorer
-router.post('/:id/open-folder', (req, res) => {
+// POST /api/workflow/:id/open-folder - open session output folder in OS file explorer
+router.post('/:id/open-folder', express.json(), (req, res) => {
   const workflowId = parseInt(req.params.id as string, 10);
-  const adapter = getAdapter(workflowId);
+  const { sessionId, tabId } = req.body as { sessionId?: string; tabId?: number };
 
-  if (!adapter) {
-    res.status(400).json({ error: `Unknown workflow: ${workflowId}` });
-    return;
+  let outputDir: string;
+  if (sessionId && tabId !== undefined) {
+    outputDir = path.resolve(sessionsBase, sessionId, `tab-${tabId}`, 'output');
+  } else {
+    // Legacy fallback: open workflow output dir
+    const adapter = getAdapter(workflowId);
+    if (!adapter) {
+      res.status(400).json({ error: `Unknown workflow: ${workflowId}` });
+      return;
+    }
+    outputDir = path.resolve(__dirname, '../../../output', adapter.outputDir);
   }
-
-  const outputDir = path.resolve(__dirname, '../../../output', adapter.outputDir);
 
   // Ensure directory exists
   if (!fs.existsSync(outputDir)) {
@@ -297,24 +304,24 @@ router.post('/:id/open-folder', (req, res) => {
 });
 
 
-// POST /api/workflow/export-blend — save Mode B blended result to output dir
+// POST /api/workflow/export-blend — save Mode B blended result to session output dir
 router.post('/export-blend', express.json({ limit: '50mb' }), async (req, res) => {
   try {
-    const { tabId, filename, imageDataBase64 } = req.body as {
+    const { sessionId, tabId, filename, imageDataBase64 } = req.body as {
+      sessionId: string;
       tabId: number;
       filename: string;
       imageDataBase64: string;
     };
 
-    const adapter = getAdapter(tabId);
-    if (!adapter) {
-      res.status(400).json({ error: 'Unknown workflow: ' + tabId });
+    if (!sessionId || tabId === undefined) {
+      res.status(400).json({ error: 'sessionId and tabId are required' });
       return;
     }
 
     // Sanitise filename — allow alphanumeric, underscore, hyphen, dot, space, and CJK characters
     const safeName = path.basename(filename).replace(/[^\w\-. \u4e00-\u9fff]/g, '_');
-    const outputDir = path.resolve(__dirname, '../../../output', adapter.outputDir);
+    const outputDir = path.resolve(sessionsBase, sessionId, `tab-${tabId}`, 'output');
     if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 
     const filePath = path.join(outputDir, safeName);

@@ -11,6 +11,7 @@ export function ensureSessionDirs(sessionId: string): void {
   for (let tab = 0; tab <= 5; tab++) {
     fs.mkdirSync(path.join(sessionsBase, sessionId, `tab-${tab}`, 'input'), { recursive: true });
     fs.mkdirSync(path.join(sessionsBase, sessionId, `tab-${tab}`, 'masks'), { recursive: true });
+    fs.mkdirSync(path.join(sessionsBase, sessionId, `tab-${tab}`, 'output'), { recursive: true });
   }
 }
 
@@ -28,6 +29,18 @@ export function saveInputImage(
   const filePath = path.join(sessionsBase, sessionId, `tab-${tabId}`, 'input', filename);
   fs.writeFileSync(filePath, buffer);
   return `/api/session-files/${sessionId}/tab-${tabId}/input/${filename}`;
+}
+
+export function saveOutputFile(
+  sessionId: string,
+  tabId: number,
+  filename: string,
+  buffer: Buffer,
+): string {
+  ensureSessionDirs(sessionId);
+  const filePath = path.join(sessionsBase, sessionId, `tab-${tabId}`, 'output', filename);
+  fs.writeFileSync(filePath, buffer);
+  return `/api/session-files/${sessionId}/tab-${tabId}/output/${encodeURIComponent(filename)}`;
 }
 
 export function saveMask(

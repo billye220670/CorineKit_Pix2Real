@@ -28,6 +28,7 @@ export function QueuePanel({ onClose, popupStyle, closing }: QueuePanelProps) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const workflows = useWorkflowStore((s) => s.workflows);
   const tabData = useWorkflowStore((s) => s.tabData);
+  const sessionId = useWorkflowStore((s) => s.sessionId);
   const setActiveTab = useWorkflowStore((s) => s.setActiveTab);
   const setFlashingImage = useWorkflowStore((s) => s.setFlashingImage);
   const remapTaskPromptIds = useWorkflowStore((s) => s.remapTaskPromptIds);
@@ -106,13 +107,13 @@ export function QueuePanel({ onClose, popupStyle, closing }: QueuePanelProps) {
         for (const { oldPromptId, newPromptId } of data.mapping) {
           const workflowId = oldIdToWorkflow[oldPromptId];
           if (workflowId !== undefined) {
-            sendMessage({ type: 'register', promptId: newPromptId, workflowId });
+            sendMessage({ type: 'register', promptId: newPromptId, workflowId, sessionId, tabId: workflowId });
           }
         }
       }
     }
     fetchQueue();
-  }, [fetchQueue, remapTaskPromptIds, sendMessage]);
+  }, [fetchQueue, remapTaskPromptIds, sendMessage, sessionId]);
 
   const handleDelete = useCallback(async (promptId: string) => {
     await fetch(`/api/workflow/cancel-queue/${promptId}`, { method: 'POST' }).catch(() => {});

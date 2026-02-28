@@ -2,6 +2,7 @@
 import { useCallback, useRef, useState, useEffect } from 'react';
 import { X, Eye, EyeOff } from 'lucide-react';
 import { useMaskStore } from '../hooks/useMaskStore.js';
+import { useWorkflowStore } from '../hooks/useWorkflowStore.js';
 import { maskKey } from '../config/maskConfig.js';
 import { MaskCanvas, type ModeASubMode, type MaskCanvasHandle } from './MaskCanvas.js';
 import type { MaskEditorOpenState } from '../hooks/useMaskStore.js';
@@ -32,10 +33,14 @@ function BrushSlider({
 function ExportDialog({
   editorState,
   canvasHandle,
+  sessionId,
+  tabId,
   onClose,
 }: {
   editorState: MaskEditorOpenState;
   canvasHandle: MaskCanvasHandle | null;
+  sessionId: string | null;
+  tabId: number;
   onClose: () => void;
 }) {
   const defaultName = editorState.resultFilename
@@ -89,7 +94,7 @@ function ExportDialog({
       const res = await fetch('/api/workflow/export-blend', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tabId: 1, filename: safeFilename, imageDataBase64: base64 }),
+        body: JSON.stringify({ sessionId, tabId, filename: safeFilename, imageDataBase64: base64 }),
       });
       if (!res.ok) throw new Error(await res.text());
       const json = await res.json() as { savedPath: string };
@@ -138,6 +143,8 @@ export function MaskEditor() {
   const closeEditor = useMaskStore((s) => s.closeEditor);
   const setMask = useMaskStore((s) => s.setMask);
   const getMask = useMaskStore((s) => s.getMask);
+  const sessionId = useWorkflowStore((s) => s.sessionId);
+  const activeTab = useWorkflowStore((s) => s.activeTab);
 
   const [subMode, setSubMode] = useState<ModeASubMode>('dark-overlay');
   const subModeLabels: Record<ModeASubMode, string> = {
@@ -357,6 +364,8 @@ export function MaskEditor() {
         <ExportDialog
           editorState={editorState}
           canvasHandle={canvasHandleRef.current}
+          sessionId={sessionId}
+          tabId={activeTab}
           onClose={() => setShowExport(false)}
         />
       )}
