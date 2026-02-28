@@ -104,6 +104,7 @@ export function DropZone({ fullscreen, importFiles, onDropHandled }: DropZonePro
           justifyContent: 'center',
           gap: 'var(--spacing-md)',
           border: `2px dashed ${isDragOver ? 'var(--color-primary)' : 'var(--color-border)'}`,
+          borderRadius: '12px',
           margin: 'var(--spacing-lg)',
           backgroundColor: isDragOver ? 'var(--color-surface-hover)' : 'var(--color-surface)',
           transition: 'all 0.15s',
