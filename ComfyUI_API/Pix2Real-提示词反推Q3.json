@@ -1,0 +1,106 @@
+{
+  "1": {
+    "inputs": {
+      "image": "20260223182700_00001_.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像"
+    }
+  },
+  "11": {
+    "inputs": {
+      "max_tokens": 1024,
+      "top_k": 30,
+      "top_p": 0.9,
+      "min_p": 0.05,
+      "typical_p": 1,
+      "temperature": 0.8,
+      "repeat_penalty": 1,
+      "frequency_penalty": 0,
+      "presence_penalty": 1,
+      "mirostat_mode": 0,
+      "mirostat_eta": 0.1,
+      "mirostat_tau": 5,
+      "state_uid": -1
+    },
+    "class_type": "llama_cpp_parameters",
+    "_meta": {
+      "title": "Llama-cpp Parameters"
+    }
+  },
+  "62": {
+    "inputs": {
+      "preset_prompt": "Prompt Style - Extreme Detailed",
+      "custom_prompt": "用中文详细描述这张图像，并生成提示词。\n要求：只输出标准提示词，内容详尽细致（不要出现无关的文字和符号）\n特别注意：如果图像中出现性器官请详细描述，没有则跳过无需提及；如果图像中出现面部请尽量精确描述表情，没有则跳过无需提及。",
+      "system_prompt": "",
+      "inference_mode": "one by one",
+      "max_frames": 24,
+      "max_size": 256,
+      "seed": 565374176717376,
+      "force_offload": false,
+      "save_states": false,
+      "llama_model": [
+        "63",
+        0
+      ],
+      "parameters": [
+        "11",
+        0
+      ],
+      "images": [
+        "1",
+        0
+      ]
+    },
+    "class_type": "llama_cpp_instruct_adv",
+    "_meta": {
+      "title": "Llama-cpp Instruct"
+    }
+  },
+  "63": {
+    "inputs": {
+      "model": "Qwen3-VL-8B-Instruct-abliterated-v2.0.Q6_K.gguf",
+      "mmproj": "Qwen3-VL-8B-Instruct-abliterated-v2.0.mmproj-f16.gguf",
+      "chat_handler": "Qwen3-VL",
+      "n_ctx": 8192,
+      "vram_limit": -1,
+      "image_min_tokens": 0,
+      "image_max_tokens": 0
+    },
+    "class_type": "llama_cpp_model_loader",
+    "_meta": {
+      "title": "Llama-cpp Model Loader"
+    }
+  },
+  "65": {
+    "inputs": {
+      "purge_cache": true,
+      "purge_models": true,
+      "anything": [
+        "62",
+        1
+      ]
+    },
+    "class_type": "LayerUtility: PurgeVRAM V2",
+    "_meta": {
+      "title": "图层工具：清除VRAM V2"
+    }
+  },
+  "66": {
+    "inputs": {
+      "output_file_path": "",
+      "file_name": "",
+      "file_extension": "txt",
+      "overwrite": true,
+      "text": [
+        "62",
+        1
+      ]
+    },
+    "class_type": "easy saveText",
+    "_meta": {
+      "title": "保存文本"
+    }
+  }
+}

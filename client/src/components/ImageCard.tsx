@@ -1,5 +1,5 @@
-import { useCallback, useState, useRef } from 'react';
-import { X, Play, RotateCcw, Check, AlertCircle, Layers, ChevronDown, Flower } from 'lucide-react';
+import { useCallback, useState, useRef, useEffect } from 'react';
+import { X, Play, RotateCcw, Check, AlertCircle, Layers, ChevronDown, Flower, Sparkles } from 'lucide-react';
 import { useWorkflowStore } from '../hooks/useWorkflowStore.js';
 import { useWebSocket } from '../hooks/useWebSocket.js';
 import { ProgressOverlay } from './ProgressOverlay.js';
@@ -64,6 +64,16 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
   const setDragging      = useDragStore((s) => s.setDragging);
 
   const [maskMenuOpen, setMaskMenuOpen] = useState(false);
+  const [isReversingPrompt, setIsReversingPrompt] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const promptValue = prompts[image.id] || '';
+  useEffect(() => {
+    const t = textareaRef.current;
+    if (!t) return;
+    t.style.height = 'auto';
+    t.style.height = `${t.scrollHeight}px`;
+  }, [promptValue]);
 
   const outputs = task?.outputs ?? [];
   const displayOutput = selectedOutputIdx === -1 ? null : (outputs[selectedOutputIdx] ?? null);
@@ -253,6 +263,36 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
       originalUrl: image.previewUrl,
     });
   }, [tabMaskMode, selectedOutputIdx, outputs, image, openEditor]);
+
+  const handleReversePrompt = useCallback(async () => {
+    let file: File | Blob;
+    let filename: string;
+    if (selectedOutputIdx === -1 || !displayOutput) {
+      file = image.file;
+      filename = image.originalName;
+    } else {
+      const resp = await fetch(displayOutput.url);
+      file = await resp.blob();
+      filename = displayOutput.filename;
+    }
+
+    setIsReversingPrompt(true);
+    try {
+      const fd = new FormData();
+      fd.append('image', file, filename);
+      const res = await fetch('/api/workflow/reverse-prompt', { method: 'POST', body: fd });
+      if (!res.ok) throw new Error('请求失败');
+      const { text } = await res.json();
+      await navigator.clipboard.writeText(text);
+      showToast('提示词已复制到剪贴板', 'success');
+    } catch (err) {
+      console.error('[ReversePrompt]', err);
+      showToast('反推提示词失败', 'error');
+    } finally {
+      setIsReversingPrompt(false);
+    }
+  }, [selectedOutputIdx, displayOutput, image]);
+
   return (
     <div
       draggable={!isProcessing}
@@ -262,9 +302,10 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseLeaveOuter}
       onMouseEnter={() => setIsCardHovered(true)}
-      className={isFlashing ? 'card-flash-anim' : undefined}
+      className={[isFlashing ? 'card-flash-anim' : '', isReversingPrompt ? 'card-ai-glow' : ''].filter(Boolean).join(' ') || undefined}
       onAnimationEnd={() => { if (isFlashing) setFlashingImage(null); }}
       style={{
+        position: 'relative',
         border: '1px solid var(--color-border)',
         backgroundColor: 'var(--color-surface)',
         borderRadius: 10,
@@ -525,6 +566,40 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
           </div>
         )}
 
+        {/* Reverse-prompt "analyzing" overlay */}
+        {isReversingPrompt && (
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 11,
+            backgroundColor: 'rgba(0,0,0,0.55)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+            pointerEvents: 'none',
+          }}>
+            <span style={{ color: '#e5e7eb', fontSize: 13, letterSpacing: 1 }}>分析中</span>
+            <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+              {[0, 1, 2].map((i) => (
+                <span
+                  key={i}
+                  style={{
+                    display: 'inline-block',
+                    width: 5,
+                    height: 5,
+                    borderRadius: '50%',
+                    backgroundColor: '#a5b4fc',
+                    animation: 'dot-wave 1.4s ease-in-out infinite',
+                    animationDelay: `${i * 0.2}s`,
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Thumbnail strip: original + generated outputs */}
         {stripItems.length > 0 && (
           <ThumbnailStrip
@@ -542,6 +617,30 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
             }}
             onOutputDragEnd={() => setDragging(null)}
           />
+        )}
+
+        {/* Reverse-prompt button — bottom-right of image, non-video only */}
+        {!isVideoWorkflow && (
+          <div
+            onClick={(e) => { e.stopPropagation(); if (!isReversingPrompt) handleReversePrompt(); }}
+            title="反推提示词"
+            style={{
+              position: 'absolute',
+              bottom: 6,
+              right: 6,
+              zIndex: 10,
+              display: 'flex',
+              alignItems: 'center',
+              background: 'rgba(0,0,0,0.68)',
+              borderRadius: 6,
+              padding: '5px 7px',
+              cursor: 'pointer',
+              opacity: isReversingPrompt ? 0.6 : 1,
+              userSelect: 'none',
+            }}
+          >
+            <Sparkles size={14} color={isReversingPrompt ? '#facc15' : '#9ca3af'} />
+          </div>
         )}
       </div>
 
@@ -561,6 +660,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
         <div style={{ display: 'flex', gap: 'var(--spacing-sm)', alignItems: 'flex-start' }}>
           {needsPrompt && (
             <textarea
+              ref={textareaRef}
               placeholder={activeTab === 5 ? "留空使用默认提示词" : activeTab === 3 ? "输入提示词（留空使用默认）" : "额外提示词（可选）"}
               value={prompts[image.id] || ''}
               onChange={(e) => setPrompt(image.id, e.target.value)}
@@ -570,7 +670,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
               onDragStart={(e) => e.stopPropagation()}
               style={{
                 flex: 1,
-                height: 28,
+                minHeight: 28,
                 padding: 'var(--spacing-xs) var(--spacing-sm)',
                 border: '1px solid var(--color-border)',
                 borderRadius: 6,
@@ -580,6 +680,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
                 resize: 'none',
                 outline: 'none',
                 fontFamily: 'inherit',
+                overflow: 'hidden',
               }}
             />
           )}
@@ -606,6 +707,16 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
           </button>
         </div>
       </div>
+
+      {/* Block all interaction while reverse-prompt is running */}
+      {isReversingPrompt && (
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          zIndex: 100,
+          cursor: 'not-allowed',
+        }} onClick={(e) => e.stopPropagation()} />
+      )}
     </div>
   );
 }

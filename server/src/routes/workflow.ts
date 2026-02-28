@@ -336,6 +336,71 @@ router.post('/export-blend', express.json({ limit: '50mb' }), async (req, res) =
 });
 
 const autoRecognizeTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-自动识别Fixed.json');
+const reversePromptTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-提示词反推Q3.json');
+
+// POST /api/workflow/reverse-prompt — run LLM captioning and return generated prompt text
+router.post('/reverse-prompt', upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) {
+      res.status(400).json({ error: 'No image file provided' });
+      return;
+    }
+
+    const internalClientId = `reverse-prompt-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+    const comfyFilename = await uploadImage(req.file.buffer, req.file.originalname);
+
+    const template = JSON.parse(fs.readFileSync(reversePromptTemplatePath, 'utf-8'));
+    template['1'].inputs.image = comfyFilename;
+
+    // Patch easy saveText with an absolute path so we can read it directly from disk.
+    const rpTempDir = path.resolve(__dirname, '../../../rp_temp');
+    if (!fs.existsSync(rpTempDir)) fs.mkdirSync(rpTempDir, { recursive: true });
+    const tempName = `rp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    template['66'].inputs.output_file_path = rpTempDir;
+    template['66'].inputs.file_name = tempName;
+    template['66'].inputs.file_extension = 'txt';
+    template['66'].inputs.overwrite = true;
+
+    const queued = await queuePrompt(template, internalClientId);
+    const promptId = queued.prompt_id;
+
+    // Poll history until ComfyUI marks it complete (timeout 180 s — LLM inference is slow)
+    const deadline = Date.now() + 180_000;
+    let history;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 1000));
+      try {
+        const h = await getHistory(promptId);
+        if (h?.status?.completed) { history = h; break; }
+      } catch { /* not ready yet */ }
+    }
+
+    if (!history) {
+      res.status(504).json({ error: '反推提示词超时，请重试' });
+      return;
+    }
+
+    // Read text directly from the file written by easy saveText
+    const txtPath = path.join(rpTempDir, `${tempName}.txt`);
+    if (!fs.existsSync(txtPath)) {
+      console.error('[Reverse Prompt] file not found:', txtPath);
+      res.status(500).json({ error: 'ComfyUI 未返回提示词文本' });
+      return;
+    }
+    const text = fs.readFileSync(txtPath, 'utf-8').trim();
+    fs.unlinkSync(txtPath);
+    if (!text) {
+      res.status(500).json({ error: 'ComfyUI 未返回提示词文本' });
+      return;
+    }
+
+    res.json({ text });
+  } catch (err: any) {
+    console.error('[Reverse Prompt Error]', err);
+    res.status(500).json({ error: err.message || 'Internal server error' });
+  }
+});
 
 // POST /api/workflow/mask/auto-recognize — run SAM segmentation and return mask PNG
 router.post('/mask/auto-recognize', upload.single('image'), async (req, res) => {
