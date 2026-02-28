@@ -8,6 +8,7 @@ import { useMaskStore } from '../hooks/useMaskStore.js';
 import { maskKey, TAB_MASK_MODE } from '../config/maskConfig.js';
 import { showToast } from '../hooks/useToast.js';
 import { useDragStore } from '../hooks/useDragStore.js';
+import { useSettingsStore } from '../hooks/useSettingsStore.js';
 import type { ImageItem } from '../types/index.js';
 
 interface ImageCardProps {
@@ -62,6 +63,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
   const backPose         = useWorkflowStore((s) => s.tabData[s.activeTab]?.backPoseToggles?.[image.id] ?? false);
   const toggleBackPose   = useWorkflowStore((s) => s.toggleBackPose);
   const setDragging      = useDragStore((s) => s.setDragging);
+  const reversePromptModel = useSettingsStore((s) => s.reversePromptModel);
 
   const [maskMenuOpen, setMaskMenuOpen] = useState(false);
   const [isReversingPrompt, setIsReversingPrompt] = useState(false);
@@ -280,7 +282,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
     try {
       const fd = new FormData();
       fd.append('image', file, filename);
-      const res = await fetch('/api/workflow/reverse-prompt', { method: 'POST', body: fd });
+      const res = await fetch(`/api/workflow/reverse-prompt?model=${encodeURIComponent(reversePromptModel)}`, { method: 'POST', body: fd });
       if (!res.ok) throw new Error('请求失败');
       const { text } = await res.json();
       await navigator.clipboard.writeText(text);
@@ -291,7 +293,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
     } finally {
       setIsReversingPrompt(false);
     }
-  }, [selectedOutputIdx, displayOutput, image]);
+  }, [selectedOutputIdx, displayOutput, image, reversePromptModel]);
 
   return (
     <div

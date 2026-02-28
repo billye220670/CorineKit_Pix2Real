@@ -17,13 +17,13 @@ function BrushSlider({
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-        <span style={{ fontSize: 11, color: '#6b7280' }}>{label}</span>
-        <span style={{ fontSize: 11, color: '#9ca3af' }}>{display}</span>
+        <span style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>{label}</span>
+        <span style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>{display}</span>
       </div>
       <input
         type="range" min={min} max={max} value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        style={{ width: '100%', accentColor: '#3b82f6' }}
+        style={{ width: '100%', accentColor: 'var(--color-primary)' }}
       />
     </div>
   );
@@ -112,21 +112,21 @@ function ExportDialog({
       onClick={onClose}
     >
       <div
-        style={{ background: '#1e1e1e', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: 20, minWidth: 340 }}
+        style={{ background: 'var(--card-bg)', border: '1px solid var(--color-border)', borderRadius: 8, padding: 20, minWidth: 340 }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div style={{ fontWeight: 600, fontSize: 14, color: '#e5e7eb', marginBottom: 14 }}>导出混合结果</div>
-        <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 4 }}>
-          保存路径: <span style={{ color: '#9ca3af' }}>output/1-真人精修/</span>
+        <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--color-text)', marginBottom: 14 }}>导出混合结果</div>
+        <div style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginBottom: 4 }}>
+          保存路径: <span style={{ color: 'var(--color-text-secondary)' }}>output/1-真人精修/</span>
         </div>
         <input
           value={filename}
           onChange={(e) => setFilename(e.target.value)}
-          style={{ width: '100%', boxSizing: 'border-box', background: '#111', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, padding: '7px 10px', color: '#e5e7eb', fontSize: 13, marginBottom: 12 }}
+          style={{ width: '100%', boxSizing: 'border-box', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 6, padding: '7px 10px', color: 'var(--color-text)', fontSize: 13, marginBottom: 12 }}
         />
         {error && <div style={{ color: '#f87171', fontSize: 12, marginBottom: 8 }}>{error}</div>}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <button onClick={onClose} style={{ background: 'none', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, color: '#9ca3af', padding: '6px 14px', cursor: 'pointer', fontSize: 13 }}>取消</button>
+          <button onClick={onClose} style={{ background: 'none', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text-secondary)', padding: '6px 14px', cursor: 'pointer', fontSize: 13 }}>取消</button>
           <button onClick={handleExport} disabled={saving} style={{ background: 'rgba(59,130,246,0.8)', border: 'none', borderRadius: 6, color: '#fff', padding: '6px 14px', cursor: saving ? 'not-allowed' : 'pointer', fontSize: 13 }}>
             {saving ? '保存中…' : '确认保存'}
           </button>
@@ -272,21 +272,21 @@ export function MaskEditor() {
       onWheel={handleWheel}
     >
       <div
-        style={{ background: 'var(--card-bg, #1a1a1a)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, width: 'min(92vw, 1200px)', height: 'min(90vh, 820px)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+        style={{ background: 'var(--card-bg, #1a1a1a)', border: '1px solid var(--color-border)', borderRadius: 10, width: 'min(92vw, 1200px)', height: 'min(90vh, 820px)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
       >
         {/* Title bar */}
-        <div style={{ display: 'flex', alignItems: 'center', padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,0.08)', gap: 8 }}>
-          <span style={{ flex: 1, fontWeight: 600, fontSize: 14, color: '#e5e7eb' }}>
+        <div style={{ display: 'flex', alignItems: 'center', padding: '10px 14px', borderBottom: '1px solid var(--color-border)', gap: 8 }}>
+          <span style={{ flex: 1, fontWeight: 600, fontSize: 14, color: 'var(--color-text)' }}>
             蒙版编辑器
-            <span style={{ marginLeft: 8, fontSize: 11, color: '#6b7280', fontWeight: 400 }}>
+            <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--color-text-secondary)', fontWeight: 400 }}>
               [{isModeB ? 'A|B混合模式' : '叠加模式'}]
             </span>
           </span>
           {canUndo && (
-            <button onClick={() => setUndoSignal((v) => v + 1)} title="撤销 (Ctrl+Z)" style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 11, padding: '2px 6px' }}>↩</button>
+            <button onClick={() => setUndoSignal((v) => v + 1)} title="撤销 (Ctrl+Z)" style={{ background: 'none', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', fontSize: 11, padding: '2px 6px' }}>↩</button>
           )}
           {canRedo && (
-            <button onClick={() => setRedoSignal((v) => v + 1)} title="重做 (Ctrl+Y)" style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 11, padding: '2px 6px' }}>↪</button>
+            <button onClick={() => setRedoSignal((v) => v + 1)} title="重做 (Ctrl+Y)" style={{ background: 'none', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', fontSize: 11, padding: '2px 6px' }}>↪</button>
           )}
           {isModeB && (
             <button
@@ -296,15 +296,15 @@ export function MaskEditor() {
               导出
             </button>
           )}
-          <button onClick={handleClose} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' }}>
+          <button onClick={handleClose} style={{ background: 'none', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' }}>
             <X size={18} />
           </button>
         </div>
 
         {/* Toolbar */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderBottom: '1px solid var(--color-border)' }}>
           {!isModeB && (
-            <button onClick={cycleSubMode} style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#d1d5db', fontSize: 12, padding: '4px 10px', cursor: 'pointer' }}>
+            <button onClick={cycleSubMode} style={{ background: 'var(--color-surface-hover)', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text)', fontSize: 12, padding: '4px 10px', cursor: 'pointer' }}>
               {subModeLabels[subMode]} ▾
             </button>
           )}
@@ -312,20 +312,20 @@ export function MaskEditor() {
             <button
               onClick={() => setShowMaskOverlay((v) => !v)}
               title={showMaskOverlay ? '隐藏蒙版叠加' : '显示蒙版叠加'}
-              style={{ background: showMaskOverlay ? 'rgba(220,40,40,0.25)' : 'rgba(255,255,255,0.07)', border: `1px solid ${showMaskOverlay ? 'rgba(220,40,40,0.6)' : 'rgba(255,255,255,0.12)'}`, borderRadius: 6, color: showMaskOverlay ? '#fca5a5' : '#d1d5db', fontSize: 12, padding: '4px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
+              style={{ background: showMaskOverlay ? 'rgba(220,40,40,0.25)' : 'var(--color-surface-hover)', border: `1px solid ${showMaskOverlay ? 'rgba(220,40,40,0.6)' : 'var(--color-border)'}`, borderRadius: 6, color: showMaskOverlay ? '#fca5a5' : 'var(--color-text)', fontSize: 12, padding: '4px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
             >
               {showMaskOverlay ? <EyeOff size={13} /> : <Eye size={13} />}
               蒙版可见
             </button>
           )}
-          <button onClick={() => setClearSignal((v) => v + 1)} style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#d1d5db', fontSize: 12, padding: '4px 10px', cursor: 'pointer' }}>清空蒙版</button>
-          <button onClick={() => setInvertSignal((v) => v + 1)} style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, color: '#d1d5db', fontSize: 12, padding: '4px 10px', cursor: 'pointer' }}>反转蒙版</button>
+          <button onClick={() => setClearSignal((v) => v + 1)} style={{ background: 'var(--color-surface-hover)', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text)', fontSize: 12, padding: '4px 10px', cursor: 'pointer' }}>清空蒙版</button>
+          <button onClick={() => setInvertSignal((v) => v + 1)} style={{ background: 'var(--color-surface-hover)', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text)', fontSize: 12, padding: '4px 10px', cursor: 'pointer' }}>反转蒙版</button>
         </div>
 
         {/* Main area: viewport + right panel */}
         <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
           {/* Viewport */}
-          <div style={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#0d0d0d' }}>
+          <div style={{ flex: 1, position: 'relative', overflow: 'hidden', background: 'var(--color-bg)' }}>
             <MaskCanvas
               editorState={editorState}
               subMode={subMode}
@@ -345,7 +345,7 @@ export function MaskEditor() {
           </div>
 
           {/* Right panel */}
-          <div style={{ width: 168, borderLeft: '1px solid rgba(255,255,255,0.08)', padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div style={{ width: 168, borderLeft: '1px solid var(--color-border)', padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: 20 }}>
             <button
               onClick={handleAutoFill}
               disabled={autoFilling}

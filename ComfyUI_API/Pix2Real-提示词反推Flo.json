@@ -1,0 +1,77 @@
+{
+  "1": {
+    "inputs": {
+      "image": "解释图片信息-(2).jpg"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像"
+    }
+  },
+  "6": {
+    "inputs": {
+      "model": "MiaoshouAI/Florence-2-large-PromptGen-v2.0",
+      "precision": "fp16",
+      "attention": "sdpa",
+      "convert_to_safetensors": false
+    },
+    "class_type": "DownloadAndLoadFlorence2Model",
+    "_meta": {
+      "title": "下载并加载 Florence2 模型"
+    }
+  },
+  "9": {
+    "inputs": {
+      "text_input": "",
+      "task": "more_detailed_caption",
+      "fill_mask": false,
+      "keep_model_loaded": false,
+      "max_new_tokens": 1024,
+      "num_beams": 3,
+      "do_sample": false,
+      "output_mask_select": "",
+      "seed": 1115129475904566,
+      "image": [
+        "1",
+        0
+      ],
+      "florence2_model": [
+        "6",
+        0
+      ]
+    },
+    "class_type": "Florence2Run",
+    "_meta": {
+      "title": "Florence2 执行"
+    }
+  },
+  "15": {
+    "inputs": {
+      "text_0": "这是一张从肖像角度拍摄的逼真照片，讲述了一位穿着中国传统服装的年轻女子用手做心形。图片还显示，一名女性站在相框中间，站在灯光昏暗的房间里，背景是华丽的木板。这名女子看起来十几岁或二十出头，深色头发配以优雅的金饰，身穿淡蓝色汉服，上面有复杂的花朵图案和金色刺绣的黑色腰带。她闭上眼睛，脸上表情安详。她往下看，双手紧握在胸前。灯光柔和而温暖，在她的皮肤上创造出柔和的光泽。",
+      "text": [
+        "9",
+        2
+      ]
+    },
+    "class_type": "ShowText|pysssss",
+    "_meta": {
+      "title": "展示文本"
+    }
+  },
+  "67": {
+    "inputs": {
+      "output_file_path": "",
+      "file_name": "",
+      "file_extension": "txt",
+      "overwrite": true,
+      "text": [
+        "15",
+        0
+      ]
+    },
+    "class_type": "easy saveText",
+    "_meta": {
+      "title": "保存文本"
+    }
+  }
+}

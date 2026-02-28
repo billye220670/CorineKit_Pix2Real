@@ -10,6 +10,7 @@
   --color-overlay: rgba(0, 0, 0, 0.6);
   --color-success: #4CAF50;
   --color-error: #f44336;
+  --card-bg: #ffffff;
   --spacing-xs: 4px;
   --spacing-sm: 8px;
   --spacing-md: 16px;
@@ -25,4 +26,5 @@
   --color-text-secondary: #999999;
   --color-border: #333333;
   --color-overlay: rgba(0, 0, 0, 0.75);
+  --card-bg: #1a1a1a;
 }

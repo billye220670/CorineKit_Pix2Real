@@ -1,0 +1,58 @@
+{
+  "1": {
+    "inputs": {
+      "image": "解释图片信息-(2).jpg"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像"
+    }
+  },
+  "20": {
+    "inputs": {
+      "model": "wd-eva02-large-tagger-v3",
+      "threshold": 0.35,
+      "character_threshold": 0.85,
+      "replace_underscore": true,
+      "trailing_comma": false,
+      "exclude_tags": "",
+      "image": [
+        "1",
+        0
+      ]
+    },
+    "class_type": "WD14Tagger|pysssss",
+    "_meta": {
+      "title": "WD14反推提示词"
+    }
+  },
+  "21": {
+    "inputs": {
+      "text_0": "1女孩，独奏，胸部，黑色头发，长袖，发饰，连衣裙，闭嘴，珠宝，锁骨，室内，宽袖子，发髻，模糊，透视，腰带，模糊背景，化妆，蓝色连衣裙，中国衣服，向下看，口红，珠子，逼真，红唇，汉服",
+      "text": [
+        "20",
+        0
+      ]
+    },
+    "class_type": "ShowText|pysssss",
+    "_meta": {
+      "title": "展示文本"
+    }
+  },
+  "67": {
+    "inputs": {
+      "output_file_path": "",
+      "file_name": "",
+      "file_extension": "txt",
+      "overwrite": true,
+      "text": [
+        "21",
+        0
+      ]
+    },
+    "class_type": "easy saveText",
+    "_meta": {
+      "title": "保存文本"
+    }
+  }
+}

@@ -9,9 +9,11 @@ import { PhotoWall, VIEW_CONFIG, type ViewSize } from './PhotoWall.js';
 import { ThemeToggle } from './ThemeToggle.js';
 import { SessionBar } from './SessionBar.js';
 import { StatusBar } from './StatusBar.js';
-import { Upload } from 'lucide-react';
+import { Settings, Upload } from 'lucide-react';
 import { Toast } from './Toast.js';
 import { MaskEditor } from './MaskEditor.js';
+import { SettingsModal } from './SettingsModal.js';
+import { useSettingsStore } from '../hooks/useSettingsStore.js';
 
 function isImageOrVideo(file: File): boolean {
   return file.type.startsWith('image/') || file.type.startsWith('video/');
@@ -46,6 +48,7 @@ export function App() {
   const images = useWorkflowStore((s) => s.tabData[s.activeTab]?.images ?? []);
   const { importFiles, dialog, overwrite, keepBoth, cancel } = useImageImporter();
   const { sessionId, lastSavedAt, newSession } = useSession();
+  const openSettings = useSettingsStore((s) => s.openSettings);
   const [isDragOver, setIsDragOver] = useState(false);
   const [viewSize, setViewSize] = useState<ViewSize>(() => {
     const saved = localStorage.getItem('viewSize');
@@ -142,6 +145,24 @@ export function App() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
           <SessionBar sessionId={sessionId} onNewSession={newSession} />
           <ThemeToggle />
+          <button
+            onClick={openSettings}
+            title="设置"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 'var(--spacing-sm)',
+              color: 'var(--color-text)',
+              border: 'none',
+              borderRadius: 0,
+              backgroundColor: 'transparent',
+              opacity: 0.55,
+              cursor: 'pointer',
+            }}
+          >
+            <Settings size={18} />
+          </button>
         </div>
       </header>
 
@@ -249,6 +270,7 @@ export function App() {
 
       <Toast />
       <MaskEditor />
+      <SettingsModal />
     </div>
   );
 }

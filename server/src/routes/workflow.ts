@@ -336,9 +336,24 @@ router.post('/export-blend', express.json({ limit: '50mb' }), async (req, res) =
 });
 
 const autoRecognizeTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-自动识别Fixed.json');
-const reversePromptTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-提示词反推Q3.json');
 
-// POST /api/workflow/reverse-prompt — run LLM captioning and return generated prompt text
+const reversePromptConfigs: Record<string, { templatePath: string; saveTextNode: string }> = {
+  'Qwen3VL': {
+    templatePath: path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-提示词反推Q3.json'),
+    saveTextNode: '66',
+  },
+  'Florence': {
+    templatePath: path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-提示词反推Flo.json'),
+    saveTextNode: '67',
+  },
+  'WD-14': {
+    templatePath: path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-提示词反推WD14.json'),
+    saveTextNode: '67',
+  },
+};
+
+// POST /api/workflow/reverse-prompt?model=Qwen3VL|Florence|WD-14
+// Runs LLM/tagger captioning and returns generated prompt text
 router.post('/reverse-prompt', upload.single('image'), async (req, res) => {
   try {
     if (!req.file) {
@@ -346,21 +361,28 @@ router.post('/reverse-prompt', upload.single('image'), async (req, res) => {
       return;
     }
 
+    const model = (req.query.model as string) || 'Qwen3VL';
+    const cfg = reversePromptConfigs[model];
+    if (!cfg) {
+      res.status(400).json({ error: `Unknown model: ${model}` });
+      return;
+    }
+
     const internalClientId = `reverse-prompt-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
     const comfyFilename = await uploadImage(req.file.buffer, req.file.originalname);
 
-    const template = JSON.parse(fs.readFileSync(reversePromptTemplatePath, 'utf-8'));
+    const template = JSON.parse(fs.readFileSync(cfg.templatePath, 'utf-8'));
     template['1'].inputs.image = comfyFilename;
 
     // Patch easy saveText with an absolute path so we can read it directly from disk.
     const rpTempDir = path.resolve(__dirname, '../../../rp_temp');
     if (!fs.existsSync(rpTempDir)) fs.mkdirSync(rpTempDir, { recursive: true });
     const tempName = `rp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    template['66'].inputs.output_file_path = rpTempDir;
-    template['66'].inputs.file_name = tempName;
-    template['66'].inputs.file_extension = 'txt';
-    template['66'].inputs.overwrite = true;
+    template[cfg.saveTextNode].inputs.output_file_path = rpTempDir;
+    template[cfg.saveTextNode].inputs.file_name = tempName;
+    template[cfg.saveTextNode].inputs.file_extension = 'txt';
+    template[cfg.saveTextNode].inputs.overwrite = true;
 
     const queued = await queuePrompt(template, internalClientId);
     const promptId = queued.prompt_id;
