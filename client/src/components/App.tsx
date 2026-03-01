@@ -13,6 +13,7 @@ import { Settings, Upload } from 'lucide-react';
 import { Toast } from './Toast.js';
 import { MaskEditor } from './MaskEditor.js';
 import { SettingsModal } from './SettingsModal.js';
+import { StartupDialog } from './StartupDialog.js';
 import { useSettingsStore } from '../hooks/useSettingsStore.js';
 
 function isImageOrVideo(file: File): boolean {
@@ -47,7 +48,7 @@ async function readFilesFromEntry(entry: FileSystemEntry): Promise<File[]> {
 export function App() {
   const images = useWorkflowStore((s) => s.tabData[s.activeTab]?.images ?? []);
   const { importFiles, dialog, overwrite, keepBoth, cancel } = useImageImporter();
-  const { sessionId, lastSavedAt, newSession } = useSession();
+  const { sessionId, lastSavedAt, newSession, startupDialog } = useSession();
   const openSettings = useSettingsStore((s) => s.openSettings);
   const [isDragOver, setIsDragOver] = useState(false);
   const [viewSize, setViewSize] = useState<ViewSize>(() => {
@@ -268,6 +269,12 @@ export function App() {
         </div>
       )}
 
+      {startupDialog && (
+        <StartupDialog
+          onRestore={startupDialog.onRestore}
+          onStartNew={startupDialog.onStartNew}
+        />
+      )}
       <Toast />
       <MaskEditor />
       <SettingsModal />

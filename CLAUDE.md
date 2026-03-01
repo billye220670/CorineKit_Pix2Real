@@ -44,6 +44,7 @@ Max safe seed value for ComfyUI: `1125899906842624`
 - `client/src/components/ThumbnailStrip.tsx` — Multi-output thumbnail navigator
 - `server/src/services/comfyui.ts` — ComfyUI HTTP + WS client
 - `server/src/routes/workflow.ts` — Execute, batch, release-memory, open-folder, mask auto-recognize endpoints
+- `docs/settings-panel.md` — Settings panel architecture & how to add new settings (see also `docs/plans/2026-03-01-settings-panel-design.md`)
 
 ## Store Notes
 

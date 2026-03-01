@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useWorkflowStore } from './useWorkflowStore.js';
 import { useMaskStore, type MaskEntry } from './useMaskStore.js';
+import { useSettingsStore } from './useSettingsStore.js';
 import {
   uploadSessionImage,
   uploadSessionMask,
@@ -86,15 +87,22 @@ async function fetchMaskEntry(url: string): Promise<MaskEntry> {
 
 const NAMES_KEY = 'pix2real_session_names';
 
+export interface StartupDialogState {
+  onRestore: () => void;
+  onStartNew: () => void;
+}
+
 export interface UseSessionReturn {
   sessionId: string;
   lastSavedAt: Date | null;
   newSession: (name?: string) => void;
+  startupDialog: StartupDialogState | null;
 }
 
 export function useSession(): UseSessionReturn {
   const [sessionId, setSessionId] = useState<string>(() => getOrCreateSessionId());
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const [startupDialog, setStartupDialog] = useState<StartupDialogState | null>(null);
 
   // Keep the store in sync whenever sessionId changes
   useEffect(() => {
@@ -235,90 +243,7 @@ export function useSession(): UseSessionReturn {
     return unsub;
   }, []);
 
-  // ── Load & restore on mount ──────────────────────────────────────────────
-  useEffect(() => {
-    void (async () => {
-      try {
-        const session = await getSession(sessionId);
-        if (!session) {
-          isRestoring.current = false;
-          return;
-        }
-
-        const restoredImages: Record<number, ImageItem[]> = {};
-        const restoredMasks: Record<string, MaskEntry> = {};
-
-        for (let tab = 0; tab <= 5; tab++) {
-          const td = session.tabData[tab];
-          if (!td) continue;
-
-          const images: ImageItem[] = [];
-          for (const imgMeta of td.images) {
-            const sessionUrl = `/api/session-files/${sessionId}/tab-${tab}/input/${imgMeta.id}${imgMeta.ext}`;
-            try {
-              const file = await fetchAsFile(sessionUrl, imgMeta.originalName);
-              const blobUrl = URL.createObjectURL(file);
-              images.push({
-                id: imgMeta.id,
-                file,
-                previewUrl: blobUrl,
-                originalName: imgMeta.originalName,
-                sessionUrl,
-              });
-              // Mark as already uploaded so we don't re-upload on subscription trigger
-              uploadedImages.current.add(`${tab}:${imgMeta.id}`);
-            } catch {
-              console.warn(`[Session] Could not restore image ${imgMeta.id} for tab ${tab}`);
-            }
-          }
-          restoredImages[tab] = images;
-
-          // Restore masks by probing known paths
-          for (const img of td.images) {
-            for (const suffix of ['-1', '0', '1', '2', '3', '4']) {
-              const maskKey = `${img.id}:${suffix}`;
-              const safeName = maskKey.replace(/:/g, '_');
-              const maskUrl = `/api/session-files/${sessionId}/tab-${tab}/masks/${safeName}.png`;
-              try {
-                const headRes = await fetch(maskUrl, { method: 'HEAD' });
-                if (!headRes.ok) continue;
-                const entry = await fetchMaskEntry(maskUrl);
-                restoredMasks[maskKey] = entry;
-                savedMasks.current.add(maskKey);
-              } catch { /* mask doesn't exist, skip */ }
-            }
-          }
-        }
-
-        useWorkflowStore.getState().restoreSession(session.activeTab, session.tabData, restoredImages);
-        useMaskStore.getState().restoreAllMasks(restoredMasks);
-        setLastSavedAt(new Date(session.updatedAt));
-      } catch (err) {
-        console.warn('[Session] Failed to restore session:', err);
-      } finally {
-        isRestoring.current = false;
-      }
-    })();
-    // Only on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // ── beforeunload flush ───────────────────────────────────────────────────
-  useEffect(() => {
-    const handler = () => {
-      if (debounceTimer.current) {
-        clearTimeout(debounceTimer.current);
-        debounceTimer.current = null;
-      }
-      const state = serializeState();
-      const blob = new Blob([JSON.stringify(state)], { type: 'application/json' });
-      navigator.sendBeacon(`/api/session/${sessionIdRef.current}/state`, blob);
-    };
-    window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
-  }, [serializeState]);
-
-  // ── New session ──────────────────────────────────────────────────────────
+  // ── New session ── (defined before mount effect so it can be referenced inside)
   const newSession = useCallback((name?: string) => {
     const id = generateSessionId();
     localStorage.setItem(SESSION_ID_KEY, id);
@@ -337,5 +262,115 @@ export function useSession(): UseSessionReturn {
     useMaskStore.getState().restoreAllMasks({});
   }, []);
 
-  return { sessionId, lastSavedAt, newSession };
+  // ── Load & restore on mount ──────────────────────────────────────────────
+  useEffect(() => {
+    void (async () => {
+      try {
+        const session = await getSession(sessionId);
+        const behavior = useSettingsStore.getState().startupBehavior;
+
+        if (!session) {
+          isRestoring.current = false;
+          return;
+        }
+
+        // ── Restore logic shared by all paths that restore ───────────────
+        const doRestore = async () => {
+          const restoredImages: Record<number, ImageItem[]> = {};
+          const restoredMasks: Record<string, MaskEntry> = {};
+
+          for (let tab = 0; tab <= 5; tab++) {
+            const td = session.tabData[tab];
+            if (!td) continue;
+
+            const images: ImageItem[] = [];
+            for (const imgMeta of td.images) {
+              const sessionUrl = `/api/session-files/${sessionId}/tab-${tab}/input/${imgMeta.id}${imgMeta.ext}`;
+              try {
+                const file = await fetchAsFile(sessionUrl, imgMeta.originalName);
+                const blobUrl = URL.createObjectURL(file);
+                images.push({
+                  id: imgMeta.id,
+                  file,
+                  previewUrl: blobUrl,
+                  originalName: imgMeta.originalName,
+                  sessionUrl,
+                });
+                // Mark as already uploaded so we don't re-upload on subscription trigger
+                uploadedImages.current.add(`${tab}:${imgMeta.id}`);
+              } catch {
+                console.warn(`[Session] Could not restore image ${imgMeta.id} for tab ${tab}`);
+              }
+            }
+            restoredImages[tab] = images;
+
+            // Restore masks by probing known paths
+            for (const img of td.images) {
+              for (const suffix of ['-1', '0', '1', '2', '3', '4']) {
+                const maskKey = `${img.id}:${suffix}`;
+                const safeName = maskKey.replace(/:/g, '_');
+                const maskUrl = `/api/session-files/${sessionId}/tab-${tab}/masks/${safeName}.png`;
+                try {
+                  const headRes = await fetch(maskUrl, { method: 'HEAD' });
+                  if (!headRes.ok) continue;
+                  const entry = await fetchMaskEntry(maskUrl);
+                  restoredMasks[maskKey] = entry;
+                  savedMasks.current.add(maskKey);
+                } catch { /* mask doesn't exist, skip */ }
+              }
+            }
+          }
+
+          useWorkflowStore.getState().restoreSession(session.activeTab, session.tabData, restoredImages);
+          useMaskStore.getState().restoreAllMasks(restoredMasks);
+          setLastSavedAt(new Date(session.updatedAt));
+          isRestoring.current = false;
+        };
+
+        // ── Branch on startup behavior ───────────────────────────────────
+        if (behavior === 'restore') {
+          await doRestore();
+        } else if (behavior === 'new') {
+          isRestoring.current = false;
+          newSession();
+        } else {
+          // 'ask' — show dialog; keep isRestoring=true until user decides
+          setStartupDialog({
+            onRestore: () => {
+              setStartupDialog(null);
+              void doRestore();
+            },
+            onStartNew: () => {
+              setStartupDialog(null);
+              isRestoring.current = false;
+              newSession();
+            },
+          });
+        }
+      } catch (err) {
+        console.warn('[Session] Failed to restore session:', err);
+        isRestoring.current = false;
+      }
+    })();
+    // Only on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── beforeunload flush ───────────────────────────────────────────────────
+  useEffect(() => {
+    const handler = () => {
+      if (isRestoring.current) return; // don't overwrite session with empty state during startup
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+        debounceTimer.current = null;
+      }
+      const state = serializeState();
+      const blob = new Blob([JSON.stringify(state)], { type: 'application/json' });
+      navigator.sendBeacon(`/api/session/${sessionIdRef.current}/state`, blob);
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [serializeState]);
+
+  return { sessionId, lastSavedAt, newSession, startupDialog };
 }
