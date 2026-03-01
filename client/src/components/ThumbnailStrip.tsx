@@ -173,7 +173,7 @@ export function ThumbnailStrip({
                 height: dims.h,
                 padding: 0,
                 border: 'none',
-                cursor: i > 0 && onOutputDragStart ? 'grab' : 'pointer',
+                cursor: 'pointer',
                 outline: i === selectedIndex ? '2px solid var(--color-primary)' : '1.5px solid rgba(255,255,255,0.25)',
                 outlineOffset: 0,
                 opacity: i === selectedIndex ? 1 : 0.65,

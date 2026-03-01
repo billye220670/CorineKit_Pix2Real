@@ -32,7 +32,7 @@ export function Sidebar() {
 
   const [dragOverTab, setDragOverTab] = useState<number | null>(null);
   const dragging = useDragStore((s) => s.dragging);
-  const isCardDragging = dragging?.type === 'card';
+  const isAnyDragging = dragging !== null;
   const [isQueueOpen, setIsQueueOpen] = useState(false);
   const [isQueueClosing, setIsQueueClosing] = useState(false);
   const [queueCount, setQueueCount] = useState(0);
@@ -49,7 +49,9 @@ export function Sidebar() {
     const el = asideRef.current;
     if (!el) return;
     const onDragOver = (e: DragEvent) => {
-      if (e.dataTransfer?.types.includes('application/x-workflow-image')) {
+      const hasCard = e.dataTransfer?.types.includes('application/x-workflow-image');
+      const hasThumb = e.dataTransfer?.types.includes('application/x-thumb-output');
+      if (hasCard || hasThumb) {
         e.preventDefault();
         if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
       }
@@ -120,53 +122,81 @@ export function Sidebar() {
     setDragOverTab(null);
 
     const imageId = e.dataTransfer.getData('application/x-workflow-image');
-    if (!imageId) return;
+    if (imageId) {
+      const state = useWorkflowStore.getState();
+      const selectedIds = state.selectedImageIds;
+      const idsToImport = selectedIds.length > 0 && selectedIds.includes(imageId)
+        ? selectedIds
+        : [imageId];
 
-    const state = useWorkflowStore.getState();
-    const selectedIds = state.selectedImageIds;
-    const idsToImport = selectedIds.length > 0 && selectedIds.includes(imageId)
-      ? selectedIds
-      : [imageId];
-
-    let sourceTabId: number | null = null;
-    for (const [key, tabEntry] of Object.entries(state.tabData)) {
-      if (tabEntry.images.some((i) => idsToImport.includes(i.id))) {
-        sourceTabId = Number(key);
-        break;
+      let sourceTabId: number | null = null;
+      for (const [key, tabEntry] of Object.entries(state.tabData)) {
+        if (tabEntry.images.some((i) => idsToImport.includes(i.id))) {
+          sourceTabId = Number(key);
+          break;
+        }
       }
-    }
-    if (sourceTabId === null || sourceTabId === targetTab) return;
+      if (sourceTabId === null || sourceTabId === targetTab) return;
 
-    const files: File[] = [];
-    for (const id of idsToImport) {
-      let file: File | null = null;
-      for (const tabEntry of Object.values(state.tabData)) {
-        const img = tabEntry.images.find((i) => i.id === id);
-        if (!img) continue;
-        const outputs = tabEntry.tasks[id]?.outputs ?? [];
-        const selectedIdx = tabEntry.selectedOutputIndex?.[id] ?? (outputs.length - 1);
-        if (outputs.length > 0 && selectedIdx !== -1) {
-          const selected = outputs[selectedIdx] ?? outputs[outputs.length - 1];
-          try {
-            const res = await fetch(selected.url);
-            const blob = await res.blob();
-            file = new File([blob], selected.filename, { type: blob.type });
-          } catch {
+      const files: File[] = [];
+      for (const id of idsToImport) {
+        let file: File | null = null;
+        for (const tabEntry of Object.values(state.tabData)) {
+          const img = tabEntry.images.find((i) => i.id === id);
+          if (!img) continue;
+          const outputs = tabEntry.tasks[id]?.outputs ?? [];
+          const selectedIdx = tabEntry.selectedOutputIndex?.[id] ?? (outputs.length - 1);
+          if (outputs.length > 0 && selectedIdx !== -1) {
+            const selected = outputs[selectedIdx] ?? outputs[outputs.length - 1];
+            try {
+              const res = await fetch(selected.url);
+              const blob = await res.blob();
+              file = new File([blob], selected.filename, { type: blob.type });
+            } catch {
+              file = img.file;
+            }
+          } else {
             file = img.file;
           }
-        } else {
-          file = img.file;
+          break;
+        }
+        if (file) files.push(file);
+      }
+
+      if (files.length === 0) return;
+      addImagesToTab(targetTab, files);
+      const targetName = state.workflows.find((w) => w.id === targetTab)?.name ?? '';
+      const label = files.length > 1 ? `${files.length} 张图片` : '';
+      showToast(`已导入${label}到「${targetName}」`);
+      return;
+    }
+
+    // Handle output thumbnail drag
+    if (e.dataTransfer.types.includes('application/x-thumb-output')) {
+      const dragState = useDragStore.getState();
+      if (dragState.dragging?.type !== 'output') return;
+      const { imageId: srcImageId, outputIndex } = dragState.dragging;
+      const state = useWorkflowStore.getState();
+      let file: File | null = null;
+      for (const tabEntry of Object.values(state.tabData)) {
+        const img = tabEntry.images.find((i) => i.id === srcImageId);
+        if (!img) continue;
+        const outputs = tabEntry.tasks[srcImageId]?.outputs ?? [];
+        const output = outputs[outputIndex];
+        if (output) {
+          try {
+            const res = await fetch(output.url);
+            const blob = await res.blob();
+            file = new File([blob], output.filename, { type: blob.type });
+          } catch { /* skip */ }
         }
         break;
       }
-      if (file) files.push(file);
+      if (!file) return;
+      addImagesToTab(targetTab, [file]);
+      const targetName = state.workflows.find((w) => w.id === targetTab)?.name ?? '';
+      showToast(`已导入到「${targetName}」`);
     }
-
-    if (files.length === 0) return;
-    addImagesToTab(targetTab, files);
-    const targetName = state.workflows.find((w) => w.id === targetTab)?.name ?? '';
-    const label = files.length > 1 ? `${files.length} 张图片` : '';
-    showToast(`已导入${label}到「${targetName}」`);
   }, [addImagesToTab]);
 
   return (
@@ -183,7 +213,15 @@ export function Sidebar() {
       }}
     >
       {/* Workflow groups */}
-      <nav ref={navRef} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '8px 0', position: 'relative' }}>
+      <nav
+        ref={navRef}
+        onDragOver={(e) => {
+          const hasCard = e.dataTransfer.types.includes('application/x-workflow-image');
+          const hasThumb = e.dataTransfer.types.includes('application/x-thumb-output');
+          if (hasCard || hasThumb) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }
+        }}
+        style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '8px 0', position: 'relative' }}
+      >
         {/* Floating active indicator */}
         {indicatorStyle && (
           <div
@@ -227,7 +265,7 @@ export function Sidebar() {
                 (t) => t.status === 'processing',
               );
               const Icon = WORKFLOW_ICONS[id];
-              const showCopyHint = isDragOver && isCardDragging;
+              const isDropTarget = isDragOver && isAnyDragging;
               return (
                 <button
                   key={id}
@@ -237,6 +275,9 @@ export function Sidebar() {
                   }}
                   onClick={() => setActiveTab(id)}
                   onDragOver={(e) => {
+                    const hasCard = e.dataTransfer.types.includes('application/x-workflow-image');
+                    const hasThumb = e.dataTransfer.types.includes('application/x-thumb-output');
+                    if (!hasCard && !hasThumb) return;
                     e.preventDefault();
                     e.dataTransfer.dropEffect = 'move';
                     setDragOverTab(id);
@@ -246,6 +287,7 @@ export function Sidebar() {
                     if (!e.currentTarget.contains(related)) setDragOverTab(null);
                   }}
                   onDrop={(e) => handleDrop(e, id)}
+                  data-drop-target={isDropTarget ? 'true' : undefined}
                   style={{
                     position: 'relative',
                     zIndex: 1,
@@ -255,20 +297,21 @@ export function Sidebar() {
                     width: 'calc(100% - 16px)',
                     margin: '2px 8px',
                     padding: '9px 12px',
-                    backgroundColor: showCopyHint
+                    backgroundColor: isDropTarget
                       ? 'rgba(33, 150, 243, 0.18)'
                       : isDragOver
                         ? 'var(--color-surface-hover)'
                         : 'transparent',
                     color: isActive ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-                    border: showCopyHint ? '1.5px solid rgba(33,150,243,0.55)' : 'none',
+                    border: 'none',
+                    boxShadow: isDropTarget ? 'inset 0 0 0 1.5px rgba(33,150,243,0.55)' : 'none',
                     borderRadius: 8,
                     fontSize: '13px',
                     fontWeight: isActive ? 500 : 300,
-                    cursor: isCardDragging ? 'copy' : 'pointer',
+                    cursor: 'pointer',
                     textAlign: 'left',
                     opacity: isActive ? 1 : 0.75,
-                    transition: 'background-color 0.15s, color 0.15s, opacity 0.15s, border-color 0.15s',
+                    transition: 'background-color 0.15s, color 0.15s, opacity 0.15s, box-shadow 0.15s',
                   }}
                 >
                   <Icon size={14} style={{ flexShrink: 0 }} />
@@ -280,7 +323,7 @@ export function Sidebar() {
                   }}>
                     {wf.name}
                   </span>
-                  {!showCopyHint && hasProcessing && (
+                  {!isDropTarget && hasProcessing && (
                     <span style={{
                       width: 6,
                       height: 6,
@@ -289,27 +332,6 @@ export function Sidebar() {
                       flexShrink: 0,
                       animation: 'pulse 1.5s ease-in-out infinite',
                     }} />
-                  )}
-                  {/* Floating bubble tooltip when dragging a card over this tab */}
-                  {showCopyHint && (
-                    <div style={{
-                      position: 'absolute',
-                      right: -4,
-                      top: '50%',
-                      transform: 'translate(100%, -50%)',
-                      backgroundColor: 'var(--color-primary)',
-                      color: '#fff',
-                      fontSize: '11px',
-                      fontWeight: 600,
-                      padding: '3px 8px',
-                      borderRadius: 6,
-                      whiteSpace: 'nowrap',
-                      pointerEvents: 'none',
-                      zIndex: 200,
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
-                    }}>
-                      添加到此
-                    </div>
                   )}
                 </button>
               );

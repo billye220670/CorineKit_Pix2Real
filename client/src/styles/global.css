@@ -136,3 +136,8 @@ body.is-dragging-card,
 body.is-dragging-card * {
   cursor: grabbing !important;
 }
+
+/* Drop targets override grabbing with copy cursor */
+body.is-dragging-card [data-drop-target="true"] {
+  cursor: copy !important;
+}

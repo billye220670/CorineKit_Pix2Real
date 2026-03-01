@@ -349,6 +349,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
         <img
           src={image.previewUrl}
           alt={image.originalName}
+          draggable={false}
           style={{ width: '100%', display: 'block' }}
           onDoubleClick={(e) => {
             if (isVideoWorkflow) return;
@@ -384,6 +385,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
             <img
               src={displayOutput.url}
               alt="Output"
+              draggable={false}
               style={{
                 position: 'absolute',
                 top: 0,
