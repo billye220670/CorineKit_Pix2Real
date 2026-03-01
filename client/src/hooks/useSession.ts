@@ -16,6 +16,11 @@ import type { ImageItem } from '../types/index.js';
 
 const SESSION_ID_KEY = 'pix2real_session_id';
 
+// Guards against React StrictMode's double-invocation of the mount effect.
+// Synchronously claimed before any await so both concurrent IIFEs don't both
+// read the sessionStorage flag — the second one bails out immediately.
+let _switchIntentConsumed = false;
+
 function generateSessionId(): string {
   return crypto.randomUUID();
 }
@@ -265,6 +270,18 @@ export function useSession(): UseSessionReturn {
   // ── Load & restore on mount ──────────────────────────────────────────────
   useEffect(() => {
     void (async () => {
+      // ── Synchronously claim the switch intent BEFORE any await ────────
+      // This prevents React StrictMode's double-invocation from letting a
+      // second concurrent IIFE fall through to the startup-behavior branch.
+      const switchIntent = sessionStorage.getItem('pix2real_switch_intent');
+      const isSwitchIntent = Boolean(switchIntent) && !_switchIntentConsumed;
+      if (isSwitchIntent) {
+        _switchIntentConsumed = true;
+        sessionStorage.removeItem('pix2real_switch_intent');
+      }
+      // Second StrictMode IIFE: another invocation already claimed intent, bail.
+      if (!isSwitchIntent && _switchIntentConsumed) return;
+
       try {
         const session = await getSession(sessionId);
         const behavior = useSettingsStore.getState().startupBehavior;
@@ -328,7 +345,8 @@ export function useSession(): UseSessionReturn {
         };
 
         // ── Branch on startup behavior ───────────────────────────────────
-        if (behavior === 'restore') {
+        // isSwitchIntent was claimed synchronously before any await above.
+        if (isSwitchIntent || behavior === 'restore') {
           await doRestore();
         } else if (behavior === 'new') {
           isRestoring.current = false;

@@ -63,6 +63,7 @@ export function SessionBar({ sessionId, onNewSession }: SessionBarProps) {
   const handleSwitchSession = useCallback((id: string) => {
     if (id === sessionId) { setOpen(false); return; }
     localStorage.setItem('pix2real_session_id', id);
+    sessionStorage.setItem('pix2real_switch_intent', '1');
     window.location.reload();
   }, [sessionId]);
 
