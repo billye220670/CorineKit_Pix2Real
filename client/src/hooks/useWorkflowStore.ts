@@ -9,6 +9,7 @@ const WORKFLOWS = [
   { id: 3, name: '快速生成视频', needsPrompt: true },
   { id: 4, name: '视频放大', needsPrompt: false },
   { id: 5, name: '解除装备', needsPrompt: true },
+  { id: 6, name: '真人转二次元', needsPrompt: true },
 ];
 
 interface TabData {
@@ -87,6 +88,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     3: emptyTabData(),
     4: emptyTabData(),
     5: emptyTabData(),
+    6: emptyTabData(),
   },
   clientId: null,
   sessionId: null,
@@ -485,7 +487,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
 
   restoreSession: (activeTab, serializedTabData, restoredImages) => {
     const newTabData: Record<number, TabData> = {};
-    for (let tab = 0; tab <= 5; tab++) {
+    for (let tab = 0; tab <= 6; tab++) {
       const ser = serializedTabData[tab];
       if (!ser) {
         newTabData[tab] = emptyTabData();

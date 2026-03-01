@@ -9,6 +9,7 @@ export const TAB_MASK_MODE: Record<number, TabMaskMode> = {
   3: 'none',
   4: 'none',
   5: 'A',    // 解除装备 — Mode A overlay
+  6: 'none', // 真人转二次元 — no mask
 };
 
 export const maskKey = (imageId: string, outputIndex: number): string =>

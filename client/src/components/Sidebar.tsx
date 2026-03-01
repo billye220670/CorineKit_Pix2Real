@@ -1,14 +1,15 @@
 import { useCallback, useState, useEffect, useRef } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { useWorkflowStore } from '../hooks/useWorkflowStore.js';
+import { useDragStore } from '../hooks/useDragStore.js';
 import { showToast } from '../hooks/useToast.js';
 import { QueuePanel } from './QueuePanel.js';
 import {
-  Wand2, Sparkles, ZoomIn, Scissors, Video, Maximize2, ListOrdered,
+  Wand2, Sparkles, ZoomIn, Scissors, Video, Maximize2, ListOrdered, Palette,
 } from 'lucide-react';
 
 const GROUPS: { label: string; ids: number[] }[] = [
-  { label: '图像处理', ids: [0, 1, 2, 5] },
+  { label: '图像处理', ids: [0, 1, 2, 5, 6] },
   { label: '视频处理', ids: [3, 4] },
 ];
 
@@ -19,6 +20,7 @@ const WORKFLOW_ICONS: Record<number, LucideIcon> = {
   3: Video,
   4: Maximize2,
   5: Scissors,
+  6: Palette,
 };
 
 export function Sidebar() {
@@ -29,6 +31,8 @@ export function Sidebar() {
   const addImagesToTab = useWorkflowStore((s) => s.addImagesToTab);
 
   const [dragOverTab, setDragOverTab] = useState<number | null>(null);
+  const dragging = useDragStore((s) => s.dragging);
+  const isCardDragging = dragging?.type === 'card';
   const [isQueueOpen, setIsQueueOpen] = useState(false);
   const [isQueueClosing, setIsQueueClosing] = useState(false);
   const [queueCount, setQueueCount] = useState(0);
@@ -223,6 +227,7 @@ export function Sidebar() {
                 (t) => t.status === 'processing',
               );
               const Icon = WORKFLOW_ICONS[id];
+              const showCopyHint = isDragOver && isCardDragging;
               return (
                 <button
                   key={id}
@@ -250,16 +255,20 @@ export function Sidebar() {
                     width: 'calc(100% - 16px)',
                     margin: '2px 8px',
                     padding: '9px 12px',
-                    backgroundColor: isDragOver ? 'var(--color-surface-hover)' : 'transparent',
+                    backgroundColor: showCopyHint
+                      ? 'rgba(33, 150, 243, 0.18)'
+                      : isDragOver
+                        ? 'var(--color-surface-hover)'
+                        : 'transparent',
                     color: isActive ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-                    border: 'none',
+                    border: showCopyHint ? '1.5px solid rgba(33,150,243,0.55)' : 'none',
                     borderRadius: 8,
                     fontSize: '13px',
                     fontWeight: isActive ? 500 : 300,
-                    cursor: 'pointer',
+                    cursor: isCardDragging ? 'copy' : 'pointer',
                     textAlign: 'left',
                     opacity: isActive ? 1 : 0.75,
-                    transition: 'background-color 0.15s, color 0.15s, opacity 0.15s',
+                    transition: 'background-color 0.15s, color 0.15s, opacity 0.15s, border-color 0.15s',
                   }}
                 >
                   <Icon size={14} style={{ flexShrink: 0 }} />
@@ -271,7 +280,7 @@ export function Sidebar() {
                   }}>
                     {wf.name}
                   </span>
-                  {hasProcessing && (
+                  {!showCopyHint && hasProcessing && (
                     <span style={{
                       width: 6,
                       height: 6,
@@ -280,6 +289,27 @@ export function Sidebar() {
                       flexShrink: 0,
                       animation: 'pulse 1.5s ease-in-out infinite',
                     }} />
+                  )}
+                  {/* Floating bubble tooltip when dragging a card over this tab */}
+                  {showCopyHint && (
+                    <div style={{
+                      position: 'absolute',
+                      right: -4,
+                      top: '50%',
+                      transform: 'translate(100%, -50%)',
+                      backgroundColor: 'var(--color-primary)',
+                      color: '#fff',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      padding: '3px 8px',
+                      borderRadius: 6,
+                      whiteSpace: 'nowrap',
+                      pointerEvents: 'none',
+                      zIndex: 200,
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+                    }}>
+                      添加到此
+                    </div>
                   )}
                 </button>
               );

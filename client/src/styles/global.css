@@ -130,3 +130,9 @@ textarea::placeholder {
 .panel-exit     { animation: panel-out 0.14s ease-in both;                         transform-origin: top right; }
 .panel-enter-up { animation: panel-in  0.18s cubic-bezier(0.22, 1, 0.36, 1) both; transform-origin: bottom left; }
 .panel-exit-up  { animation: panel-out 0.14s ease-in both;                         transform-origin: bottom left; }
+
+/* Suppress all cursor changes while a card is being dragged */
+body.is-dragging-card,
+body.is-dragging-card * {
+  cursor: grabbing !important;
+}

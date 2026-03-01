@@ -41,6 +41,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
   const [isCardHovered, setIsCardHovered] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressFired = useRef(false);
   const mouseDownFromInput = useRef(false);
@@ -52,6 +53,16 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
   const isVideoWorkflow = activeTab === 3 || activeTab === 4;
   const isProcessing = status === 'processing' || status === 'queued';
   const canExecute = !!clientId && !isProcessing;
+
+  // Direct DOM mutation to block card drag when mouse is in the thumbnail strip.
+  // State-based approach is unreliable: browser fires onMouseLeave before dragstart,
+  // resetting draggable=true before the card's dragstart handler can block it.
+  const handleStripMouseEnter = useCallback(() => {
+    if (cardRef.current) cardRef.current.draggable = false;
+  }, []);
+  const handleStripMouseLeave = useCallback(() => {
+    if (cardRef.current && !isProcessing) cardRef.current.draggable = true;
+  }, [isProcessing]);
   const tabMaskMode = TAB_MASK_MODE[activeTab] ?? 'none';
   const showMaskUI = tabMaskMode !== 'none';
   const currentMaskOutputIndex = tabMaskMode === 'B' ? selectedOutputIdx : -1;
@@ -148,11 +159,13 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
     cancelLongPress();
     e.dataTransfer.setData('application/x-workflow-image', image.id);
     e.dataTransfer.effectAllowed = 'move';
+    document.body.classList.add('is-dragging-card');
     setDragging({ type: 'card', imageId: image.id });
     setIsDragging(true);
   }, [image.id, cancelLongPress, setDragging]);
 
   const handleDragEnd = useCallback(() => {
+    document.body.classList.remove('is-dragging-card');
     setIsDragging(false);
     setDragging(null);
   }, [setDragging]);
@@ -297,6 +310,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
 
   return (
     <div
+      ref={cardRef}
       draggable={!isProcessing}
       onDragStart={isProcessing ? undefined : handleDragStart}
       onDragEnd={handleDragEnd}
@@ -618,6 +632,8 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
               setDragging({ type: 'output', imageId: image.id, outputIndex });
             }}
             onOutputDragEnd={() => setDragging(null)}
+            onMouseEnter={handleStripMouseEnter}
+            onMouseLeave={handleStripMouseLeave}
           />
         )}
 
@@ -689,7 +705,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
           <button
             onClick={(e) => { e.stopPropagation(); handleExecute(); }}
             disabled={!canExecute}
-            title={status === 'done' ? "重新生成" : "执行"}
+            title={status === 'done' && outputs.length > 0 ? "重新生成" : "执行"}
             style={{
               flexShrink: 0,
               height: 28,
@@ -697,7 +713,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              backgroundColor: status === 'done' ? 'var(--color-success)' : 'var(--color-primary)',
+              backgroundColor: status === 'done' && outputs.length > 0 ? 'var(--color-success)' : 'var(--color-primary)',
               color: '#ffffff',
               border: 'none',
               borderRadius: 6,
@@ -705,7 +721,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
               opacity: canExecute ? 1 : 0.5,
             }}
           >
-            {status === 'done' ? <RotateCcw size={13} /> : <Play size={13} />}
+            {status === 'done' && outputs.length > 0 ? <RotateCcw size={13} /> : <Play size={13} />}
           </button>
         </div>
       </div>

@@ -13,6 +13,8 @@ interface ThumbnailStripProps {
   onSelect: (index: number) => void;
   onOutputDragStart?: (outputIndex: number) => void;
   onOutputDragEnd?: () => void;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
 }
 
 interface ThumbDims {
@@ -35,6 +37,8 @@ export function ThumbnailStrip({
   onSelect,
   onOutputDragStart,
   onOutputDragEnd,
+  onMouseEnter,
+  onMouseLeave,
 }: ThumbnailStripProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const rowRef = useRef<HTMLDivElement>(null);
@@ -78,6 +82,8 @@ export function ThumbnailStrip({
   return (
     <div
       ref={containerRef}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       style={{
         position: 'absolute',
         bottom: 0,
@@ -145,10 +151,15 @@ export function ThumbnailStrip({
             <button
               key={i}
               draggable={i > 0 && !!onOutputDragStart}
-              onDragStart={i > 0 && onOutputDragStart ? (e) => {
+              onDragStart={i === 0 ? (e) => e.preventDefault() : i > 0 && onOutputDragStart ? (e) => {
                 e.stopPropagation();
                 e.dataTransfer.setData('application/x-thumb-output', String(i - 1));
                 e.dataTransfer.effectAllowed = 'move';
+                // Use the thumbnail image itself as drag ghost
+                const media = (e.currentTarget as HTMLElement).querySelector('img, video') as HTMLElement | null;
+                if (media) {
+                  e.dataTransfer.setDragImage(media, media.offsetWidth / 2, media.offsetHeight / 2);
+                }
                 onOutputDragStart(i - 1);
               } : undefined}
               onDragEnd={i > 0 && onOutputDragEnd ? (e) => {
@@ -173,6 +184,7 @@ export function ThumbnailStrip({
             >
               {item.isVideo ? (
                 <video
+                  draggable={false}
                   src={item.url}
                   preload="metadata"
                   muted
@@ -181,6 +193,7 @@ export function ThumbnailStrip({
                 />
               ) : (
                 <img
+                  draggable={false}
                   src={item.url}
                   alt={item.filename}
                   style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}

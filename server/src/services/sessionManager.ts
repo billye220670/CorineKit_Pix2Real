@@ -24,10 +24,10 @@ export function saveInputImage(
   ext: string,
   buffer: Buffer,
 ): string {
-  ensureSessionDirs(sessionId);
+  const dir = path.join(sessionsBase, sessionId, `tab-${tabId}`, 'input');
+  fs.mkdirSync(dir, { recursive: true });
   const filename = `${imageId}${ext}`;
-  const filePath = path.join(sessionsBase, sessionId, `tab-${tabId}`, 'input', filename);
-  fs.writeFileSync(filePath, buffer);
+  fs.writeFileSync(path.join(dir, filename), buffer);
   return `/api/session-files/${sessionId}/tab-${tabId}/input/${filename}`;
 }
 
@@ -37,9 +37,9 @@ export function saveOutputFile(
   filename: string,
   buffer: Buffer,
 ): string {
-  ensureSessionDirs(sessionId);
-  const filePath = path.join(sessionsBase, sessionId, `tab-${tabId}`, 'output', filename);
-  fs.writeFileSync(filePath, buffer);
+  const dir = path.join(sessionsBase, sessionId, `tab-${tabId}`, 'output');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, filename), buffer);
   return `/api/session-files/${sessionId}/tab-${tabId}/output/${encodeURIComponent(filename)}`;
 }
 
@@ -49,11 +49,11 @@ export function saveMask(
   maskKey: string,
   buffer: Buffer,
 ): void {
-  ensureSessionDirs(sessionId);
+  const dir = path.join(sessionsBase, sessionId, `tab-${tabId}`, 'masks');
+  fs.mkdirSync(dir, { recursive: true });
   // maskKey may contain ":" which is invalid in file names on Windows — replace with "_"
   const safeName = maskKey.replace(/:/g, '_') + '.png';
-  const filePath = path.join(sessionsBase, sessionId, `tab-${tabId}`, 'masks', safeName);
-  fs.writeFileSync(filePath, buffer);
+  fs.writeFileSync(path.join(dir, safeName), buffer);
 }
 
 // ── Session State JSON ─────────────────────────────────────────────────────

@@ -5,6 +5,7 @@ import { workflow2Adapter } from './Workflow2Adapter.js';
 import { workflow3Adapter } from './Workflow3Adapter.js';
 import { workflow4Adapter } from './Workflow4Adapter.js';
 import { workflow5Adapter } from './Workflow5Adapter.js';
+import { workflow6Adapter } from './Workflow6Adapter.js';
 
 export const adapters: Record<number, WorkflowAdapter> = {
   0: workflow0Adapter,
@@ -13,6 +14,7 @@ export const adapters: Record<number, WorkflowAdapter> = {
   3: workflow3Adapter,
   4: workflow4Adapter,
   5: workflow5Adapter,
+  6: workflow6Adapter,
 };
 
 export function getAdapter(id: number): WorkflowAdapter | undefined {

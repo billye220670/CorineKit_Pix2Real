@@ -1,0 +1,323 @@
+{
+  "3": {
+    "inputs": {
+      "seed": 539359787969703,
+      "steps": 25,
+      "cfg": 6,
+      "sampler_name": "euler_ancestral",
+      "scheduler": "normal",
+      "denoise": 0.4,
+      "model": [
+        "4",
+        0
+      ],
+      "positive": [
+        "6",
+        0
+      ],
+      "negative": [
+        "7",
+        0
+      ],
+      "latent_image": [
+        "49",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "K采样器"
+    }
+  },
+  "4": {
+    "inputs": {
+      "ckpt_name": "XL-漫画2.5D\\IL-Gembyte_20Emerald.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple",
+    "_meta": {
+      "title": "Checkpoint加载器（简易）"
+    }
+  },
+  "6": {
+    "inputs": {
+      "text": [
+        "60",
+        0
+      ],
+      "clip": [
+        "4",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP文本编码"
+    }
+  },
+  "7": {
+    "inputs": {
+      "text": "lowres, worst quality, bad quality, bad anatomy, simple background, blurry, lowres, cropped, extra limbs, bad anatomy, deformed hands, bad face, sketch, jpeg artifacts, signature, watermark, old, oldest, ",
+      "clip": [
+        "4",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP文本编码"
+    }
+  },
+  "8": {
+    "inputs": {
+      "samples": [
+        "3",
+        0
+      ],
+      "vae": [
+        "4",
+        2
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE解码"
+    }
+  },
+  "10": {
+    "inputs": {
+      "upscale_model": [
+        "11",
+        0
+      ],
+      "image": [
+        "8",
+        0
+      ]
+    },
+    "class_type": "ImageUpscaleWithModel",
+    "_meta": {
+      "title": "使用模型放大图像"
+    }
+  },
+  "11": {
+    "inputs": {
+      "model_name": "OmniSR_X2_DIV2K.safetensors"
+    },
+    "class_type": "UpscaleModelLoader",
+    "_meta": {
+      "title": "加载放大模型"
+    }
+  },
+  "14": {
+    "inputs": {
+      "pixels": [
+        "10",
+        0
+      ],
+      "vae": [
+        "4",
+        2
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAE编码"
+    }
+  },
+  "15": {
+    "inputs": {
+      "seed": 623015334754255,
+      "steps": 9,
+      "cfg": 6,
+      "sampler_name": "euler_ancestral",
+      "scheduler": "normal",
+      "denoise": 0.25,
+      "model": [
+        "4",
+        0
+      ],
+      "positive": [
+        "6",
+        0
+      ],
+      "negative": [
+        "7",
+        0
+      ],
+      "latent_image": [
+        "14",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "K采样器"
+    }
+  },
+  "37": {
+    "inputs": {
+      "separator": "",
+      "text1": [
+        "38",
+        0
+      ],
+      "text2": [
+        "50",
+        0
+      ]
+    },
+    "class_type": "CR Text Concatenate",
+    "_meta": {
+      "title": "文本联结"
+    }
+  },
+  "38": {
+    "inputs": {
+      "prompt": "masterpiece, best quality, ultra high res, hyper-detailed, anime realism, 8K, newest, "
+    },
+    "class_type": "CR Prompt Text",
+    "_meta": {
+      "title": "前缀可修改"
+    }
+  },
+  "48": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "megapixels": 1,
+      "resolution_steps": 1,
+      "image": [
+        "57",
+        0
+      ]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {
+      "title": "缩放图像（像素）"
+    }
+  },
+  "49": {
+    "inputs": {
+      "pixels": [
+        "48",
+        0
+      ],
+      "vae": [
+        "4",
+        2
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAE编码"
+    }
+  },
+  "50": {
+    "inputs": {
+      "model": "wd-vit-tagger-v3",
+      "threshold": 0.35,
+      "character_threshold": 0.85,
+      "replace_underscore": false,
+      "trailing_comma": false,
+      "exclude_tags": "realistic,photorealistic",
+      "image": [
+        "48",
+        0
+      ]
+    },
+    "class_type": "WD14Tagger|pysssss",
+    "_meta": {
+      "title": "WD14反推提示词"
+    }
+  },
+  "53": {
+    "inputs": {
+      "anything": [
+        "15",
+        0
+      ]
+    },
+    "class_type": "easy cleanGpuUsed",
+    "_meta": {
+      "title": "清理显存占用"
+    }
+  },
+  "54": {
+    "inputs": {
+      "samples": [
+        "53",
+        0
+      ],
+      "vae": [
+        "4",
+        2
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE解码"
+    }
+  },
+  "56": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": [
+        "54",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "保存图像"
+    }
+  },
+  "57": {
+    "inputs": {
+      "image": "IMG_0377.JPG"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像"
+    }
+  },
+  "60": {
+    "inputs": {
+      "boolean": [
+        "64",
+        0
+      ],
+      "on_true": [
+        "37",
+        0
+      ],
+      "on_false": [
+        "66",
+        0
+      ]
+    },
+    "class_type": "easy ifElse",
+    "_meta": {
+      "title": "是否判断"
+    }
+  },
+  "64": {
+    "inputs": {
+      "any": [
+        "66",
+        0
+      ]
+    },
+    "class_type": "easy isNone",
+    "_meta": {
+      "title": "是否为空"
+    }
+  },
+  "66": {
+    "inputs": {
+      "text": ""
+    },
+    "class_type": "TextInput_",
+    "_meta": {
+      "title": "文本"
+    }
+  }
+}

@@ -22,6 +22,7 @@ const OUTPUT_DIRS = [
   '3-快速生成视频',
   '4-视频放大',
   '5-解除装备',
+  '6-真人转二次元',
 ];
 for (const dir of OUTPUT_DIRS) {
   const dirPath = path.join(outputBase, dir);
