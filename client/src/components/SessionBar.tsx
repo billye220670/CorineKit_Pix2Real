@@ -266,6 +266,7 @@ export function SessionBar({ sessionId, onNewSession }: SessionBarProps) {
             }}>
               最近会话
             </div>
+            <div style={{ maxHeight: 320, overflowY: 'auto' }}>
             {sessions.length === 0 && (
               <div style={{ padding: '10px', fontSize: '12px', color: 'var(--color-text-secondary)', textAlign: 'center' }}>
                 暂无历史
@@ -366,6 +367,7 @@ export function SessionBar({ sessionId, onNewSession }: SessionBarProps) {
                 </div>
               );
             })}
+            </div>
           </div>
         </>
       )}

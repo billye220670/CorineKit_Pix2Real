@@ -80,8 +80,7 @@ router.get('/:sessionId', (req, res) => {
 
 // GET /api/sessions
 router.get('/', (_req, res) => {
-  pruneOldSessions(5);
-  const sessions = listSessions().slice(0, 5);
+  const sessions = listSessions();
   res.json(sessions);
 });
 
