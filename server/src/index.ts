@@ -77,25 +77,33 @@ wss.on('connection', (clientWs) => {
   // Send the clientId to the client
   clientWs.send(JSON.stringify({ type: 'connected', clientId }));
 
+  // Buffer recent execution_start/progress events per promptId so they can be
+  // replayed if the client registers AFTER ComfyUI has already started processing
+  // (common for the first card in a batch — no queue delay).
+  const eventBuffer = new Map<string, object[]>();
+  function bufferAndSend(promptId: string, event: object) {
+    if (!eventBuffer.has(promptId)) eventBuffer.set(promptId, []);
+    eventBuffer.get(promptId)!.push(event);
+    if (clientWs.readyState === WebSocket.OPEN) {
+      clientWs.send(JSON.stringify(event));
+    }
+  }
+
   // Connect to ComfyUI WebSocket with this clientId
   const comfyWs = connectWebSocket(clientId, {
     onExecutionStart(promptId) {
-      if (clientWs.readyState === WebSocket.OPEN) {
-        clientWs.send(JSON.stringify({ type: 'execution_start', promptId }));
-      }
+      bufferAndSend(promptId, { type: 'execution_start', promptId });
     },
 
     onProgress(promptId, progress) {
       const percentage = Math.round((progress.value / progress.max) * 100);
-      if (clientWs.readyState === WebSocket.OPEN) {
-        clientWs.send(JSON.stringify({
-          type: 'progress',
-          promptId,
-          value: progress.value,
-          max: progress.max,
-          percentage,
-        }));
-      }
+      bufferAndSend(promptId, {
+        type: 'progress',
+        promptId,
+        value: progress.value,
+        max: progress.max,
+        percentage,
+      });
     },
 
     async onComplete(promptId) {
@@ -153,6 +161,7 @@ wss.on('connection', (clientWs) => {
 
         // Cleanup
         promptWorkflowMap.delete(promptId);
+        eventBuffer.delete(promptId);
       } catch (err) {
         console.error(`[WS] Error processing completion for ${promptId}:`, err);
         if (clientWs.readyState === WebSocket.OPEN) {
@@ -167,6 +176,7 @@ wss.on('connection', (clientWs) => {
 
     onError(promptId, message) {
       console.error(`[WS] Prompt ${promptId} error: ${message}`);
+      eventBuffer.delete(promptId);
       if (clientWs.readyState === WebSocket.OPEN) {
         clientWs.send(JSON.stringify({
           type: 'error',
@@ -188,6 +198,14 @@ wss.on('connection', (clientWs) => {
           sessionId: msg.sessionId || '',
           tabId: msg.tabId ?? msg.workflowId,
         });
+        // Replay any buffered events the client may have missed because ComfyUI
+        // started processing before the client finished registering.
+        const buffered = eventBuffer.get(msg.promptId) ?? [];
+        for (const event of buffered) {
+          if (clientWs.readyState === WebSocket.OPEN) {
+            clientWs.send(JSON.stringify(event));
+          }
+        }
       }
     } catch {
       // ignore

@@ -313,7 +313,7 @@ export function PhotoWall({ viewSize }: PhotoWallProps) {
 
         {/* Right: 清空蒙版和执行按钮 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
-          {isMultiSelectMode && (
+          {isMultiSelectMode && activeTab !== 7 && (
             <button
               onClick={handleBatchDeleteMasks}
               title="删除所选图片下的所有蒙版"

@@ -89,7 +89,7 @@ router.post('/5/execute', uploadFields, async (req, res) => {
 // POST /api/workflow/7/execute — 快速出图: text-to-image, JSON body (no file upload)
 router.post('/7/execute', express.json(), async (req, res) => {
   try {
-    const { clientId, model, prompt, width, height, steps, cfg, sampler, scheduler } = req.body as {
+    const { clientId, model, prompt, width, height, steps, cfg, sampler, scheduler, name } = req.body as {
       clientId: string;
       model: string;
       prompt: string;
@@ -99,6 +99,7 @@ router.post('/7/execute', express.json(), async (req, res) => {
       cfg: number;
       sampler: string;
       scheduler: string;
+      name?: string;
     };
 
     if (!clientId) {
@@ -122,6 +123,10 @@ router.post('/7/execute', express.json(), async (req, res) => {
     // Node 39: user prompt (replaces default; empty = keep JSON default)
     if (prompt !== undefined) {
       template['39'].inputs.prompt = prompt;
+    }
+    // Node 45: output filename prefix
+    if (name) {
+      template['45'].inputs.filename_prefix = name;
     }
 
     const result = await queuePrompt(template, clientId);

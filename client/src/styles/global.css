@@ -167,3 +167,13 @@ body.is-dragging-card [data-drop-target="true"] {
   background-size: 800px 100%;
   animation: shimmer-wave 1.5s linear infinite;
 }
+
+/* Hide number input spin arrows */
+input[type=number].no-spin::-webkit-inner-spin-button,
+input[type=number].no-spin::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type=number].no-spin {
+  -moz-appearance: textfield;
+}

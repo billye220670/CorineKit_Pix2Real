@@ -68,7 +68,7 @@ interface WorkflowStore {
   removeOutput: (imageId: string, outputIndex: number) => void;
 
   // Text2Img card creation (Tab 7)
-  addText2ImgCard: (config: Text2ImgConfig) => string;
+  addText2ImgCard: (config: Text2ImgConfig, displayName?: string) => string;
 
   // Computed helpers
   needsPrompt: () => boolean;
@@ -492,12 +492,13 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     });
   },
 
-  addText2ImgCard: (config) => {
+  addText2ImgCard: (config, displayName) => {
     // 1×1 white PNG as placeholder (so session upload / session restore works normally)
     const b64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQAABjE+ibYAAAAASUVORK5CYII=';
     const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
     const blob = new Blob([bytes], { type: 'image/png' });
-    const file = new File([blob], 'text2img.png', { type: 'image/png' });
+    const name = displayName ?? 'text2img';
+    const file = new File([blob], `${name}.png`, { type: 'image/png' });
     const id = `img_${Date.now()}_${imageCounter++}`;
     const previewUrl = URL.createObjectURL(blob);
     set((state) => {
@@ -507,7 +508,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
           ...state.tabData,
           [7]: {
             ...prev,
-            images: [...prev.images, { id, file, previewUrl, originalName: 'text2img.png' }],
+            images: [...prev.images, { id, file, previewUrl, originalName: `${name}.png` }],
             text2imgConfigs: { ...prev.text2imgConfigs, [id]: config },
           },
         },

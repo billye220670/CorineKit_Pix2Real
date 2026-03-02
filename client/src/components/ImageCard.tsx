@@ -702,26 +702,6 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
         </div>
 
         <div style={{ display: 'flex', gap: 'var(--spacing-sm)', alignItems: 'flex-start' }}>
-          {/* Tab 7: read-only prompt text */}
-          {isTab7 && text2imgConfig?.prompt && (
-            <div
-              title={text2imgConfig.prompt}
-              style={{
-                flex: 1,
-                fontSize: '12px',
-                color: 'var(--color-text-secondary)',
-                display: '-webkit-box',
-                WebkitLineClamp: 2,
-                WebkitBoxOrient: 'vertical',
-                overflow: 'hidden',
-                lineHeight: 1.4,
-                minHeight: 0,
-                padding: 'var(--spacing-xs) 0',
-              }}
-            >
-              {text2imgConfig.prompt}
-            </div>
-          )}
           {/* Normal workflows: editable prompt textarea */}
           {!isTab7 && needsPrompt && (
             <textarea

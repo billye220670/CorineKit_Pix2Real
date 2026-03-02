@@ -26,6 +26,11 @@ const SCHEDULERS = [
   { label: 'normal', value: 'normal' },
 ];
 
+const DRAFT_KEY = 't2i_draft';
+function readDraft() {
+  try { return JSON.parse(localStorage.getItem(DRAFT_KEY) ?? 'null') ?? {}; } catch { return {}; }
+}
+
 export function Text2ImgSidebar() {
   const clientId  = useWorkflowStore((s) => s.clientId);
   const sessionId = useWorkflowStore((s) => s.sessionId);
@@ -46,18 +51,25 @@ export function Text2ImgSidebar() {
       .finally(() => setModelsLoading(false));
   }, []);
 
-  // Config state
-  const [model,     setModel]     = useState('');
-  const [prompt,    setPrompt]    = useState('');
-  const [ratio,     setRatio]     = useState('3:4');
-  const [steps,     setSteps]     = useState(30);
-  const [cfg,       setCfg]       = useState(6);
-  const [sampler,   setSampler]   = useState('euler_ancestral');
-  const [scheduler, setScheduler] = useState('normal');
+  // Config state — initialised from localStorage draft so tab switches don't reset values
+  const [model,      setModel]      = useState(() => readDraft().model     ?? '');
+  const [prompt,     setPrompt]     = useState(() => readDraft().prompt    ?? '');
+  const [ratio,      setRatio]      = useState(() => readDraft().ratio     ?? '3:4');
+  const [steps,      setSteps]      = useState(() => readDraft().steps     ?? 30);
+  const [cfg,        setCfg]        = useState(() => readDraft().cfg       ?? 6);
+  const [sampler,    setSampler]    = useState(() => readDraft().sampler   ?? 'euler_ancestral');
+  const [scheduler,  setScheduler]  = useState(() => readDraft().scheduler ?? 'normal');
+  const [customName, setCustomName] = useState(() => readDraft().customName ?? '');
   const [samplerOpen, setSamplerOpen] = useState(false);
+  const [batchCount, setBatchCount] = useState(1);
   const [isGenerating, setIsGenerating] = useState(false);
 
-  // Default model once loaded
+  // Persist config to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({ model, prompt, ratio, steps, cfg, sampler, scheduler, customName }));
+  }, [model, prompt, ratio, steps, cfg, sampler, scheduler, customName]);
+
+  // Default model once loaded (only if none was saved)
   useEffect(() => {
     if (models.length > 0 && !model) {
       setModel(models[0]);
@@ -80,28 +92,39 @@ export function Text2ImgSidebar() {
       scheduler,
     };
 
-    setIsGenerating(true);
-    const imageId = addText2ImgCard(config);
+    // Build base name: user input or auto timestamp
+    const now = new Date();
+    const ts = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+    const baseName = customName.trim() || `t2i_${ts}`;
+    const count = Math.min(32, Math.max(1, batchCount));
 
+    setIsGenerating(true);
     try {
-      const res = await fetch('/api/workflow/7/execute', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId, ...config }),
-      });
-      if (!res.ok) {
-        console.error('[Text2Img] Execute failed:', await res.text());
-        return;
+      for (let i = 0; i < count; i++) {
+        const itemName = count === 1 ? baseName : `${baseName}_${i + 1}`;
+        const imageId = addText2ImgCard(config, itemName);
+        startTask(imageId, '');  // Show shimmer immediately before fetch returns
+        try {
+          const res = await fetch('/api/workflow/7/execute', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ clientId, ...config, name: itemName }),
+          });
+          if (!res.ok) {
+            console.error('[Text2Img] Execute failed:', await res.text());
+            continue;
+          }
+          const data = await res.json() as { promptId: string };
+          startTask(imageId, data.promptId);
+          sendMessage({ type: 'register', promptId: data.promptId, workflowId: 7, sessionId, tabId: 7 });
+        } catch (err) {
+          console.error('[Text2Img] Execute error:', err);
+        }
       }
-      const data = await res.json() as { promptId: string };
-      startTask(imageId, data.promptId);
-      sendMessage({ type: 'register', promptId: data.promptId, workflowId: 7, sessionId, tabId: 7 });
-    } catch (err) {
-      console.error('[Text2Img] Execute error:', err);
     } finally {
       setIsGenerating(false);
     }
-  }, [clientId, isGenerating, model, models, prompt, selectedPreset, steps, cfg, sampler, scheduler, addText2ImgCard, startTask, sendMessage, sessionId]);
+  }, [clientId, isGenerating, model, models, prompt, selectedPreset, steps, cfg, sampler, scheduler, customName, batchCount, addText2ImgCard, startTask, sendMessage, sessionId]);
 
   // ── Style helpers ────────────────────────────────────────────────────────
 
@@ -278,32 +301,75 @@ export function Text2ImgSidebar() {
         </div>
       </div>
 
-      {/* Generate button */}
-      <div style={{ padding: '12px 14px', borderTop: '1px solid var(--color-border)', flexShrink: 0 }}>
-        <button
-          onClick={handleGenerate}
-          disabled={!clientId || isGenerating || models.length === 0}
+      {/* Generate area: name input + button row */}
+      <div style={{ padding: '12px 14px', borderTop: '1px solid var(--color-border)', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <input
+          type="text"
+          placeholder="图片名（留空自动命名）"
+          value={customName}
+          onChange={(e) => setCustomName(e.target.value)}
           style={{
             width: '100%',
-            padding: '10px',
-            backgroundColor: 'var(--color-primary)',
-            color: '#fff',
-            border: 'none',
-            borderRadius: 8,
-            fontSize: '14px',
-            fontWeight: 600,
-            cursor: (!clientId || isGenerating || models.length === 0) ? 'not-allowed' : 'pointer',
-            opacity: (!clientId || isGenerating || models.length === 0) ? 0.5 : 1,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 6,
-            transition: 'opacity 0.15s',
+            padding: '7px 10px',
+            border: '1px solid var(--color-border)',
+            borderRadius: 6,
+            backgroundColor: 'var(--color-bg)',
+            color: 'var(--color-text)',
+            fontSize: '12px',
+            outline: 'none',
+            fontFamily: 'inherit',
+            boxSizing: 'border-box',
           }}
-        >
-          {isGenerating && <Loader size={14} style={{ animation: 'pulse 1s ease-in-out infinite' }} />}
-          生成
-        </button>
+        />
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={handleGenerate}
+            disabled={!clientId || isGenerating || models.length === 0}
+            style={{
+              flex: 1,
+              padding: '10px',
+              backgroundColor: 'var(--color-primary)',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 8,
+              fontSize: '14px',
+              fontWeight: 600,
+              cursor: (!clientId || isGenerating || models.length === 0) ? 'not-allowed' : 'pointer',
+              opacity: (!clientId || isGenerating || models.length === 0) ? 0.5 : 1,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+              transition: 'opacity 0.15s',
+            }}
+          >
+            {isGenerating && <Loader size={14} style={{ animation: 'pulse 1s ease-in-out infinite' }} />}
+            生成
+          </button>
+          <input
+            type="number"
+            className="no-spin"
+            min={1}
+            max={32}
+            step={1}
+            value={batchCount}
+            onChange={(e) => setBatchCount(Math.min(32, Math.max(1, parseInt(e.target.value, 10) || 1)))}
+            style={{
+              width: 52,
+              padding: '0 6px',
+              border: '1px solid var(--color-border)',
+              borderRadius: 8,
+              backgroundColor: 'var(--color-bg)',
+              color: 'var(--color-text)',
+              fontSize: '14px',
+              fontWeight: 600,
+              textAlign: 'center',
+              outline: 'none',
+              fontFamily: 'inherit',
+              flexShrink: 0,
+            }}
+          />
+        </div>
       </div>
     </div>
   );
