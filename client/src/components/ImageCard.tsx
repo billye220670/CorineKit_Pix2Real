@@ -350,7 +350,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
         onMouseLeave={handleMouseLeave}
         onClick={handleImageAreaClick}
       >
-        {/* Original image — hidden for tab 7 while processing (replaced by shimmer), also hidden when output is shown for tab7 */}
+        {/* Image area: tab 7 has 3 states; other tabs show placeholder + optional absolute output overlay */}
         {isTab7 && isProcessing ? (
           <div
             className="shimmer-skeleton"
@@ -360,12 +360,20 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
               display: 'block',
             }}
           />
+        ) : isTab7 && displayOutput ? (
+          <img
+            src={displayOutput.url}
+            alt="Output"
+            draggable={false}
+            style={{ width: '100%', display: 'block' }}
+            onDoubleClick={(e) => { e.stopPropagation(); openMaskEditor(); }}
+          />
         ) : (
           <img
             src={image.previewUrl}
             alt={image.originalName}
             draggable={false}
-            style={{ width: '100%', display: isTab7 && displayOutput ? 'none' : 'block' }}
+            style={{ width: '100%', display: 'block' }}
             onDoubleClick={(e) => {
               if (isVideoWorkflow) return;
               e.stopPropagation();
@@ -374,8 +382,8 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
           />
         )}
 
-        {/* Output overlay */}
-        {displayOutput && (
+        {/* Output overlay — non-tab-7 only (tab 7 renders output as block element above) */}
+        {displayOutput && !isTab7 && (
           isVideoWorkflow ? (
             <video
               ref={videoRef}
