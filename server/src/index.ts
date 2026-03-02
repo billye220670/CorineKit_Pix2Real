@@ -9,7 +9,7 @@ import workflowRouter from './routes/workflow.js';
 import outputRouter from './routes/output.js';
 import sessionRouter from './routes/session.js';
 import { connectWebSocket, getHistory, getImageBuffer } from './services/comfyui.js';
-import { sessionsBase, pruneOldSessions, saveOutputFile } from './services/sessionManager.js';
+import { sessionsBase, saveOutputFile } from './services/sessionManager.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const outputBase = path.resolve(__dirname, '../../output');
@@ -36,8 +36,6 @@ for (const dir of OUTPUT_DIRS) {
 if (!fs.existsSync(sessionsBase)) {
   fs.mkdirSync(sessionsBase, { recursive: true });
 }
-// Clean up old sessions on startup (keep 5)
-pruneOldSessions(5);
 
 const app = express();
 const server = createServer(app);
