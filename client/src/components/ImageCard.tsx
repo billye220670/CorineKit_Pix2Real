@@ -349,6 +349,20 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         onClick={handleImageAreaClick}
+        onMouseDown={(e) => {
+          if (e.button !== 1) return;
+          e.preventDefault(); // prevent browser auto-scroll cursor
+          const url = displayOutput?.url ?? image.sessionUrl ?? image.previewUrl;
+          if (url.startsWith('blob:')) {
+            showToast('图片尚未保存，无法打开');
+            return;
+          }
+          fetch('/api/output/open-file', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url }),
+          }).catch(() => {});
+        }}
       >
         {/* Image area: tab 7 has 3 states; other tabs show placeholder + optional absolute output overlay */}
         {isTab7 && isProcessing ? (
