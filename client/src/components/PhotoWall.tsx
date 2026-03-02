@@ -84,7 +84,7 @@ export function PhotoWall({ viewSize }: PhotoWallProps) {
     }
   }, [allSelected, images, clearSelection, setSelectedImageIds]);
 
-  const hasIdleSelected = images.some((img) => {
+  const hasIdleSelected = activeTab === 7 ? false : images.some((img) => {
     if (!selectedImageIds.includes(img.id)) return false;
     const task = tasks[img.id];
     if (task && task.status !== 'idle') return false;
@@ -262,9 +262,9 @@ export function PhotoWall({ viewSize }: PhotoWallProps) {
         {/* 分割线 1 */}
         <div style={{ width: 1, height: 20, backgroundColor: 'var(--color-border)', marginLeft: 4, marginRight: 4 }} />
 
-        {/* Left: multi-select bulk prompt */}
+        {/* Left: multi-select bulk prompt — hidden for tab 7 (text2img has no per-card prompt editing) */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
-          {isMultiSelectMode && (
+          {isMultiSelectMode && activeTab !== 7 && (
             <>
               <input
                 type="text"
@@ -375,6 +375,21 @@ export function PhotoWall({ viewSize }: PhotoWallProps) {
           style={{ position: 'absolute', inset: 0, overflow: 'auto', padding: 'var(--spacing-lg)' }}
           onClick={(e) => { if (isMultiSelectMode && e.target === e.currentTarget) clearSelection(); }}
         >
+        {/* Tab 7 empty state */}
+        {images.length === 0 && activeTab === 7 && (
+          <div style={{
+            height: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'var(--color-text-secondary)',
+            fontSize: '14px',
+            opacity: 0.5,
+            userSelect: 'none',
+          }}>
+            点击右侧生成按钮开始创作
+          </div>
+        )}
         <div
           style={{
             columns: `${VIEW_CONFIG[viewSize].columnWidth} auto`,

@@ -141,3 +141,29 @@ body.is-dragging-card * {
 body.is-dragging-card [data-drop-target="true"] {
   cursor: copy !important;
 }
+
+/* Shimmer skeleton for text-to-image cards (tab 7) while processing */
+:root {
+  --shimmer-base: #d8d8d8;
+  --shimmer-highlight: #ebebeb;
+}
+[data-theme="dark"] {
+  --shimmer-base: #262626;
+  --shimmer-highlight: #333333;
+}
+
+@keyframes shimmer-wave {
+  0%   { background-position: -400px 0; }
+  100% { background-position:  400px 0; }
+}
+
+.shimmer-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--shimmer-base) 0%,
+    var(--shimmer-highlight) 50%,
+    var(--shimmer-base) 100%
+  );
+  background-size: 800px 100%;
+  animation: shimmer-wave 1.5s linear infinite;
+}

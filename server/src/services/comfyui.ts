@@ -214,6 +214,15 @@ export interface PromptIdRemap {
   newPromptId: string;
 }
 
+export async function getCheckpointModels(): Promise<string[]> {
+  const res = await fetch(`${COMFYUI_URL}/object_info/CheckpointLoaderSimple`);
+  if (!res.ok) throw new Error(`object_info failed: ${res.status}`);
+  const data = (await res.json()) as {
+    CheckpointLoaderSimple: { input: { required: { ckpt_name: [string[]] } } };
+  };
+  return data?.CheckpointLoaderSimple?.input?.required?.ckpt_name?.[0] ?? [];
+}
+
 export async function prioritizeQueueItem(targetPromptId: string): Promise<PromptIdRemap[]> {
   const queue = await getQueue();
   const allPending = queue.pending;

@@ -6,12 +6,13 @@ import { exec } from 'child_process';
 import multer from 'multer';
 import { getAdapter, adapters } from '../adapters/index.js';
 import { workflow5Adapter } from '../adapters/Workflow5Adapter.js';
-import { uploadImage, uploadVideo, queuePrompt, deleteQueueItem, getSystemStats, getQueue, prioritizeQueueItem, getHistory, getImageBuffer } from '../services/comfyui.js';
+import { uploadImage, uploadVideo, queuePrompt, deleteQueueItem, getSystemStats, getQueue, prioritizeQueueItem, getHistory, getImageBuffer, getCheckpointModels } from '../services/comfyui.js';
 import { sessionsBase } from '../services/sessionManager.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const releaseMemoryTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-释放内存.json');
 const removeEquipTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-解除装备Fixed.json');
+const text2imgTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-二次元生成.json');
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -82,6 +83,68 @@ router.post('/5/execute', uploadFields, async (req, res) => {
   } catch (err: any) {
     console.error('[Workflow 5 Execute Error]', err);
     res.status(500).json({ error: err.message || 'Internal server error' });
+  }
+});
+
+// POST /api/workflow/7/execute — 快速出图: text-to-image, JSON body (no file upload)
+router.post('/7/execute', express.json(), async (req, res) => {
+  try {
+    const { clientId, model, prompt, width, height, steps, cfg, sampler, scheduler } = req.body as {
+      clientId: string;
+      model: string;
+      prompt: string;
+      width: number;
+      height: number;
+      steps: number;
+      cfg: number;
+      sampler: string;
+      scheduler: string;
+    };
+
+    if (!clientId) {
+      res.status(400).json({ error: 'clientId is required' });
+      return;
+    }
+
+    const template = JSON.parse(fs.readFileSync(text2imgTemplatePath, 'utf-8'));
+
+    // Node 4: checkpoint model
+    template['4'].inputs.ckpt_name = model;
+    // Node 5: image dimensions
+    template['5'].inputs.width = width;
+    template['5'].inputs.height = height;
+    // Node 3: sampler settings + random seed
+    template['3'].inputs.seed = Math.floor(Math.random() * 1125899906842624);
+    template['3'].inputs.steps = steps;
+    template['3'].inputs.cfg = cfg;
+    template['3'].inputs.sampler_name = sampler;
+    template['3'].inputs.scheduler = scheduler;
+    // Node 39: user prompt (replaces default; empty = keep JSON default)
+    if (prompt !== undefined) {
+      template['39'].inputs.prompt = prompt;
+    }
+
+    const result = await queuePrompt(template, clientId);
+
+    res.json({
+      promptId: result.prompt_id,
+      clientId,
+      workflowId: 7,
+      workflowName: '快速出图',
+    });
+  } catch (err: any) {
+    console.error('[Workflow 7 Execute Error]', err);
+    res.status(500).json({ error: err.message || 'Internal server error' });
+  }
+});
+
+// GET /api/workflow/models/checkpoints — list available checkpoint models from ComfyUI
+router.get('/models/checkpoints', async (_req, res) => {
+  try {
+    const models = await getCheckpointModels();
+    res.json(models);
+  } catch {
+    res.status(502).json([]);
   }
 });
 

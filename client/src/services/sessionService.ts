@@ -1,6 +1,17 @@
 // client/src/services/sessionService.ts
 // Typed API wrappers for the session persistence backend.
 
+export interface Text2ImgConfig {
+  model: string;
+  prompt: string;
+  width: number;
+  height: number;
+  steps: number;
+  cfg: number;
+  sampler: string;
+  scheduler: string;
+}
+
 export interface SessionMeta {
   sessionId: string;
   createdAt: string;
@@ -27,6 +38,7 @@ export interface SerializedTabData {
   tasks: Record<string, SerializedTask>;
   selectedOutputIndex: Record<string, number>;
   backPoseToggles: Record<string, boolean>;
+  text2imgConfigs?: Record<string, Text2ImgConfig>;
 }
 
 export interface SessionData {

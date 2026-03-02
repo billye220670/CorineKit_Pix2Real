@@ -1,5 +1,5 @@
 import { useCallback, useState, useRef, useEffect } from 'react';
-import { X, Play, RotateCcw, Check, AlertCircle, Layers, ChevronDown, Flower, Sparkles } from 'lucide-react';
+import { X, Play, RotateCcw, Check, AlertCircle, Layers, ChevronDown, Flower, Sparkles, Copy } from 'lucide-react';
 import { useWorkflowStore } from '../hooks/useWorkflowStore.js';
 import { useWebSocket } from '../hooks/useWebSocket.js';
 import { ProgressOverlay } from './ProgressOverlay.js';
@@ -51,8 +51,13 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
   const progress = task?.progress || 0;
   const needsPrompt = workflows[activeTab]?.needsPrompt ?? false;
   const isVideoWorkflow = activeTab === 3 || activeTab === 4;
+  const isTab7 = activeTab === 7;
   const isProcessing = status === 'processing' || status === 'queued';
   const canExecute = !!clientId && !isProcessing;
+
+  const text2imgConfig = useWorkflowStore((s) =>
+    s.activeTab === 7 ? s.tabData[7]?.text2imgConfigs?.[image.id] : undefined
+  );
 
   // Direct DOM mutation to block card drag when mouse is in the thumbnail strip.
   // State-based approach is unreliable: browser fires onMouseLeave before dragstart,
@@ -299,10 +304,10 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
       if (!res.ok) throw new Error('请求失败');
       const { text } = await res.json();
       await navigator.clipboard.writeText(text);
-      showToast('提示词已复制到剪贴板', 'success');
+      showToast('提示词已复制到剪贴板');
     } catch (err) {
       console.error('[ReversePrompt]', err);
-      showToast('反推提示词失败', 'error');
+      showToast('反推提示词失败');
     } finally {
       setIsReversingPrompt(false);
     }
@@ -345,18 +350,29 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
         onMouseLeave={handleMouseLeave}
         onClick={handleImageAreaClick}
       >
-        {/* Original image */}
-        <img
-          src={image.previewUrl}
-          alt={image.originalName}
-          draggable={false}
-          style={{ width: '100%', display: 'block' }}
-          onDoubleClick={(e) => {
-            if (isVideoWorkflow) return;
-            e.stopPropagation();
-            openMaskEditor();
-          }}
-        />
+        {/* Original image — hidden for tab 7 while processing (replaced by shimmer), also hidden when output is shown for tab7 */}
+        {isTab7 && isProcessing ? (
+          <div
+            className="shimmer-skeleton"
+            style={{
+              width: '100%',
+              aspectRatio: `${text2imgConfig?.width ?? 832} / ${text2imgConfig?.height ?? 1216}`,
+              display: 'block',
+            }}
+          />
+        ) : (
+          <img
+            src={image.previewUrl}
+            alt={image.originalName}
+            draggable={false}
+            style={{ width: '100%', display: isTab7 && displayOutput ? 'none' : 'block' }}
+            onDoubleClick={(e) => {
+              if (isVideoWorkflow) return;
+              e.stopPropagation();
+              openMaskEditor();
+            }}
+          />
+        )}
 
         {/* Output overlay */}
         {displayOutput && (
@@ -618,8 +634,8 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
           </div>
         )}
 
-        {/* Thumbnail strip: original + generated outputs */}
-        {stripItems.length > 0 && (
+        {/* Thumbnail strip: original + generated outputs — hidden for tab 7 */}
+        {stripItems.length > 0 && !isTab7 && (
           <ThumbnailStrip
             items={stripItems}
             selectedIndex={stripSelectedIndex}
@@ -678,7 +694,28 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
         </div>
 
         <div style={{ display: 'flex', gap: 'var(--spacing-sm)', alignItems: 'flex-start' }}>
-          {needsPrompt && (
+          {/* Tab 7: read-only prompt text */}
+          {isTab7 && text2imgConfig?.prompt && (
+            <div
+              title={text2imgConfig.prompt}
+              style={{
+                flex: 1,
+                fontSize: '12px',
+                color: 'var(--color-text-secondary)',
+                display: '-webkit-box',
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden',
+                lineHeight: 1.4,
+                minHeight: 0,
+                padding: 'var(--spacing-xs) 0',
+              }}
+            >
+              {text2imgConfig.prompt}
+            </div>
+          )}
+          {/* Normal workflows: editable prompt textarea */}
+          {!isTab7 && needsPrompt && (
             <textarea
               ref={textareaRef}
               placeholder={activeTab === 5 ? "留空使用默认提示词" : activeTab === 3 ? "输入提示词（留空使用默认）" : "额外提示词（可选）"}
@@ -704,27 +741,60 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
               }}
             />
           )}
-          <button
-            onClick={(e) => { e.stopPropagation(); handleExecute(); }}
-            disabled={!canExecute}
-            title={status === 'done' && outputs.length > 0 ? "重新生成" : "执行"}
-            style={{
-              flexShrink: 0,
-              height: 28,
-              padding: '0 10px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: status === 'done' && outputs.length > 0 ? 'var(--color-success)' : 'var(--color-primary)',
-              color: '#ffffff',
-              border: 'none',
-              borderRadius: 6,
-              cursor: canExecute ? 'pointer' : 'not-allowed',
-              opacity: canExecute ? 1 : 0.5,
-            }}
-          >
-            {status === 'done' && outputs.length > 0 ? <RotateCcw size={13} /> : <Play size={13} />}
-          </button>
+          {/* Tab 7: Copy prompt button instead of Play/RotateCcw */}
+          {isTab7 ? (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!text2imgConfig?.prompt) return;
+                navigator.clipboard.writeText(text2imgConfig.prompt).then(() => {
+                  showToast('提示词已复制');
+                }).catch(() => {
+                  showToast('复制失败');
+                });
+              }}
+              disabled={!text2imgConfig?.prompt}
+              title="复制提示词"
+              style={{
+                flexShrink: 0,
+                height: 28,
+                padding: '0 10px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: 'var(--color-surface-hover)',
+                color: 'var(--color-text-secondary)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 6,
+                cursor: text2imgConfig?.prompt ? 'pointer' : 'not-allowed',
+                opacity: text2imgConfig?.prompt ? 1 : 0.4,
+              }}
+            >
+              <Copy size={13} />
+            </button>
+          ) : (
+            <button
+              onClick={(e) => { e.stopPropagation(); handleExecute(); }}
+              disabled={!canExecute}
+              title={status === 'done' && outputs.length > 0 ? "重新生成" : "执行"}
+              style={{
+                flexShrink: 0,
+                height: 28,
+                padding: '0 10px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: status === 'done' && outputs.length > 0 ? 'var(--color-success)' : 'var(--color-primary)',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: 6,
+                cursor: canExecute ? 'pointer' : 'not-allowed',
+                opacity: canExecute ? 1 : 0.5,
+              }}
+            >
+              {status === 'done' && outputs.length > 0 ? <RotateCcw size={13} /> : <Play size={13} />}
+            </button>
+          )}
         </div>
       </div>
 

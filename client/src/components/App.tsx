@@ -6,6 +6,7 @@ import { useSession } from '../hooks/useSession.js';
 import { Sidebar } from './Sidebar.js';
 import { DropZone } from './DropZone.js';
 import { PhotoWall, VIEW_CONFIG, type ViewSize } from './PhotoWall.js';
+import { Text2ImgSidebar } from './Text2ImgSidebar.js';
 import { ThemeToggle } from './ThemeToggle.js';
 import { SessionBar } from './SessionBar.js';
 import { StatusBar } from './StatusBar.js';
@@ -47,6 +48,7 @@ async function readFilesFromEntry(entry: FileSystemEntry): Promise<File[]> {
 
 export function App() {
   const images = useWorkflowStore((s) => s.tabData[s.activeTab]?.images ?? []);
+  const activeTab = useWorkflowStore((s) => s.activeTab);
   const { importFiles, dialog, overwrite, keepBoth, cancel } = useImageImporter();
   const { sessionId, lastSavedAt, newSession, startupDialog } = useSession();
   const openSettings = useSettingsStore((s) => s.openSettings);
@@ -75,12 +77,13 @@ export function App() {
 
   // Main-area drag handlers — only activate for external file drops, not ImageCard drags
   const handleMainDragOver = useCallback((e: React.DragEvent) => {
+    if (activeTab === 7) return; // tab 7 is text-to-image only
     if (e.dataTransfer.types.includes('application/x-workflow-image')) return;
     if (e.dataTransfer.types.includes('application/x-thumb-output')) return;
     if (!e.dataTransfer.types.includes('Files')) return;
     e.preventDefault();
     setIsDragOver(true);
-  }, []);
+  }, [activeTab]);
 
   const handleMainDragLeave = useCallback((e: React.DragEvent) => {
     const related = e.relatedTarget as Node | null;
@@ -92,6 +95,9 @@ export function App() {
   const handleMainDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
+
+    // Tab 7 is text-to-image only; ignore external file drops
+    if (activeTab === 7) return;
 
     const items = e.dataTransfer.items;
     const files: File[] = [];
@@ -114,7 +120,7 @@ export function App() {
     }
 
     if (files.length > 0) importFiles(files);
-  }, [importFiles]);
+  }, [activeTab, importFiles]);
 
   return (
     <div style={{
@@ -191,10 +197,13 @@ export function App() {
             position: 'relative',
           }}
         >
-          {images.length === 0 ? (
+          {images.length === 0 && activeTab !== 7 ? (
             <DropZone fullscreen importFiles={importFiles} onDropHandled={() => setIsDragOver(false)} />
           ) : (
-            <PhotoWall viewSize={viewSize} />
+            <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+              <PhotoWall viewSize={viewSize} />
+              {activeTab === 7 && <Text2ImgSidebar />}
+            </div>
           )}
 
           {/* Fullscreen drop overlay */}

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { ImageItem, TaskInfo, TaskStatus } from '../types/index.js';
-import type { SerializedTabData } from '../services/sessionService.js';
+import type { SerializedTabData, Text2ImgConfig } from '../services/sessionService.js';
+export type { Text2ImgConfig };
 
 const WORKFLOWS = [
   { id: 0, name: '二次元转真人', needsPrompt: true },
@@ -10,6 +11,7 @@ const WORKFLOWS = [
   { id: 4, name: '视频放大', needsPrompt: false },
   { id: 5, name: '解除装备', needsPrompt: true },
   { id: 6, name: '真人转二次元', needsPrompt: true },
+  { id: 7, name: '快速出图', needsPrompt: false },
 ];
 
 interface TabData {
@@ -19,10 +21,11 @@ interface TabData {
   imagePromptMap: Record<string, string>;
   selectedOutputIndex: Record<string, number>;
   backPoseToggles: Record<string, boolean>;
+  text2imgConfigs: Record<string, Text2ImgConfig>;
 }
 
 function emptyTabData(): TabData {
-  return { images: [], prompts: {}, tasks: {}, imagePromptMap: {}, selectedOutputIndex: {}, backPoseToggles: {} };
+  return { images: [], prompts: {}, tasks: {}, imagePromptMap: {}, selectedOutputIndex: {}, backPoseToggles: {}, text2imgConfigs: {} };
 }
 
 interface WorkflowStore {
@@ -64,6 +67,9 @@ interface WorkflowStore {
   resetTask: (imageId: string) => void;
   removeOutput: (imageId: string, outputIndex: number) => void;
 
+  // Text2Img card creation (Tab 7)
+  addText2ImgCard: (config: Text2ImgConfig) => string;
+
   // Computed helpers
   needsPrompt: () => boolean;
   isProcessing: () => boolean;
@@ -89,6 +95,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     4: emptyTabData(),
     5: emptyTabData(),
     6: emptyTabData(),
+    7: emptyTabData(),
   },
   clientId: null,
   sessionId: null,
@@ -209,6 +216,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       const { [id]: _m, ...restMap } = prev.imagePromptMap;
       const { [id]: _s, ...restSelectedOutputIndex } = prev.selectedOutputIndex;
       const { [id]: _b, ...restBackPoseToggles } = prev.backPoseToggles;
+      const { [id]: _c, ...restText2ImgConfigs } = prev.text2imgConfigs;
       return {
         tabData: {
           ...state.tabData,
@@ -219,6 +227,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
             imagePromptMap: restMap,
             selectedOutputIndex: restSelectedOutputIndex,
             backPoseToggles: restBackPoseToggles,
+            text2imgConfigs: restText2ImgConfigs,
           },
         },
       };
@@ -243,6 +252,9 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
             selectedOutputIndex: Object.fromEntries(Object.entries(prev.selectedOutputIndex).filter(([k]) => !idSet.has(k))),
             backPoseToggles: Object.fromEntries(
               Object.entries(prev.backPoseToggles).filter(([k]) => !idSet.has(k))
+            ),
+            text2imgConfigs: Object.fromEntries(
+              Object.entries(prev.text2imgConfigs).filter(([k]) => !idSet.has(k))
             ),
           },
         },
@@ -480,6 +492,30 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     });
   },
 
+  addText2ImgCard: (config) => {
+    // 1×1 white PNG as placeholder (so session upload / session restore works normally)
+    const b64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQAABjE+ibYAAAAASUVORK5CYII=';
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const blob = new Blob([bytes], { type: 'image/png' });
+    const file = new File([blob], 'text2img.png', { type: 'image/png' });
+    const id = `img_${Date.now()}_${imageCounter++}`;
+    const previewUrl = URL.createObjectURL(blob);
+    set((state) => {
+      const prev = state.tabData[7] || emptyTabData();
+      return {
+        tabData: {
+          ...state.tabData,
+          [7]: {
+            ...prev,
+            images: [...prev.images, { id, file, previewUrl, originalName: 'text2img.png' }],
+            text2imgConfigs: { ...prev.text2imgConfigs, [id]: config },
+          },
+        },
+      };
+    });
+    return id;
+  },
+
   needsPrompt: () => {
     const { activeTab, workflows } = get();
     return workflows[activeTab]?.needsPrompt ?? false;
@@ -487,7 +523,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
 
   restoreSession: (activeTab, serializedTabData, restoredImages) => {
     const newTabData: Record<number, TabData> = {};
-    for (let tab = 0; tab <= 6; tab++) {
+    for (let tab = 0; tab <= 7; tab++) {
       const ser = serializedTabData[tab];
       if (!ser) {
         newTabData[tab] = emptyTabData();
@@ -515,6 +551,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         imagePromptMap,
         selectedOutputIndex: ser.selectedOutputIndex,
         backPoseToggles: ser.backPoseToggles,
+        text2imgConfigs: ser.text2imgConfigs ?? {},
       };
     }
     set({ activeTab, tabData: newTabData });
