@@ -16,10 +16,11 @@ npm run install:all  # Install all dependencies
 
 ## Architecture
 
-- **Adapter pattern**: each workflow (0–5) has an adapter in `server/src/adapters/` that loads a JSON template from `ComfyUI_API/` and patches the required nodes
+- **Adapter pattern**: each workflow has an adapter in `server/src/adapters/` that loads a JSON template from `ComfyUI_API/` and patches nodes
 - **WebSocket relay**: backend connects to ComfyUI WS per client, forwards progress/complete/error to frontend
 - **Singleton WS**: frontend uses a module-level singleton to avoid connection floods
 - **Output**: files saved to `output/<workflow-dir>/` after each task completes
+- **Sessions**: stored in `sessions/`; no auto-pruning on startup
 
 ## Workflows
 
@@ -31,39 +32,35 @@ npm run install:all  # Install all dependencies
 | 3 | 快速生成视频 | Yes | WanMoeKSampler `"165"` |
 | 4 | 视频放大 | No | SeedVR2VideoUpscaler `"1153"` |
 | 5 | 解除装备 | Yes | Seed (rgthree) `"315"` |
+| 6 | 真人转二次元 | Yes (optional) | dual KSampler `"3"` + `"15"` |
+| 7 | 快速出图 | No (text-to-image) | dedicated route, JSON body |
 
-Workflow 5 uses a **dedicated route** `POST /api/workflow/5/execute` (before generic `/:id/execute`) accepting `image` + `mask` files + `backPose` bool. Mask format: white/black opaque RGB PNG (RGBA alpha>0 → white). Prompt replaces JSON default entirely; empty = keep default.
+**Special routes** (registered before generic `/:id/execute`):
+- Workflow 5: `POST /api/workflow/5/execute` — `image` + `mask` files + `backPose` bool; mask = white/black opaque RGB PNG
+- Workflow 7: `POST /api/workflow/7/execute` — JSON body only (no file upload)
 
-Max safe seed value for ComfyUI: `1125899906842624`
+Max safe seed: `1125899906842624` (SeedVR2VideoUpscaler: `4294967295`)
 
 ## Key Files
 
-- `client/src/hooks/useWorkflowStore.ts` — Zustand store (per-tab images, tasks, progress, selectedOutputIndex, backPoseToggles)
-- `client/src/config/maskConfig.ts` — `TAB_MASK_MODE` (A/B/none per tab), `maskKey(imageId, outputIndex)`
+- `client/src/hooks/useWorkflowStore.ts` — Zustand store (images, tasks, progress, selectedOutputIndex, backPoseToggles)
+- `client/src/config/maskConfig.ts` — `TAB_MASK_MODE` per tab, `maskKey(imageId, outputIndex)`
 - `client/src/hooks/useWebSocket.ts` — Singleton WS hook
 - `client/src/components/ThumbnailStrip.tsx` — Multi-output thumbnail navigator
-- `server/src/services/comfyui.ts` — ComfyUI HTTP + WS client
-- `server/src/routes/workflow.ts` — Execute, batch, release-memory, open-folder, mask auto-recognize endpoints
-- `docs/settings-panel.md` — Settings panel architecture & how to add new settings (see also `docs/plans/2026-03-01-settings-panel-design.md`)
+- `server/src/adapters/index.ts` — Register adapters here
+- `server/src/routes/workflow.ts` — Execute, batch, release-memory, open-folder, mask auto-recognize
+- `server/src/services/sessionManager.ts` — Session CRUD, no auto-pruning
+- `docs/settings-panel.md` — Settings panel architecture
 
 ## Store Notes
 
-- `TabData.selectedOutputIndex`: `Record<imageId, number>` — `-1` = original image selected, `>= 0` = index into `task.outputs`
-- `TabData.backPoseToggles`: `Record<imageId, boolean>` — per-card 后位 LoRA toggle (workflow 5 only)
-- `startTask` preserves existing `outputs` so re-executions accumulate results on the same card
-- `completeTask` appends new outputs to existing array; defaults selection to first of new batch
+- `selectedOutputIndex`: `-1` = original selected, `>=0` = index into `task.outputs`
+- `backPoseToggles`: per-card 后位 LoRA toggle (workflow 5 only)
+- `startTask` preserves existing outputs (re-executions accumulate on same card)
+- `completeTask` appends new outputs; defaults selection to first of new batch
 
 ## Mask Editor Notes
 
 - `TAB_MASK_MODE`: `0→A`, `1→B`, `5→A`; others `none`
-- `maskKey(imageId, outputIndex)` — `-1` for Mode A (no output), `>=0` for Mode B
-- Mode A: user paints on original; mask stored at `maskKey(id, -1)`
-- Mode B: user paints on a result image; mask stored at `maskKey(id, selectedOutputIdx)`
-- Mask auto-recognize: `POST /api/workflow/mask/auto-recognize` — uploads image, runs SAM via `Pix2Real-自动识别Fixed.json`, polls history, returns mask PNG
-
-## UI Notes
-
-- Photo wall uses CSS Grid `repeat(auto-fill, minmax(columnWidth, 1fr))` — no right-side whitespace
-- ThumbnailStrip: original always at index 0, no background, thumb size adapts via ResizeObserver
-- Release-memory button disabled when any task is queued/processing across all tabs; stats span sits outside button to preserve usage colors
-- VRAM/RAM display uses continuous rAF lerp (factor 0.012) toward poll target for smooth animation
+- Mode A: paint on original, stored at `maskKey(id, -1)`; Mode B: paint on result, stored at `maskKey(id, selectedOutputIdx)`
+- Auto-recognize: `POST /api/workflow/mask/auto-recognize` — SAM via `Pix2Real-自动识别Fixed.json`

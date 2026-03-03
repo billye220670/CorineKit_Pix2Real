@@ -56,6 +56,9 @@ export function SessionBar({ sessionId, onNewSession }: SessionBarProps) {
 
   const handleDelete = useCallback(async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    const names = getSessionNames();
+    const label = names[id] ? `「${names[id]}」` : '此会话';
+    if (!window.confirm(`确定要删除${label}吗？本地文件将一并删除，无法恢复。`)) return;
     await deleteSession(id);
     setSessions((prev) => prev.filter((s) => s.sessionId !== id));
   }, []);
