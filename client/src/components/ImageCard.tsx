@@ -1,7 +1,8 @@
 import { useCallback, useState, useRef, useEffect } from 'react';
-import { X, Play, RotateCcw, Check, AlertCircle, Layers, ChevronDown, Flower, Sparkles, Copy } from 'lucide-react';
+import { X, Play, RotateCcw, Check, AlertCircle, Layers, ChevronDown, Flower, Sparkles, Copy, BookText } from 'lucide-react';
 import { useWorkflowStore } from '../hooks/useWorkflowStore.js';
 import { useWebSocket } from '../hooks/useWebSocket.js';
+import { usePromptAssistantStore } from '../hooks/usePromptAssistantStore.js';
 import { ProgressOverlay } from './ProgressOverlay.js';
 import { ThumbnailStrip } from './ThumbnailStrip.js';
 import { useMaskStore } from '../hooks/useMaskStore.js';
@@ -83,6 +84,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
 
   const [maskMenuOpen, setMaskMenuOpen] = useState(false);
   const [isReversingPrompt, setIsReversingPrompt] = useState(false);
+  const [textareaFocused, setTextareaFocused] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const promptValue = prompts[image.id] || '';
@@ -718,30 +720,61 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
         <div style={{ display: 'flex', gap: 'var(--spacing-sm)', alignItems: 'flex-start' }}>
           {/* Normal workflows: editable prompt textarea */}
           {!isTab7 && needsPrompt && (
-            <textarea
-              ref={textareaRef}
-              placeholder={activeTab === 5 ? "留空使用默认提示词" : activeTab === 3 ? "输入提示词（留空使用默认）" : "额外提示词（可选）"}
-              value={prompts[image.id] || ''}
-              onChange={(e) => setPrompt(image.id, e.target.value)}
-              disabled={isProcessing}
-              rows={1}
-              onClick={(e) => e.stopPropagation()}
-              onDragStart={(e) => e.stopPropagation()}
-              style={{
-                flex: 1,
-                minHeight: 28,
-                padding: 'var(--spacing-xs) var(--spacing-sm)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 6,
-                backgroundColor: 'var(--color-bg)',
-                color: 'var(--color-text)',
-                fontSize: '12px',
-                resize: 'none',
-                outline: 'none',
-                fontFamily: 'inherit',
-                overflow: 'hidden',
-              }}
-            />
+            <div style={{ position: 'relative', flex: 1 }}>
+              <textarea
+                ref={textareaRef}
+                placeholder={activeTab === 5 ? "留空使用默认提示词" : activeTab === 3 ? "输入提示词（留空使用默认）" : "额外提示词（可选）"}
+                value={prompts[image.id] || ''}
+                onChange={(e) => setPrompt(image.id, e.target.value)}
+                disabled={isProcessing}
+                rows={1}
+                onClick={(e) => e.stopPropagation()}
+                onDragStart={(e) => e.stopPropagation()}
+                onFocus={() => setTextareaFocused(true)}
+                onBlur={() => setTextareaFocused(false)}
+                style={{
+                  width: '100%',
+                  minHeight: 28,
+                  padding: 'var(--spacing-xs) var(--spacing-sm)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 6,
+                  backgroundColor: 'var(--color-bg)',
+                  color: 'var(--color-text)',
+                  fontSize: '12px',
+                  resize: 'none',
+                  outline: 'none',
+                  fontFamily: 'inherit',
+                  overflow: 'hidden',
+                }}
+              />
+              <button
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  usePromptAssistantStore.getState().openPanel({
+                    initialText: prompts[image.id] || '',
+                  });
+                }}
+                title="提示词助理"
+                style={{
+                  position: 'absolute',
+                  bottom: 6,
+                  right: 6,
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: 2,
+                  color: 'var(--color-text-secondary)',
+                  opacity: textareaFocused ? 1 : 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  transition: 'opacity 0.15s',
+                  pointerEvents: textareaFocused ? 'auto' : 'none',
+                }}
+              >
+                <BookText size={13} />
+              </button>
+            </div>
           )}
           {/* Tab 7: Copy prompt button instead of Play/RotateCcw */}
           {isTab7 ? (

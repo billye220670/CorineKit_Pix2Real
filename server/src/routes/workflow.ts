@@ -13,6 +13,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const releaseMemoryTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-释放内存.json');
 const removeEquipTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-解除装备Fixed.json');
 const text2imgTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-二次元生成.json');
+const promptAssistantTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-提示词助手.json');
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -488,6 +489,72 @@ router.post('/reverse-prompt', upload.single('image'), async (req, res) => {
     res.json({ text });
   } catch (err: any) {
     console.error('[Reverse Prompt Error]', err);
+    res.status(500).json({ error: err.message || 'Internal server error' });
+  }
+});
+
+// POST /api/workflow/prompt-assistant
+// Calls Pix2Real-提示词助手.json workflow with systemPrompt and userPrompt, returns generated text
+router.post('/prompt-assistant', express.json(), async (req, res) => {
+  try {
+    const { systemPrompt, userPrompt } = req.body;
+    if (!systemPrompt || !userPrompt) {
+      res.status(400).json({ error: 'systemPrompt and userPrompt are required' });
+      return;
+    }
+
+    const internalClientId = `prompt-assistant-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+    const template = JSON.parse(fs.readFileSync(promptAssistantTemplatePath, 'utf-8'));
+    template['62'].inputs.system_prompt = systemPrompt;
+    template['62'].inputs.custom_prompt = userPrompt;
+    template['62'].inputs.seed = Math.floor(Math.random() * 1125899906842624);
+
+    // Patch saveText output path
+    const paTempDir = path.resolve(__dirname, '../../../pa_temp');
+    if (!fs.existsSync(paTempDir)) fs.mkdirSync(paTempDir, { recursive: true });
+    const tempName = `pa_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    template['66'].inputs.output_file_path = paTempDir;
+    template['66'].inputs.file_name = tempName;
+    template['66'].inputs.file_extension = 'txt';
+    template['66'].inputs.overwrite = true;
+
+    const queued = await queuePrompt(template, internalClientId);
+    const promptId = queued.prompt_id;
+
+    // Poll history until ComfyUI marks it complete (timeout 180 s)
+    const deadline = Date.now() + 180_000;
+    let history;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 1000));
+      try {
+        const h = await getHistory(promptId);
+        if (h?.status?.completed) { history = h; break; }
+      } catch { /* not ready yet */ }
+    }
+
+    if (!history) {
+      res.status(504).json({ error: '提示词助理超时，请重试' });
+      return;
+    }
+
+    // Read text from file
+    const txtPath = path.join(paTempDir, `${tempName}.txt`);
+    if (!fs.existsSync(txtPath)) {
+      console.error('[Prompt Assistant] file not found:', txtPath);
+      res.status(500).json({ error: 'ComfyUI 未返回结果文本' });
+      return;
+    }
+    const text = fs.readFileSync(txtPath, 'utf-8').trim();
+    fs.unlinkSync(txtPath);
+    if (!text) {
+      res.status(500).json({ error: 'ComfyUI 未返回结果文本' });
+      return;
+    }
+
+    res.json({ text });
+  } catch (err: any) {
+    console.error('[Prompt Assistant Error]', err);
     res.status(500).json({ error: err.message || 'Internal server error' });
   }
 });

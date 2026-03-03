@@ -1,0 +1,106 @@
+{
+  "11": {
+    "inputs": {
+      "max_tokens": 1024,
+      "top_k": 30,
+      "top_p": 0.9,
+      "min_p": 0.05,
+      "typical_p": 1,
+      "temperature": 0.8,
+      "repeat_penalty": 1,
+      "frequency_penalty": 0,
+      "presence_penalty": 1,
+      "mirostat_mode": 0,
+      "mirostat_eta": 0.1,
+      "mirostat_tau": 5,
+      "state_uid": -1
+    },
+    "class_type": "llama_cpp_parameters",
+    "_meta": {
+      "title": "Llama-cpp Parameters"
+    }
+  },
+  "14": {
+    "inputs": {
+      "text_0": "1: 一只橘色虎斑猫，毛发蓬松，蹲伏在木地板上，前爪微屈，眼神专注地盯着前方的小老鼠，背景是破旧木屋内部，墙皮剥落，阳光从破窗斜射进来，地板有木纹和灰尘，老鼠在角落阴影中探头，毛色灰白，体型细小。\n\n2: 橘猫猛然扑出，前爪伸展，身体呈弓形腾空，尾巴高高扬起，老鼠惊慌后退，爪子抓向地面，背景木屋地板裂纹明显，阳光在猫爪边缘形成高光，老鼠尾巴甩动，地面上有细小尘埃被惊起。\n\n3: 橘猫落地时前爪着地，四爪微张稳住身体，老鼠已逃至墙角，背对猫蜷缩，猫低头注视，眼睛微眯，背景木屋墙角有破布和旧绳索，阳光从缝隙投下斜光，地面有猫爪印和老鼠足迹。\n\n4: 橘猫转身向墙角跃去，后腿蹬地，身体前倾，尾巴扫过地面，老鼠被惊动，快速窜向门缝，背景木屋门板有锈迹和木钉，阳光在门框边缘形成明暗过渡，地面有猫爪印和老鼠拖痕。\n\n5: 橘猫悬停在半空，前爪向前伸展，爪尖对准老鼠，老鼠从门缝钻出，身体前冲，背景木屋门框外是模糊的庭院，阳光透过树叶形成光斑，地面有落叶和细小石子。\n\n6: 橘猫落地后迅速转身，尾巴卷起，后爪蹬地，身体呈蓄力姿势，老鼠在庭院中停下，回头凝视，背景庭院有矮墙和枯草，阳光斜照，地面有影子和落叶，猫毛随风轻扬。\n\n7: 橘猫猛扑而上，前爪并拢，身体压缩，老鼠被击中后翻滚，背景庭院矮墙外是远处篱笆和树影，阳光在猫身形成高光，地面有尘土飞溅和老鼠拖痕。",
+      "text": [
+        "62",
+        1
+      ]
+    },
+    "class_type": "ShowText|pysssss",
+    "_meta": {
+      "title": "展示文本"
+    }
+  },
+  "62": {
+    "inputs": {
+      "preset_prompt": "Empty - Nothing",
+      "custom_prompt": "",
+      "system_prompt": "",
+      "inference_mode": "one by one",
+      "max_frames": 24,
+      "max_size": 256,
+      "seed": 364611736443825,
+      "force_offload": false,
+      "save_states": false,
+      "llama_model": [
+        "63",
+        0
+      ],
+      "parameters": [
+        "11",
+        0
+      ]
+    },
+    "class_type": "llama_cpp_instruct_adv",
+    "_meta": {
+      "title": "Llama-cpp Instruct"
+    }
+  },
+  "63": {
+    "inputs": {
+      "model": "Qwen3-VL-8B-Instruct-abliterated-v2.0.Q4_K_M.gguf",
+      "mmproj": "Qwen3-VL-8B-Instruct-abliterated-v2.0.mmproj-f16.gguf",
+      "chat_handler": "Qwen3-VL",
+      "n_ctx": 8192,
+      "vram_limit": -1,
+      "image_min_tokens": 0,
+      "image_max_tokens": 0
+    },
+    "class_type": "llama_cpp_model_loader",
+    "_meta": {
+      "title": "Llama-cpp Model Loader"
+    }
+  },
+  "65": {
+    "inputs": {
+      "purge_cache": true,
+      "purge_models": true,
+      "anything": [
+        "62",
+        1
+      ]
+    },
+    "class_type": "LayerUtility: PurgeVRAM V2",
+    "_meta": {
+      "title": "图层工具：清除VRAM V2"
+    }
+  },
+  "66": {
+    "inputs": {
+      "output_file_path": "",
+      "file_name": "",
+      "file_extension": "txt",
+      "overwrite": true,
+      "text": [
+        "14",
+        0
+      ]
+    },
+    "class_type": "easy saveText",
+    "_meta": {
+      "title": "保存文本"
+    }
+  }
+}

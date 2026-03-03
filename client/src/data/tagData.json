@@ -1,0 +1,94 @@
+{
+  "categories": [
+    {
+      "id": "cat_person",
+      "label": "人物",
+      "subcategories": [
+        {
+          "id": "sub_role",
+          "label": "角色",
+          "multiSelect": true,
+          "tags": ["teacher", "student", "actress", "warrior", "maid", "princess", "knight", "sage"]
+        },
+        {
+          "id": "sub_clothing",
+          "label": "服饰",
+          "subcategories": [
+            {
+              "id": "sub_top",
+              "label": "上装",
+              "multiSelect": false,
+              "tags": ["t-shirt", "dress shirt", "hoodie", "qipao", "jacket", "blazer", "sweater"]
+            },
+            {
+              "id": "sub_bottom",
+              "label": "下装",
+              "multiSelect": false,
+              "tags": ["jeans", "shorts", "skirt", "pleated skirt", "pants", "leggings"]
+            },
+            {
+              "id": "sub_hat",
+              "label": "帽子",
+              "multiSelect": false,
+              "tags": ["baseball cap", "beret", "sun hat", "cat ears", "crown", "turban"]
+            }
+          ]
+        },
+        {
+          "id": "sub_action",
+          "label": "动作",
+          "multiSelect": true,
+          "tags": ["standing", "sitting", "running", "looking at viewer", "arms raised", "walking", "dancing"]
+        }
+      ]
+    },
+    {
+      "id": "cat_scene",
+      "label": "场景",
+      "subcategories": [
+        {
+          "id": "sub_bg",
+          "label": "背景",
+          "multiSelect": false,
+          "tags": ["outdoors", "indoors", "forest", "cityscape", "beach", "classroom", "kitchen", "bedroom"]
+        },
+        {
+          "id": "sub_light",
+          "label": "光线",
+          "multiSelect": true,
+          "tags": ["sunlight", "neon lights", "moonlight", "soft lighting", "backlight", "rim light", "harsh shadows"]
+        }
+      ]
+    },
+    {
+      "id": "cat_style",
+      "label": "风格",
+      "subcategories": [
+        {
+          "id": "sub_art",
+          "label": "画风",
+          "multiSelect": false,
+          "tags": ["anime", "realistic", "watercolor", "oil painting", "sketch", "digital art", "3d render"]
+        },
+        {
+          "id": "sub_quality",
+          "label": "质量",
+          "multiSelect": true,
+          "tags": ["detailed", "high resolution", "sharp focus", "cinematic", "professional", "polished"]
+        }
+      ]
+    },
+    {
+      "id": "cat_shot",
+      "label": "镜头",
+      "subcategories": [
+        {
+          "id": "sub_framing",
+          "label": "构图",
+          "multiSelect": false,
+          "tags": ["portrait", "full body", "close-up", "cowboy shot", "from above", "from below", "wide shot"]
+        }
+      ]
+    }
+  ]
+}

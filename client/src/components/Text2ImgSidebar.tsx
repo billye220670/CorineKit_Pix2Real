@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useWorkflowStore, type Text2ImgConfig } from '../hooks/useWorkflowStore.js';
+import { usePromptAssistantStore } from '../hooks/usePromptAssistantStore.js';
 import { useWebSocket } from '../hooks/useWebSocket.js';
-import { ChevronRight, ChevronDown, Loader } from 'lucide-react';
+import { ChevronRight, ChevronDown, Loader, BookText } from 'lucide-react';
 
 const RATIO_PRESETS = [
   { label: '1:1',  width: 1024, height: 1024 },
@@ -63,6 +64,7 @@ export function Text2ImgSidebar() {
   const [samplerOpen, setSamplerOpen] = useState(false);
   const [batchCount, setBatchCount] = useState(1);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [promptFocused, setPromptFocused] = useState(false);
 
   // Persist config to localStorage whenever it changes
   useEffect(() => {
@@ -213,26 +215,57 @@ export function Text2ImgSidebar() {
         {/* Prompt */}
         <div>
           <div style={label}>提示词</div>
-          <textarea
-            placeholder="输入提示词（可选）"
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            rows={4}
-            style={{
-              width: '100%',
-              padding: '7px 8px',
-              border: '1px solid var(--color-border)',
-              borderRadius: 6,
-              backgroundColor: 'var(--color-bg)',
-              color: 'var(--color-text)',
-              fontSize: '12px',
-              resize: 'vertical',
-              outline: 'none',
-              fontFamily: 'inherit',
-              minHeight: 80,
-              boxSizing: 'border-box',
-            }}
-          />
+          <div style={{ position: 'relative' }}>
+            <textarea
+              placeholder="输入提示词（可选）"
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              onFocus={() => setPromptFocused(true)}
+              onBlur={() => setPromptFocused(false)}
+              rows={4}
+              style={{
+                width: '100%',
+                padding: '7px 8px',
+                border: '1px solid var(--color-border)',
+                borderRadius: 6,
+                backgroundColor: 'var(--color-bg)',
+                color: 'var(--color-text)',
+                fontSize: '12px',
+                resize: 'vertical',
+                outline: 'none',
+                fontFamily: 'inherit',
+                minHeight: 80,
+                boxSizing: 'border-box',
+              }}
+            />
+            <button
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={(e) => {
+                e.stopPropagation();
+                usePromptAssistantStore.getState().openPanel({
+                  initialText: prompt,
+                });
+              }}
+              title="提示词助理"
+              style={{
+                position: 'absolute',
+                bottom: 6,
+                right: 6,
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                padding: 2,
+                color: 'var(--color-text-secondary)',
+                opacity: promptFocused ? 1 : 0,
+                display: 'flex',
+                alignItems: 'center',
+                transition: 'opacity 0.15s',
+                pointerEvents: promptFocused ? 'auto' : 'none',
+              }}
+            >
+              <BookText size={13} />
+            </button>
+          </div>
         </div>
 
         {/* Aspect ratio */}

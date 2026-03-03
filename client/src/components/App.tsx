@@ -14,6 +14,7 @@ import { Settings, Upload } from 'lucide-react';
 import { Toast } from './Toast.js';
 import { MaskEditor } from './MaskEditor.js';
 import { SettingsModal } from './SettingsModal.js';
+import { PromptAssistantPanel } from './PromptAssistantPanel.js';
 import { StartupDialog } from './StartupDialog.js';
 import { useSettingsStore } from '../hooks/useSettingsStore.js';
 
@@ -287,6 +288,7 @@ export function App() {
       <Toast />
       <MaskEditor />
       <SettingsModal />
+      <PromptAssistantPanel />
     </div>
   );
 }
