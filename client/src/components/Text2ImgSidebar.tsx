@@ -255,7 +255,7 @@ export function Text2ImgSidebar() {
               rows={4}
               style={{
                 width: '100%',
-                padding: '7px 8px',
+                padding: '7px 36px 7px 8px',
                 border: '1px solid var(--color-border)',
                 borderRadius: 6,
                 backgroundColor: 'var(--color-bg)',
@@ -276,14 +276,18 @@ export function Text2ImgSidebar() {
               onMouseLeave={() => setPromptBtnHovered(false)}
               style={{
                 position: 'absolute',
-                bottom: 10,
+                bottom: 12,
                 right: 6,
                 display: 'flex',
                 flexDirection: 'row',
                 alignItems: 'center',
                 opacity: promptFocused || promptBtnHovered ? 1 : 0,
-                transition: 'opacity 0.15s',
                 pointerEvents: promptFocused || promptBtnHovered ? 'auto' : 'none',
+                background: promptBtnHovered ? 'var(--color-surface)' : 'transparent',
+                border: `1px solid ${promptBtnHovered ? 'var(--color-border)' : 'transparent'}`,
+                borderRadius: 6,
+                padding: '2px 4px',
+                transition: 'opacity 0.15s, background 0.15s, border-color 0.15s',
               }}
             >
               {/* Quick action buttons — slide in on hover */}

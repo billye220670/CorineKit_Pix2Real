@@ -766,7 +766,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
                 style={{
                   width: '100%',
                   minHeight: 28,
-                  padding: 'var(--spacing-xs) var(--spacing-sm)',
+                  padding: 'var(--spacing-xs) 36px var(--spacing-xs) var(--spacing-sm)',
                   border: '1px solid var(--color-border)',
                   borderRadius: 6,
                   backgroundColor: 'var(--color-bg)',
@@ -786,14 +786,18 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
                 onMouseLeave={() => setPromptBtnHovered(false)}
                 style={{
                   position: 'absolute',
-                  bottom: 10,
-                  right: 6,
+                  bottom: 8,
+                  right: 3,
                   display: 'flex',
                   flexDirection: 'row',
                   alignItems: 'center',
                   opacity: textareaFocused || promptBtnHovered ? 1 : 0,
-                  transition: 'opacity 0.15s',
                   pointerEvents: textareaFocused || promptBtnHovered ? 'auto' : 'none',
+                  background: promptBtnHovered ? 'var(--color-surface)' : 'transparent',
+                  border: `1px solid ${promptBtnHovered ? 'var(--color-border)' : 'transparent'}`,
+                  borderRadius: 6,
+                  padding: '2px 4px',
+                  transition: 'opacity 0.15s, background 0.15s, border-color 0.15s',
                 }}              >
                 {/* Quick action buttons — slide in on hover */}
                 <div style={{
