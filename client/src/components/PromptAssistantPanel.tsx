@@ -17,28 +17,7 @@ const TABS: Array<{ id: PromptMode; label: string }> = [
 ];
 
 export function PromptAssistantPanel() {
-  const { isOpen, activeMode, initialText, closePanel, setMode } = usePromptAssistantStore();
-
-  if (!isOpen) return null;
-
-  const renderMode = () => {
-    switch (activeMode) {
-      case 'convert':
-        return <ModeConvert initialText={initialText} />;
-      case 'variations':
-        return <ModeVariations initialText={initialText} />;
-      case 'detailer':
-        return <ModeDetailer initialText={initialText} />;
-      case 'nextScene':
-        return <ModeNextScene initialText={initialText} />;
-      case 'storyboarder':
-        return <ModeStoryboarder initialText={initialText} />;
-      case 'tagAssemble':
-        return <ModeTagAssemble />;
-      default:
-        return null;
-    }
-  };
+  const { isOpen, activeMode, initialText, sessionKey, closePanel, setMode } = usePromptAssistantStore();
 
   return (
     <div
@@ -46,7 +25,7 @@ export function PromptAssistantPanel() {
         position: 'fixed',
         inset: 0,
         background: 'rgba(0, 0, 0, 0.6)',
-        display: 'flex',
+        display: isOpen ? 'flex' : 'none',
         alignItems: 'center',
         justifyContent: 'center',
         zIndex: 1000,
@@ -131,9 +110,27 @@ export function PromptAssistantPanel() {
             flex: 1,
             overflow: 'hidden',
             padding: 16,
+            position: 'relative',
           }}
         >
-          {renderMode()}
+          <div style={{ display: activeMode === 'convert' ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
+            <ModeConvert initialText={initialText} sessionKey={sessionKey} />
+          </div>
+          <div style={{ display: activeMode === 'variations' ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
+            <ModeVariations initialText={initialText} sessionKey={sessionKey} />
+          </div>
+          <div style={{ display: activeMode === 'detailer' ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
+            <ModeDetailer initialText={initialText} sessionKey={sessionKey} />
+          </div>
+          <div style={{ display: activeMode === 'nextScene' ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
+            <ModeNextScene initialText={initialText} sessionKey={sessionKey} />
+          </div>
+          <div style={{ display: activeMode === 'storyboarder' ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
+            <ModeStoryboarder initialText={initialText} sessionKey={sessionKey} />
+          </div>
+          <div style={{ display: activeMode === 'tagAssemble' ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
+            <ModeTagAssemble />
+          </div>
         </div>
       </div>
     </div>

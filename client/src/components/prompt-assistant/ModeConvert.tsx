@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { ArrowRight, ArrowLeft } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { ArrowRight, ArrowLeft, Copy, Check } from 'lucide-react';
 import { SYSTEM_PROMPTS } from './systemPrompts.js';
 
 async function callAssistant(systemPrompt: string, userPrompt: string): Promise<string> {
@@ -13,10 +13,34 @@ async function callAssistant(systemPrompt: string, userPrompt: string): Promise<
   return text;
 }
 
-export function ModeConvert({ initialText }: { initialText: string }) {
+const copyBtnBase = {
+  position: 'absolute' as const,
+  bottom: 8,
+  right: 8,
+  padding: '4px 7px',
+  background: 'var(--color-bg)',
+  border: '1px solid var(--color-border)',
+  borderRadius: 4,
+  cursor: 'pointer',
+  color: 'var(--color-text-secondary)',
+  display: 'flex',
+  alignItems: 'center',
+  boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
+  zIndex: 1,
+};
+
+export function ModeConvert({ initialText, sessionKey }: { initialText: string; sessionKey: number }) {
   const [leftText, setLeftText] = useState(initialText);
   const [rightText, setRightText] = useState('');
   const [loading, setLoading] = useState(false);
+  const [leftHovered, setLeftHovered] = useState(false);
+  const [rightHovered, setRightHovered] = useState(false);
+  const [leftCopied, setLeftCopied] = useState(false);
+  const [rightCopied, setRightCopied] = useState(false);
+
+  useEffect(() => {
+    if (initialText) setLeftText(initialText);
+  }, [sessionKey]);
 
   const handleNaturalToTags = async () => {
     if (!leftText.trim()) return;
@@ -44,33 +68,51 @@ export function ModeConvert({ initialText }: { initialText: string }) {
     }
   };
 
+  const doCopy = (text: string, setCopied: (v: boolean) => void) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
   return (
-    <div style={{ display: 'flex', gap: 12, height: '100%' }}>
+    <div style={{ display: 'flex', gap: 16, height: '100%' }}>
       {/* Left - Natural Language */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <label style={{ fontSize: 12, marginBottom: 6, color: 'var(--color-text-secondary)' }}>
+        <label style={{ fontSize: 12, marginBottom: 8, color: 'var(--color-text-secondary)' }}>
           自然语言
         </label>
-        <textarea
-          value={leftText}
-          onChange={(e) => setLeftText(e.target.value)}
-          style={{
-            flex: 1,
-            padding: 8,
-            background: 'var(--color-bg)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 6,
-            color: 'var(--color-text)',
-            fontFamily: 'mono',
-            fontSize: 12,
-            resize: 'none',
-          }}
-          placeholder="输入自然语言描述..."
-        />
+        <div
+          style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column' }}
+          onMouseEnter={() => setLeftHovered(true)}
+          onMouseLeave={() => setLeftHovered(false)}
+        >
+          <textarea
+            value={leftText}
+            onChange={(e) => setLeftText(e.target.value)}
+            style={{
+              flex: 1,
+              padding: 10,
+              background: 'var(--color-bg)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 6,
+              color: 'var(--color-text)',
+              fontFamily: 'mono',
+              fontSize: 12,
+              lineHeight: 1.6,
+              resize: 'none',
+            }}
+            placeholder="输入自然语言描述..."
+          />
+          {leftHovered && leftText && (
+            <button style={copyBtnBase} onClick={() => doCopy(leftText, setLeftCopied)}>
+              {leftCopied ? <Check size={13} /> : <Copy size={13} />}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Center - Arrow Buttons */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, justifyContent: 'center' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, justifyContent: 'center' }}>
         <button
           onClick={handleNaturalToTags}
           disabled={loading || !leftText.trim()}
@@ -115,25 +157,37 @@ export function ModeConvert({ initialText }: { initialText: string }) {
 
       {/* Right - Tags */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <label style={{ fontSize: 12, marginBottom: 6, color: 'var(--color-text-secondary)' }}>
+        <label style={{ fontSize: 12, marginBottom: 8, color: 'var(--color-text-secondary)' }}>
           标签
         </label>
-        <textarea
-          value={rightText}
-          onChange={(e) => setRightText(e.target.value)}
-          style={{
-            flex: 1,
-            padding: 8,
-            background: 'var(--color-bg)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 6,
-            color: 'var(--color-text)',
-            fontFamily: 'mono',
-            fontSize: 12,
-            resize: 'none',
-          }}
-          placeholder="生成的标签会出现在这里..."
-        />
+        <div
+          style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column' }}
+          onMouseEnter={() => setRightHovered(true)}
+          onMouseLeave={() => setRightHovered(false)}
+        >
+          <textarea
+            value={rightText}
+            onChange={(e) => setRightText(e.target.value)}
+            style={{
+              flex: 1,
+              padding: 10,
+              background: 'var(--color-bg)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 6,
+              color: 'var(--color-text)',
+              fontFamily: 'mono',
+              fontSize: 12,
+              lineHeight: 1.6,
+              resize: 'none',
+            }}
+            placeholder="生成的标签会出现在这里..."
+          />
+          {rightHovered && rightText && (
+            <button style={copyBtnBase} onClick={() => doCopy(rightText, setRightCopied)}>
+              {rightCopied ? <Check size={13} /> : <Copy size={13} />}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

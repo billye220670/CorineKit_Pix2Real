@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { Copy, Check } from 'lucide-react';
 import { SYSTEM_PROMPTS } from './systemPrompts.js';
 
 async function callAssistant(systemPrompt: string, userPrompt: string): Promise<string> {
@@ -12,10 +13,32 @@ async function callAssistant(systemPrompt: string, userPrompt: string): Promise<
   return text;
 }
 
-export function ModeStoryboarder({ initialText }: { initialText: string }) {
+const copyBtnBase = {
+  position: 'absolute' as const,
+  bottom: 8,
+  right: 8,
+  padding: '4px 7px',
+  background: 'var(--color-bg)',
+  border: '1px solid var(--color-border)',
+  borderRadius: 4,
+  cursor: 'pointer',
+  color: 'var(--color-text-secondary)',
+  display: 'flex',
+  alignItems: 'center',
+  boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
+  zIndex: 1,
+};
+
+export function ModeStoryboarder({ initialText, sessionKey }: { initialText: string; sessionKey: number }) {
   const [inputText, setInputText] = useState(initialText);
   const [shots, setShots] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
+  const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (initialText) setInputText(initialText);
+  }, [sessionKey]);
 
   const handleGenerate = async () => {
     if (!inputText.trim()) return;
@@ -35,11 +58,17 @@ export function ModeStoryboarder({ initialText }: { initialText: string }) {
     }
   };
 
+  const doCopy = (text: string, i: number) => {
+    navigator.clipboard.writeText(text);
+    setCopiedIdx(i);
+    setTimeout(() => setCopiedIdx(null), 1500);
+  };
+
   return (
-    <div style={{ display: 'flex', gap: 12, height: '100%' }}>
+    <div style={{ display: 'flex', gap: 16, height: '100%' }}>
       {/* Left - Story Input */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <label style={{ fontSize: 12, marginBottom: 6, color: 'var(--color-text-secondary)' }}>
+        <label style={{ fontSize: 12, marginBottom: 8, color: 'var(--color-text-secondary)' }}>
           故事大纲
         </label>
         <textarea
@@ -47,13 +76,14 @@ export function ModeStoryboarder({ initialText }: { initialText: string }) {
           onChange={(e) => setInputText(e.target.value)}
           style={{
             flex: 1,
-            padding: 8,
+            padding: 10,
             background: 'var(--color-bg)',
             border: '1px solid var(--color-border)',
             borderRadius: 6,
             color: 'var(--color-text)',
             fontFamily: 'mono',
             fontSize: 12,
+            lineHeight: 1.6,
             resize: 'none',
           }}
           placeholder="输入故事大纲或剧情描述..."
@@ -62,11 +92,11 @@ export function ModeStoryboarder({ initialText }: { initialText: string }) {
           onClick={handleGenerate}
           disabled={loading || !inputText.trim()}
           style={{
-            marginTop: 8,
+            marginTop: 10,
             padding: '8px 16px',
             background: 'var(--color-primary)',
             border: 'none',
-            borderRadius: 4,
+            borderRadius: 5,
             color: 'white',
             cursor: 'pointer',
             fontSize: 12,
@@ -79,16 +109,17 @@ export function ModeStoryboarder({ initialText }: { initialText: string }) {
 
       {/* Right - Shots */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <label style={{ fontSize: 12, marginBottom: 6, color: 'var(--color-text-secondary)' }}>
+        <label style={{ fontSize: 12, marginBottom: 8, color: 'var(--color-text-secondary)' }}>
           分镜脚本 ({shots.length} 镜头)
         </label>
-        <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
           {shots.map((shot, i) => (
-            <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+            <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
               <div
                 style={{
                   minWidth: 24,
                   height: 24,
+                  marginTop: 2,
                   background: 'var(--color-primary)',
                   color: 'white',
                   borderRadius: 4,
@@ -102,22 +133,34 @@ export function ModeStoryboarder({ initialText }: { initialText: string }) {
               >
                 {i + 1}
               </div>
-              <textarea
-                value={shot}
-                readOnly
-                style={{
-                  flex: 1,
-                  padding: 8,
-                  background: 'var(--color-bg)',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 4,
-                  color: 'var(--color-text)',
-                  fontFamily: 'mono',
-                  fontSize: 11,
-                  resize: 'none',
-                  minHeight: 50,
-                }}
-              />
+              <div
+                style={{ flex: 1, position: 'relative' }}
+                onMouseEnter={() => setHoveredIdx(i)}
+                onMouseLeave={() => setHoveredIdx(null)}
+              >
+                <div
+                  style={{
+                    padding: 10,
+                    paddingBottom: 32,
+                    background: 'var(--color-bg)',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 5,
+                    color: 'var(--color-text)',
+                    fontFamily: 'mono',
+                    fontSize: 11,
+                    lineHeight: 1.65,
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  {shot}
+                </div>
+                {hoveredIdx === i && (
+                  <button style={copyBtnBase} onClick={() => doCopy(shot, i)}>
+                    {copiedIdx === i ? <Check size={13} /> : <Copy size={13} />}
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>

@@ -758,7 +758,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
                 title="提示词助理"
                 style={{
                   position: 'absolute',
-                  bottom: 6,
+                  bottom: 10,
                   right: 6,
                   background: 'transparent',
                   border: 'none',
