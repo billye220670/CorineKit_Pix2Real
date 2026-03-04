@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { useWorkflowStore, type Text2ImgConfig } from '../hooks/useWorkflowStore.js';
 import { usePromptAssistantStore } from '../hooks/usePromptAssistantStore.js';
 import { useWebSocket } from '../hooks/useWebSocket.js';
-import { ChevronRight, ChevronDown, Loader, BookText } from 'lucide-react';
+import { ChevronRight, ChevronDown, Loader, BookText, Hash, AlignLeft, Wand2, Loader2 } from 'lucide-react';
+import { SYSTEM_PROMPTS } from './prompt-assistant/systemPrompts.js';
 
 const RATIO_PRESETS = [
   { label: '1:1',  width: 1024, height: 1024 },
@@ -65,6 +66,8 @@ export function Text2ImgSidebar() {
   const [batchCount, setBatchCount] = useState(1);
   const [isGenerating, setIsGenerating] = useState(false);
   const [promptFocused, setPromptFocused] = useState(false);
+  const [promptBtnHovered, setPromptBtnHovered] = useState(false);
+  const [quickActionLoading, setQuickActionLoading] = useState<string | null>(null);
 
   // Persist config to localStorage whenever it changes
   useEffect(() => {
@@ -127,6 +130,29 @@ export function Text2ImgSidebar() {
       setIsGenerating(false);
     }
   }, [clientId, isGenerating, model, models, prompt, selectedPreset, steps, cfg, sampler, scheduler, customName, batchCount, addText2ImgCard, startTask, sendMessage, sessionId]);
+
+  const handleQuickAction = useCallback(async (mode: 'naturalToTags' | 'tagsToNatural' | 'detailer') => {
+    if (!prompt.trim()) return;
+    setQuickActionLoading(mode);
+    try {
+      const sysPrompt =
+        mode === 'naturalToTags' ? SYSTEM_PROMPTS.naturalToTags :
+        mode === 'tagsToNatural' ? SYSTEM_PROMPTS.tagsToNatural :
+        SYSTEM_PROMPTS.detailer;
+      const res = await fetch('/api/workflow/prompt-assistant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ systemPrompt: sysPrompt, userPrompt: prompt }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const { text: result } = await res.json();
+      setPrompt(result);
+    } catch {
+      // silent fail — user can retry
+    } finally {
+      setQuickActionLoading(null);
+    }
+  }, [prompt]);
 
   // ── Style helpers ────────────────────────────────────────────────────────
 
@@ -215,13 +241,17 @@ export function Text2ImgSidebar() {
         {/* Prompt */}
         <div>
           <div style={label}>提示词</div>
-          <div style={{ position: 'relative' }}>
+          <div
+            style={{ position: 'relative' }}
+            className={quickActionLoading ? 'textarea-ai-active' : undefined}
+          >
             <textarea
               placeholder="输入提示词（可选）"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               onFocus={() => setPromptFocused(true)}
               onBlur={() => setPromptFocused(false)}
+              readOnly={quickActionLoading !== null}
               rows={4}
               style={{
                 width: '100%',
@@ -236,35 +266,127 @@ export function Text2ImgSidebar() {
                 fontFamily: 'inherit',
                 minHeight: 80,
                 boxSizing: 'border-box',
+                opacity: quickActionLoading !== null ? 0.45 : 1,
+                transition: 'opacity 0.2s',
               }}
             />
-            <button
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={(e) => {
-                e.stopPropagation();
-                usePromptAssistantStore.getState().openPanel({
-                  initialText: prompt,
-                });
-              }}
-              title="提示词助理"
+            {/* Prompt assistant button group — expands on hover */}
+            <div
+              onMouseEnter={() => setPromptBtnHovered(true)}
+              onMouseLeave={() => setPromptBtnHovered(false)}
               style={{
                 position: 'absolute',
                 bottom: 10,
                 right: 6,
-                background: 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-                padding: 2,
-                color: 'var(--color-text-secondary)',
-                opacity: promptFocused ? 1 : 0,
                 display: 'flex',
+                flexDirection: 'row',
                 alignItems: 'center',
+                opacity: promptFocused || promptBtnHovered ? 1 : 0,
                 transition: 'opacity 0.15s',
-                pointerEvents: promptFocused ? 'auto' : 'none',
+                pointerEvents: promptFocused || promptBtnHovered ? 'auto' : 'none',
               }}
             >
-              <BookText size={13} />
-            </button>
+              {/* Quick action buttons — slide in on hover */}
+              <div style={{
+                display: 'flex',
+                gap: 4,
+                overflow: 'hidden',
+                maxWidth: promptBtnHovered ? 72 : 0,
+                marginRight: promptBtnHovered ? 4 : 0,
+                opacity: promptBtnHovered ? 1 : 0,
+                transition: 'max-width 0.2s ease, margin-right 0.2s ease, opacity 0.15s',
+              }}>
+                {/* 按需扩写 */}
+                <button
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => handleQuickAction('detailer')}
+                  disabled={quickActionLoading !== null}
+                  title="按需扩写（直接替换）"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: quickActionLoading ? 'not-allowed' : 'pointer',
+                    padding: 2,
+                    flexShrink: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    color: quickActionLoading === 'detailer' ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                    opacity: quickActionLoading && quickActionLoading !== 'detailer' ? 0.35 : 1,
+                  }}
+                >
+                  {quickActionLoading === 'detailer'
+                    ? <Loader2 size={13} style={{ animation: 'spin 0.6s linear infinite' }} />
+                    : <Wand2 size={13} />}
+                </button>
+                {/* tag → 自然语言 */}
+                <button
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => handleQuickAction('tagsToNatural')}
+                  disabled={quickActionLoading !== null}
+                  title="标签 → 自然语言（直接替换）"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: quickActionLoading ? 'not-allowed' : 'pointer',
+                    padding: 2,
+                    flexShrink: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    color: quickActionLoading === 'tagsToNatural' ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                    opacity: quickActionLoading && quickActionLoading !== 'tagsToNatural' ? 0.35 : 1,
+                  }}
+                >
+                  {quickActionLoading === 'tagsToNatural'
+                    ? <Loader2 size={13} style={{ animation: 'spin 0.6s linear infinite' }} />
+                    : <AlignLeft size={13} />}
+                </button>
+                {/* 自然语言 → tag */}
+                <button
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => handleQuickAction('naturalToTags')}
+                  disabled={quickActionLoading !== null}
+                  title="自然语言 → 标签（直接替换）"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: quickActionLoading ? 'not-allowed' : 'pointer',
+                    padding: 2,
+                    flexShrink: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    color: quickActionLoading === 'naturalToTags' ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                    opacity: quickActionLoading && quickActionLoading !== 'naturalToTags' ? 0.35 : 1,
+                  }}
+                >
+                  {quickActionLoading === 'naturalToTags'
+                    ? <Loader2 size={13} style={{ animation: 'spin 0.6s linear infinite' }} />
+                    : <Hash size={13} />}
+                </button>
+              </div>
+              {/* Panel entry button */}
+              <button
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  usePromptAssistantStore.getState().openPanel({
+                    initialText: prompt,
+                  });
+                }}
+                title="提示词助理"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: 2,
+                  flexShrink: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  color: 'var(--color-text-secondary)',
+                }}
+              >
+                <BookText size={13} />
+              </button>
+            </div>
           </div>
         </div>
 

@@ -58,6 +58,42 @@ img {
   50% { opacity: 0.3; }
 }
 
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Prompt assistant quick-action loading state */
+@property --pa-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+@keyframes pa-border-flow {
+  to { --pa-angle: 360deg; }
+}
+.textarea-ai-active {
+  position: relative;
+}
+.textarea-ai-active::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 7px;
+  padding: 1px;
+  background: conic-gradient(
+    from var(--pa-angle),
+    transparent 0deg,
+    var(--color-primary) 25deg,
+    transparent 55deg
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: destination-out;
+  mask-composite: exclude;
+  animation: pa-border-flow 2s linear infinite;
+  pointer-events: none;
+  z-index: 2;
+}
+
 @keyframes dot-wave {
   0%, 80%, 100% { opacity: 0.2; transform: translateY(0); }
   40% { opacity: 1; transform: translateY(-3px); }

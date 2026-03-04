@@ -1,5 +1,6 @@
 import { useCallback, useState, useRef, useEffect } from 'react';
-import { X, Play, RotateCcw, Check, AlertCircle, Layers, ChevronDown, Flower, Sparkles, Copy, BookText } from 'lucide-react';
+import { X, Play, RotateCcw, Check, AlertCircle, Layers, ChevronDown, Flower, Sparkles, Copy, BookText, Hash, AlignLeft, Wand2, Loader2 } from 'lucide-react';
+import { SYSTEM_PROMPTS } from './prompt-assistant/systemPrompts.js';
 import { useWorkflowStore } from '../hooks/useWorkflowStore.js';
 import { useWebSocket } from '../hooks/useWebSocket.js';
 import { usePromptAssistantStore } from '../hooks/usePromptAssistantStore.js';
@@ -85,6 +86,8 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
   const [maskMenuOpen, setMaskMenuOpen] = useState(false);
   const [isReversingPrompt, setIsReversingPrompt] = useState(false);
   const [textareaFocused, setTextareaFocused] = useState(false);
+  const [promptBtnHovered, setPromptBtnHovered] = useState(false);
+  const [quickActionLoading, setQuickActionLoading] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const promptValue = prompts[image.id] || '';
@@ -314,6 +317,30 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
       setIsReversingPrompt(false);
     }
   }, [selectedOutputIdx, displayOutput, image, reversePromptModel]);
+
+  const handleQuickAction = useCallback(async (mode: 'naturalToTags' | 'tagsToNatural' | 'detailer') => {
+    const text = prompts[image.id] || '';
+    if (!text.trim()) return;
+    setQuickActionLoading(mode);
+    try {
+      const sysPrompt =
+        mode === 'naturalToTags' ? SYSTEM_PROMPTS.naturalToTags :
+        mode === 'tagsToNatural' ? SYSTEM_PROMPTS.tagsToNatural :
+        SYSTEM_PROMPTS.detailer;
+      const res = await fetch('/api/workflow/prompt-assistant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ systemPrompt: sysPrompt, userPrompt: text }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const { text: result } = await res.json();
+      setPrompt(image.id, result);
+    } catch {
+      showToast('提示词助理操作失败');
+    } finally {
+      setQuickActionLoading(null);
+    }
+  }, [prompts, image.id, setPrompt]);
 
   return (
     <div
@@ -720,13 +747,17 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
         <div style={{ display: 'flex', gap: 'var(--spacing-sm)', alignItems: 'flex-start' }}>
           {/* Normal workflows: editable prompt textarea */}
           {!isTab7 && needsPrompt && (
-            <div style={{ position: 'relative', flex: 1 }}>
+            <div
+              style={{ position: 'relative', flex: 1 }}
+              className={quickActionLoading ? 'textarea-ai-active' : undefined}
+            >
               <textarea
                 ref={textareaRef}
                 placeholder={activeTab === 5 ? "留空使用默认提示词" : activeTab === 3 ? "输入提示词（留空使用默认）" : "额外提示词（可选）"}
                 value={prompts[image.id] || ''}
                 onChange={(e) => setPrompt(image.id, e.target.value)}
                 disabled={isProcessing}
+                readOnly={quickActionLoading !== null}
                 rows={1}
                 onClick={(e) => e.stopPropagation()}
                 onDragStart={(e) => e.stopPropagation()}
@@ -745,36 +776,126 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
                   outline: 'none',
                   fontFamily: 'inherit',
                   overflow: 'hidden',
+                  opacity: quickActionLoading !== null ? 0.45 : 1,
+                  transition: 'opacity 0.2s',
                 }}
               />
-              <button
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  usePromptAssistantStore.getState().openPanel({
-                    initialText: prompts[image.id] || '',
-                  });
-                }}
-                title="提示词助理"
+              {/* Prompt assistant button group — expands on hover */}
+              <div
+                onMouseEnter={() => setPromptBtnHovered(true)}
+                onMouseLeave={() => setPromptBtnHovered(false)}
                 style={{
                   position: 'absolute',
                   bottom: 10,
                   right: 6,
-                  background: 'transparent',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: 2,
-                  color: 'var(--color-text-secondary)',
-                  opacity: textareaFocused ? 1 : 0,
                   display: 'flex',
+                  flexDirection: 'row',
                   alignItems: 'center',
+                  opacity: textareaFocused || promptBtnHovered ? 1 : 0,
                   transition: 'opacity 0.15s',
-                  pointerEvents: textareaFocused ? 'auto' : 'none',
-                }}
-              >
-                <BookText size={13} />
-              </button>
-            </div>
+                  pointerEvents: textareaFocused || promptBtnHovered ? 'auto' : 'none',
+                }}              >
+                {/* Quick action buttons — slide in on hover */}
+                <div style={{
+                  display: 'flex',
+                  gap: 4,
+                  overflow: 'hidden',
+                  maxWidth: promptBtnHovered ? 72 : 0,
+                  marginRight: promptBtnHovered ? 4 : 0,
+                  opacity: promptBtnHovered ? 1 : 0,
+                  transition: 'max-width 0.2s ease, margin-right 0.2s ease, opacity 0.15s',
+                }}>
+                  {/* 按需扩写 */}
+                  <button
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={(e) => { e.stopPropagation(); handleQuickAction('detailer'); }}
+                    disabled={quickActionLoading !== null}
+                    title="按需扩写（直接替换）"
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      cursor: quickActionLoading ? 'not-allowed' : 'pointer',
+                      padding: 2,
+                      flexShrink: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      color: quickActionLoading === 'detailer' ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                      opacity: quickActionLoading && quickActionLoading !== 'detailer' ? 0.35 : 1,
+                    }}
+                  >
+                    {quickActionLoading === 'detailer'
+                      ? <Loader2 size={13} style={{ animation: 'spin 0.6s linear infinite' }} />
+                      : <Wand2 size={13} />}
+                  </button>
+                  {/* tag → 自然语言 */}
+                  <button
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={(e) => { e.stopPropagation(); handleQuickAction('tagsToNatural'); }}
+                    disabled={quickActionLoading !== null}
+                    title="标签 → 自然语言（直接替换）"
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      cursor: quickActionLoading ? 'not-allowed' : 'pointer',
+                      padding: 2,
+                      flexShrink: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      color: quickActionLoading === 'tagsToNatural' ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                      opacity: quickActionLoading && quickActionLoading !== 'tagsToNatural' ? 0.35 : 1,
+                    }}
+                  >
+                    {quickActionLoading === 'tagsToNatural'
+                      ? <Loader2 size={13} style={{ animation: 'spin 0.6s linear infinite' }} />
+                      : <AlignLeft size={13} />}
+                  </button>
+                  {/* 自然语言 → tag */}
+                  <button
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={(e) => { e.stopPropagation(); handleQuickAction('naturalToTags'); }}
+                    disabled={quickActionLoading !== null}
+                    title="自然语言 → 标签（直接替换）"
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      cursor: quickActionLoading ? 'not-allowed' : 'pointer',
+                      padding: 2,
+                      flexShrink: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      color: quickActionLoading === 'naturalToTags' ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                      opacity: quickActionLoading && quickActionLoading !== 'naturalToTags' ? 0.35 : 1,
+                    }}
+                  >
+                    {quickActionLoading === 'naturalToTags'
+                      ? <Loader2 size={13} style={{ animation: 'spin 0.6s linear infinite' }} />
+                      : <Hash size={13} />}
+                  </button>
+                </div>
+                {/* Panel entry button */}
+                <button
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    usePromptAssistantStore.getState().openPanel({
+                      initialText: prompts[image.id] || '',
+                    });
+                  }}
+                  title="提示词助理"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: 2,
+                    flexShrink: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    color: 'var(--color-text-secondary)',
+                  }}
+                >
+                  <BookText size={13} />
+                </button>
+              </div>            </div>
           )}
           {/* Tab 7: Copy prompt button instead of Play/RotateCcw */}
           {isTab7 ? (
