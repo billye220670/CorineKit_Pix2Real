@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import { X, Check, Trash2 } from 'lucide-react';
+import { X, Check, Trash2, Ban } from 'lucide-react';
 import { useWorkflowStore } from '../hooks/useWorkflowStore.js';
 import { useWebSocket } from '../hooks/useWebSocket.js';
 import { ImageCard } from './ImageCard.js';
@@ -235,11 +235,18 @@ export function FaceSwapPhotoWall({ viewSize }: FaceSwapPhotoWallProps) {
   const [dragOverTargetId, setDragOverTargetId] = useState<string | null>(null);
   const dragEnterCounters = useRef<Record<string, number>>({});
 
+  // Hover tracking for target card drag hint
+  const [hoveredTargetId, setHoveredTargetId] = useState<string | null>(null);
+
   // Zone file drop states
   const [isDragOverFaceZone, setIsDragOverFaceZone] = useState(false);
   const [isDragOverTargetZone, setIsDragOverTargetZone] = useState(false);
   const faceZoneDragCount = useRef(0);
   const targetZoneDragCount = useRef(0);
+
+  // Drag-over highlight for face cards (when a target card is dragged onto them)
+  const [dragOverFaceCardId, setDragOverFaceCardId] = useState<string | null>(null);
+  const faceCardDragCounters = useRef<Record<string, number>>({});
 
   const faceImages = images.filter((img) => faceSwapZones[img.id] === 'face');
   const targetImages = images.filter((img) => faceSwapZones[img.id] !== 'face');
@@ -293,62 +300,69 @@ export function FaceSwapPhotoWall({ viewSize }: FaceSwapPhotoWallProps) {
       return;
     }
 
-    // Multi-select: if face is in selection and zone is face, queue all selected faces
-    if (isMultiSelectMode && multiSelectZone === 'face' && selectedImageIds.includes(faceImageId)) {
-      const selectedFaceIds = selectedImageIds.filter((id) => faceSwapZones[id] === 'face');
-      clearSelection();
-      setMultiSelectZone(null);
-      for (const faceId of selectedFaceIds) {
-        const fi = images.find((i) => i.id === faceId);
-        if (fi) await executeFaceSwap(fi, targetImg);
-      }
-      showToast(`已队列 ${selectedFaceIds.length} 个换脸任务`);
-    } else {
-      await executeFaceSwap(faceImg, targetImg);
-    }
+    // Multi-select: block face-swap when multiple faces are selected
+    if (isMultiSelectMode && multiSelectZone === 'face') return;
+
+    await executeFaceSwap(faceImg, targetImg);
   }, [images, tasks, isMultiSelectMode, multiSelectZone, selectedImageIds, faceSwapZones, clearSelection, executeFaceSwap]);
 
-  // Handle drop of external files into face zone
+  // Handle drop of external files into face zone, or target card cross-import
   const handleFaceZoneDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOverFaceZone(false);
     faceZoneDragCount.current = 0;
 
-    // Ignore face-card drags (no files in dataTransfer)
-    if (!e.dataTransfer.types.includes('Files')) return;
+    // Cross-import: target card dragged into face zone — copy image into face zone
+    const targetImageId = e.dataTransfer.getData('application/x-face-swap-target');
+    if (targetImageId) {
+      const srcImg = images.find((i) => i.id === targetImageId);
+      if (srcImg) {
+        const [newId] = addImagesGetIds([srcImg.file]);
+        setFaceSwapZone(newId, 'face');
+      }
+      return;
+    }
 
+    // External file drop
+    if (!e.dataTransfer.types.includes('Files')) return;
     const files = Array.from(e.dataTransfer.files).filter(isImageFile);
     if (files.length === 0) return;
-
     const ids = addImagesGetIds(files);
     ids.forEach((id) => setFaceSwapZone(id, 'face'));
-  }, [addImagesGetIds, setFaceSwapZone]);
+  }, [images, addImagesGetIds, setFaceSwapZone]);
 
-  // Handle drop of external files into target zone
+  // Handle drop of external files into target zone, or face card cross-import to target
   const handleTargetZoneDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOverTargetZone(false);
     targetZoneDragCount.current = 0;
 
-    // Ignore face-card drags
-    if (!e.dataTransfer.types.includes('Files')) return;
+    // Cross-import: face card dragged to target zone background — copy image into target zone
+    const faceImageId = e.dataTransfer.getData('application/x-face-swap-face');
+    if (faceImageId) {
+      const srcImg = images.find((i) => i.id === faceImageId);
+      if (srcImg) addImages([srcImg.file]); // new entry defaults to target zone
+      return;
+    }
 
+    // External file drop
+    if (!e.dataTransfer.types.includes('Files')) return;
     const files = Array.from(e.dataTransfer.files).filter(isImageFile);
     if (files.length === 0) return;
-
-    addImages(files); // defaults to target (no zone entry = target)
-  }, [addImages]);
+    addImages(files);
+  }, [images, addImages, setFaceSwapZone]);
 
   const handleFaceZoneDragOver = useCallback((e: React.DragEvent) => {
-    if (e.dataTransfer.types.includes('Files')) {
+    if (e.dataTransfer.types.includes('Files') || e.dataTransfer.types.includes('application/x-face-swap-target')) {
       e.preventDefault();
-      e.dataTransfer.dropEffect = 'copy';
+      e.dataTransfer.dropEffect = 'move';
     }
   }, []);
 
   const handleTargetZoneDragOver = useCallback((e: React.DragEvent) => {
-    if (e.dataTransfer.types.includes('Files')) {
+    if (e.dataTransfer.types.includes('Files') || e.dataTransfer.types.includes('application/x-face-swap-face')) {
       e.preventDefault();
+      // face card uses effectAllowed='copy', must match
       e.dataTransfer.dropEffect = 'copy';
     }
   }, []);
@@ -383,6 +397,46 @@ export function FaceSwapPhotoWall({ viewSize }: FaceSwapPhotoWallProps) {
     e.dataTransfer.setData('application/x-face-swap-face', imageId);
     e.dataTransfer.effectAllowed = 'copy';
   }, []);
+
+  // Handle drop of a target card onto a face card — triggers face-swap
+  const handleFaceCardDrop = useCallback(async (e: React.DragEvent, faceImg: ImageItem) => {
+    e.preventDefault();
+    e.stopPropagation(); // prevent face zone's cross-import drop from also firing
+    setDragOverFaceCardId(null);
+    faceCardDragCounters.current[faceImg.id] = 0;
+    // Also clear the face zone highlight that was set when drag entered the zone
+    setIsDragOverFaceZone(false);
+    faceZoneDragCount.current = 0;
+
+    const targetImageId = e.dataTransfer.getData('application/x-face-swap-target');
+    if (!targetImageId) return;
+
+    if (isMultiSelectMode && multiSelectZone === 'target' && selectedImageIds.includes(targetImageId)) {
+      // Multi-select: queue face-swap for every selected target card using this face
+      const selectedTargetIds = selectedImageIds.filter((id) => faceSwapZones[id] !== 'face');
+      clearSelection();
+      setMultiSelectZone(null);
+      let queued = 0;
+      for (const targetId of selectedTargetIds) {
+        const targetImg = images.find((i) => i.id === targetId);
+        if (!targetImg) continue;
+        const task = tasks[targetId];
+        if (task?.status === 'processing' || task?.status === 'queued') continue;
+        await executeFaceSwap(faceImg, targetImg);
+        queued++;
+      }
+      if (queued > 0) showToast(`已队列 ${queued} 个换脸任务`);
+    } else {
+      const targetImg = images.find((i) => i.id === targetImageId);
+      if (!targetImg) return;
+      const task = tasks[targetImg.id];
+      if (task?.status === 'processing' || task?.status === 'queued') {
+        showToast('目标图正在处理中，请等待完成');
+        return;
+      }
+      await executeFaceSwap(faceImg, targetImg);
+    }
+  }, [images, tasks, isMultiSelectMode, multiSelectZone, selectedImageIds, faceSwapZones, clearSelection, executeFaceSwap]);
 
   const selectedCount = selectedImageIds.length;
 
@@ -463,12 +517,12 @@ export function FaceSwapPhotoWall({ viewSize }: FaceSwapPhotoWallProps) {
           }}
           onDragOver={handleFaceZoneDragOver}
           onDragEnter={(e) => {
-            if (!e.dataTransfer.types.includes('Files')) return;
+            if (!e.dataTransfer.types.includes('Files') && !e.dataTransfer.types.includes('application/x-face-swap-target')) return;
             faceZoneDragCount.current++;
             setIsDragOverFaceZone(true);
           }}
           onDragLeave={(e) => {
-            if (!e.dataTransfer.types.includes('Files')) return;
+            if (!e.dataTransfer.types.includes('Files') && !e.dataTransfer.types.includes('application/x-face-swap-target')) return;
             faceZoneDragCount.current = Math.max(0, faceZoneDragCount.current - 1);
             if (faceZoneDragCount.current === 0) setIsDragOverFaceZone(false);
           }}
@@ -493,27 +547,81 @@ export function FaceSwapPhotoWall({ viewSize }: FaceSwapPhotoWallProps) {
             overflowY: 'auto',
             padding: config.facePadding,
             display: 'grid',
-            gridTemplateColumns: '1fr',
+            gridTemplateColumns: 'minmax(0, 1fr)',
             gridAutoRows: 'max-content',
             gap: config.faceGap,
             alignContent: 'start',
           }}>
             {faceImages.map((img) => {
               const isFaceSelected = selectedImageIds.includes(img.id) && multiSelectZone === 'face';
+              const isFaceCardDragOver = dragOverFaceCardId === img.id;
+              const selectedTargetCount = selectedImageIds.filter((id) => faceSwapZones[id] !== 'face').length;
               return (
-                <FaceZoneCard
+                <div
                   key={img.id}
-                  image={img}
-                  isMultiSelectMode={isMultiSelectMode && multiSelectZone === 'face'}
-                  isSelected={isFaceSelected}
-                  onLongPress={() => handleFaceLongPress(img.id)}
-                  onToggleSelect={() => {
-                    if (multiSelectZone !== 'face') return;
-                    toggleImageSelection(img.id);
+                  style={{ position: 'relative', minWidth: 0 }}
+                  onDragOver={(e) => {
+                    if (e.dataTransfer.types.includes('application/x-face-swap-target')) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      e.dataTransfer.dropEffect = 'move'; // match ImageCard's effectAllowed='move'
+                    }
                   }}
-                  onDelete={() => removeImages([img.id])}
-                  onDragStart={(e) => handleFaceDragStart(e, img.id)}
-                />
+                  onDragEnter={(e) => {
+                    if (!e.dataTransfer.types.includes('application/x-face-swap-target')) return;
+                    faceCardDragCounters.current[img.id] = (faceCardDragCounters.current[img.id] ?? 0) + 1;
+                    setDragOverFaceCardId(img.id);
+                  }}
+                  onDragLeave={(e) => {
+                    if (!e.dataTransfer.types.includes('application/x-face-swap-target')) return;
+                    faceCardDragCounters.current[img.id] = Math.max(0, (faceCardDragCounters.current[img.id] ?? 0) - 1);
+                    if (faceCardDragCounters.current[img.id] === 0) setDragOverFaceCardId(null);
+                  }}
+                  onDrop={(e) => handleFaceCardDrop(e, img)}
+                >
+                  <FaceZoneCard
+                    image={img}
+                    isMultiSelectMode={isMultiSelectMode && multiSelectZone === 'face'}
+                    isSelected={isFaceSelected}
+                    onLongPress={() => handleFaceLongPress(img.id)}
+                    onToggleSelect={() => {
+                      if (multiSelectZone !== 'face') return;
+                      toggleImageSelection(img.id);
+                    }}
+                    onDelete={() => removeImages([img.id])}
+                    onDragStart={(e) => handleFaceDragStart(e, img.id)}
+                  />
+
+                  {/* Drop overlay when a target card hovers over this face card */}
+                  {isFaceCardDragOver && (
+                    <div style={{
+                      position: 'absolute',
+                      inset: 0,
+                      borderRadius: 10,
+                      backgroundColor: 'rgba(33,150,243,0.18)',
+                      border: '2px solid var(--color-primary)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      pointerEvents: 'none',
+                      zIndex: 20,
+                    }}>
+                      <span style={{
+                        color: 'var(--color-primary)',
+                        fontWeight: 700,
+                        fontSize: 12,
+                        background: 'rgba(255,255,255,0.88)',
+                        padding: '3px 8px',
+                        borderRadius: 6,
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {isMultiSelectMode && multiSelectZone === 'target' && selectedTargetCount > 1
+                          ? `换脸 ×${selectedTargetCount}`
+                          : '换脸'}
+                      </span>
+                    </div>
+                  )}
+                </div>
               );
             })}
 
@@ -586,11 +694,22 @@ export function FaceSwapPhotoWall({ viewSize }: FaceSwapPhotoWallProps) {
               return (
                 <div
                   key={img.id}
+                  onMouseEnter={() => setHoveredTargetId(img.id)}
+                  onMouseLeave={() => setHoveredTargetId(null)}
+                  onDragStart={(e) => {
+                    // Add explicit cross-import data type alongside ImageCard's x-workflow-image
+                    e.dataTransfer.setData('application/x-face-swap-target', img.id);
+                  }}
                   onDragOver={(e) => {
                     if (e.dataTransfer.types.includes('application/x-face-swap-face')) {
-                      e.preventDefault();
+                      // Always stop propagation so the zone background doesn't also react
                       e.stopPropagation();
-                      e.dataTransfer.dropEffect = 'copy';
+                      if (isMultiSelectMode && multiSelectZone === 'face') {
+                        // Don't preventDefault → browser shows not-allowed cursor
+                      } else {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'copy';
+                      }
                     }
                   }}
                   onDragEnter={(e) => {
@@ -626,28 +745,64 @@ export function FaceSwapPhotoWall({ viewSize }: FaceSwapPhotoWallProps) {
                     }}
                   />
 
-                  {/* Drop hint overlay */}
-                  {isDragOver && !isProcessing && (
+                  {/* Drag-to-face-zone hint badge */}
+                  {hoveredTargetId === img.id && !isMultiSelectMode && !isDragOver && (
                     <div style={{
                       position: 'absolute',
-                      inset: 0,
-                      borderRadius: 10,
-                      backgroundColor: 'rgba(33,150,243,0.18)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
+                      bottom: 6,
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      backgroundColor: 'rgba(0,0,0,0.7)',
+                      color: '#e5e7eb',
+                      fontSize: 11,
+                      padding: '3px 8px',
+                      borderRadius: 4,
                       pointerEvents: 'none',
-                      zIndex: 20,
+                      whiteSpace: 'nowrap',
+                      zIndex: 10,
                     }}>
-                      <span style={{
-                        color: 'var(--color-primary)',
-                        fontWeight: 700,
-                        fontSize: 14,
-                        background: 'rgba(255,255,255,0.85)',
-                        padding: '4px 12px',
-                        borderRadius: 6,
-                      }}>换脸</span>
+                      拖到左侧导入为脸部参考
                     </div>
+                  )}
+
+                  {/* Drop hint overlay — swap or forbidden depending on mode */}
+                  {isDragOver && !isProcessing && (
+                    isMultiSelectMode && multiSelectZone === 'face' ? (
+                      <div style={{
+                        position: 'absolute',
+                        inset: 0,
+                        borderRadius: 10,
+                        backgroundColor: 'rgba(239,68,68,0.15)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        pointerEvents: 'none',
+                        zIndex: 20,
+                      }}>
+                        <Ban size={32} strokeWidth={1.8} color="#ef4444" />
+                      </div>
+                    ) : (
+                      <div style={{
+                        position: 'absolute',
+                        inset: 0,
+                        borderRadius: 10,
+                        backgroundColor: 'rgba(33,150,243,0.18)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        pointerEvents: 'none',
+                        zIndex: 20,
+                      }}>
+                        <span style={{
+                          color: 'var(--color-primary)',
+                          fontWeight: 700,
+                          fontSize: 14,
+                          background: 'rgba(255,255,255,0.85)',
+                          padding: '4px 12px',
+                          borderRadius: 6,
+                        }}>换脸</span>
+                      </div>
+                    )
                   )}
                 </div>
               );
