@@ -11,6 +11,13 @@ interface FaceSwapPhotoWallProps {
   viewSize: ViewSize;
 }
 
+// View size configuration for FaceSwap layout
+const FACE_SWAP_VIEW_CONFIG: Record<ViewSize, { cardSize: string; faceGap: number; facePadding: string; faceZoneWidth: string }> = {
+  small: { cardSize: '160px', faceGap: 6, facePadding: '8px 6px', faceZoneWidth: '10%' },
+  medium: { cardSize: '240px', faceGap: 8, facePadding: '10px 8px', faceZoneWidth: '15%' },
+  large: { cardSize: '400px', faceGap: 12, facePadding: '14px 12px', faceZoneWidth: '20%' },
+};
+
 function isImageFile(file: File): boolean {
   return file.type.startsWith('image/');
 }
@@ -203,7 +210,8 @@ function FaceZoneCard({ image, isMultiSelectMode, isSelected, onLongPress, onTog
   );
 }
 
-export function FaceSwapPhotoWall({ viewSize: _viewSize }: FaceSwapPhotoWallProps) {
+export function FaceSwapPhotoWall({ viewSize }: FaceSwapPhotoWallProps) {
+  const config = FACE_SWAP_VIEW_CONFIG[viewSize];
   const images = useWorkflowStore((s) => s.tabData[8]?.images ?? []);
   const faceSwapZones = useWorkflowStore((s) => s.tabData[8]?.faceSwapZones ?? {});
   const tasks = useWorkflowStore((s) => s.tabData[8]?.tasks ?? {});
@@ -442,10 +450,10 @@ export function FaceSwapPhotoWall({ viewSize: _viewSize }: FaceSwapPhotoWallProp
 
       {/* Main split layout */}
       <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden' }}>
-        {/* Left: Face zone (30%) */}
+        {/* Left: Face zone */}
         <div
           style={{
-            width: '30%',
+            width: config.faceZoneWidth,
             flexShrink: 0,
             display: 'flex',
             flexDirection: 'column',
@@ -483,10 +491,11 @@ export function FaceSwapPhotoWall({ viewSize: _viewSize }: FaceSwapPhotoWallProp
           <div style={{
             flex: 1,
             overflowY: 'auto',
-            padding: '10px 8px',
+            padding: config.facePadding,
             display: 'grid',
             gridTemplateColumns: '1fr',
-            gap: 8,
+            gridAutoRows: 'max-content',
+            gap: config.faceGap,
             alignContent: 'start',
           }}>
             {faceImages.map((img) => {
@@ -564,7 +573,7 @@ export function FaceSwapPhotoWall({ viewSize: _viewSize }: FaceSwapPhotoWallProp
             overflowY: 'auto',
             padding: '10px 12px',
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+            gridTemplateColumns: `repeat(auto-fill, minmax(${config.cardSize}, 1fr))`,
             gap: 12,
             alignContent: 'start',
           }}>

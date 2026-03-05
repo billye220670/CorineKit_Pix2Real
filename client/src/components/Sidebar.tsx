@@ -126,8 +126,6 @@ export function Sidebar() {
 
     // Tab 7 is text-to-image only; it does not accept image drops
     if (targetTab === 7) return;
-    // Tab 8 manages its own zone drops via FaceSwapPhotoWall
-    if (targetTab === 8) return;
 
     const imageId = e.dataTransfer.getData('application/x-workflow-image');
     if (imageId) {

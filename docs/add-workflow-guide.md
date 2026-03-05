@@ -11,7 +11,7 @@
 
 | # | 信息项 | 说明 |
 |---|--------|------|
-| 1 | **新 Tab ID** | 下一个可用整数（目前 0-6 已用，新的从 7 开始） |
+| 1 | **新 Tab ID** | 下一个可用整数（目前 0-8 已用，新的从 9 开始） |
 | 2 | **工作流名称** | 显示在 UI 标签页上的中文名 |
 | 3 | **JSON 文件名** | 放入 `ComfyUI_API/` 的文件名 |
 | 4 | **输入节点 ID** | LoadImage / VHS_LoadVideo 节点 ID，以及对应字段名（通常是 `image` 或 `video`） |
@@ -45,6 +45,7 @@ client/src/components/Sidebar.tsx        ← 侧边栏（GROUPS + WORKFLOW_ICONS
 client/src/config/maskConfig.ts          ← 蒙版模式配置
 client/src/components/ImageCard.tsx      ← 单卡执行逻辑（Mode A 工作流需要改）
 client/src/components/PhotoWall.tsx      ← 批量执行逻辑（Mode A 工作流需要改）
+client/src/components/FaceSwapPhotoWall.tsx  ← 专用双图 UI（Tab 8 参考实现）
 ```
 
 **标准完成流程**：
@@ -209,7 +210,86 @@ router.post('/N/execute', uploadFields, async (req, res) => {
 
 ---
 
-## 六、特殊内置路由（不用改，仅供参考）
+## 六、专用双图 UI 工作流（参考 Tab 8 黑兽换脸）
+
+适用场景：工作流需要**两张不同角色的输入图**，且生成由特殊交互触发（如拖拽），而不是普通的「上传→点击执行」流程。
+
+> Tab 8 是首个此类工作流。如果下一个双图工作流与它结构相似，可以直接扩展 `FaceSwapPhotoWall`；如果结构差异较大，建议新建独立 PhotoWall 组件。
+
+### 设计要点
+
+| 维度 | Tab 8 的选择 | 原因 |
+|------|------------|------|
+| 布局 | 30%/70% 水平分栏，左=人脸区，右=目标区 | 两张图的语义不同，需要明确分区 |
+| 生成触发 | **拖拽**人脸卡片到目标卡片上方放手 | 避免 PlayButton，让「谁换谁」的关系直观可见 |
+| 区域跟踪 | store 中 `faceSwapZones: Record<string, 'face' \| 'target'>` | 跨 tab 拖入的图片默认为 target，只有显式拖入左区的才标记为 face |
+| 播放按钮 | `ImageCard` 新增 `hidePlayButton` prop，目标区卡片传 `true` | 目标区只接受拖拽触发，不需要也不应该有独立执行按钮 |
+| 多选隔离 | 本地 `multiSelectZone: 'face' \| 'target' \| null` | 两个区的选中状态共用同一个 `selectedImageIds`，通过 zone 字段过滤渲染 |
+
+### 拖拽 MIME 类型
+
+```
+application/x-face-swap-face   ← 人脸卡片拖拽（FaceZoneCard dragstart）
+application/x-workflow-image   ← 普通 ImageCard 拖拽（已有）
+application/x-thumb-output     ← 输出缩略图拖拽（已有）
+```
+
+### Store 新增内容（已在 `useWorkflowStore.ts`）
+
+```typescript
+// TabData 接口
+faceSwapZones: Record<string, 'face' | 'target'>
+
+// emptyTabData() 中
+faceSwapZones: {}
+
+// 新 action
+setFaceSwapZone(imageId: string, zone: 'face' | 'target'): void
+addImagesGetIds(files: File[]): string[]   // 同 addImages，但同步返回新 ID 数组
+```
+
+`addImagesGetIds` 的目的：外部文件拖入左区时，需要先 `addImagesGetIds(files)` 拿到 ID，再立即 `setFaceSwapZone(id, 'face')` ——否则 store 更新是异步的，拿不到 ID。
+
+### 专用路由 `POST /api/workflow/8/execute`（已在 `workflow.ts`）
+
+```typescript
+router.post('/8/execute', uploadFaceSwapFields, async (req, res) => {
+  // fields: targetImage + faceImage
+  // patch: template['91'].inputs.image = targetFilename
+  //        template['20'].inputs.image = faceFilename
+  //        template['158'].inputs.seed = random
+  // queuePrompt() → { promptId, clientId, workflowId: 8, workflowName }
+});
+```
+
+### TODO 清单（专用双图 UI）
+
+完成标准 TODO（Step 1–8）之后，还需要：
+
+- [ ] **适配器 `buildPrompt` 抛错**：路由是专用的，通用路由不会调用适配器
+- [ ] **`server/src/routes/workflow.ts`**：添加 `POST /N/execute`，使用 `multer.fields([{name:'targetImage'},{name:'faceImage'}])`，放在 `/:id/execute` **之前**
+- [ ] **`useWorkflowStore.ts`**：`TabData` 增加区域字段（如 `faceSwapZones`）；添加 `setFaceSwapZone` 和 `addImagesGetIds`；`removeImage`/`removeImages` 中清理区域字段；`restoreSession` 中恢复区域字段
+- [ ] **`sessionService.ts` `SerializedTabData`**：添加对应可选字段（如 `faceSwapZones?`）
+- [ ] **`useSession.ts` `serializeState`**：序列化区域字段
+- [ ] **`ImageCard.tsx`**：添加 `hidePlayButton?: boolean` prop，将播放/复制按钮包裹在 `{!hidePlayButton && (...)}` 中
+- [ ] **`App.tsx`**：
+  - `handleMainDragOver` / `handleMainDrop` 跳过新 tab（`if (activeTab === N) return;`）
+  - `images.length === 0` 的 DropZone 判断排除新 tab（`&& activeTab !== N`）
+  - 渲染分支加入 `{activeTab === N ? <NewPhotoWall /> : ...}`
+- [ ] **新建 `FaceSwapPhotoWall.tsx`（或类似组件）**：实现分区布局、拖拽触发执行、多选隔离、悬停高亮、外部文件拖入处理
+- [ ] **`Sidebar.tsx` `handleDrop`**：添加 `if (targetTab === N) return;`（专用 UI 管理自己的 drop）
+
+验证：
+- [ ] 外部文件拖入左区 → 出现在人脸区
+- [ ] 外部文件拖入右区 → 出现在目标区
+- [ ] 拖拽人脸卡片到目标卡片 → 进度显示 → 结果出现在目标卡片
+- [ ] 多选 3 张人脸后拖到目标 → 3 个任务并发
+- [ ] Session 刷新后区域归属保留
+- [ ] `sessions/<id>/tab-N/output/` 有生成文件
+
+---
+
+## 七、特殊内置路由（不用改，仅供参考）
 
 | 路由 | 说明 | 关键节点 |
 |------|------|---------|
@@ -221,7 +301,7 @@ router.post('/N/execute', uploadFields, async (req, res) => {
 
 ---
 
-## 七、Seed 最大值参考
+## 八、Seed 最大值参考
 
 | 节点类型 | 最大安全 seed |
 |---------|-------------|
@@ -230,7 +310,7 @@ router.post('/N/execute', uploadFields, async (req, res) => {
 
 ---
 
-## 八、提示词合并方式对照
+## 九、提示词合并方式对照
 
 | 工作流 | 方式 | 代码 |
 |--------|------|------|
@@ -244,7 +324,7 @@ router.post('/N/execute', uploadFields, async (req, res) => {
 
 ---
 
-## 九、已知曾踩过的坑（每次核查）
+## 十、已知曾踩过的坑（每次核查）
 
 1. **`Sidebar.tsx` 硬编码**：`GROUPS` 和 `WORKFLOW_ICONS` 不会自动读 store，新 tab 必须手动加，否则页签不显示。
 
@@ -256,16 +336,20 @@ router.post('/N/execute', uploadFields, async (req, res) => {
 
 5. **Mode A 必须专用路由**：标准 `/:id/execute` 只接收单张图片，Mode A 工作流需要同时上传原图和蒙版，必须使用 `uploadFields` 的专用路由。
 
+6. **专用双图 UI — `addImagesGetIds` vs `addImages`**：外部文件拖入特定区域后需要立即设置区域标记，`addImages` 不返回 ID（store 更新异步），必须用 `addImagesGetIds` 拿到 ID 再调 `setFaceSwapZone`。
+
+7. **专用双图 UI — 拖拽进入计数器**：`onDragEnter`/`onDragLeave` 会因子元素触发闪烁，用 `useRef<Record<string, number>>` 记录每张卡片的进入计数，`> 0` 时才显示高亮。
+
 ---
 
-## 十、快速核查清单（每次新增工作流必做）
+## 十一、快速核查清单（每次新增工作流必做）
 
 后端：
 - [ ] `ComfyUI_API/<name>.json` 已放置
 - [ ] `server/src/adapters/WorkflowNAdapter.ts` 创建完毕
 - [ ] `server/src/adapters/index.ts` 已注册
 - [ ] `server/src/index.ts` `OUTPUT_DIRS` 已添加
-- [ ] 若 Mode A：专用路由已添加且位于 `/:id/execute` **之前**
+- [ ] 若 Mode A 或专用双图 UI：专用路由已添加且位于 `/:id/execute` **之前**
 - [ ] 若输入为视频：`workflow.ts` 中 `uploadVideo` 判断已扩展
 
 前端：
@@ -277,6 +361,7 @@ router.post('/N/execute', uploadFields, async (req, res) => {
 - [ ] `maskConfig.ts` `TAB_MASK_MODE` 已配置
 - [ ] 若 Mode A：`ImageCard.tsx` `handleExecute` 已添加分支
 - [ ] 若 Mode A：`PhotoWall.tsx` `handleBatchExecute` 和 `hasIdleSelected` 已更新
+- [ ] 若专用双图 UI：见第六节的专项清单
 
 验证：
 - [ ] `npm run dev` 启动无报错
