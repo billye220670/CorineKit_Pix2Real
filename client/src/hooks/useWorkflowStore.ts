@@ -12,6 +12,7 @@ const WORKFLOWS = [
   { id: 5, name: '解除装备', needsPrompt: true },
   { id: 6, name: '真人转二次元', needsPrompt: true },
   { id: 7, name: '快速出图', needsPrompt: false },
+  { id: 8, name: '黑兽换脸', needsPrompt: false },
 ];
 
 interface TabData {
@@ -22,10 +23,11 @@ interface TabData {
   selectedOutputIndex: Record<string, number>;
   backPoseToggles: Record<string, boolean>;
   text2imgConfigs: Record<string, Text2ImgConfig>;
+  faceSwapZones: Record<string, 'face' | 'target'>;
 }
 
 function emptyTabData(): TabData {
-  return { images: [], prompts: {}, tasks: {}, imagePromptMap: {}, selectedOutputIndex: {}, backPoseToggles: {}, text2imgConfigs: {} };
+  return { images: [], prompts: {}, tasks: {}, imagePromptMap: {}, selectedOutputIndex: {}, backPoseToggles: {}, text2imgConfigs: {}, faceSwapZones: {} };
 }
 
 interface WorkflowStore {
@@ -38,6 +40,7 @@ interface WorkflowStore {
 
   setActiveTab: (tab: number) => void;
   addImages: (files: File[]) => void;
+  addImagesGetIds: (files: File[]) => string[];
   addImagesToTab: (tabId: number, files: File[]) => void;
   removeImage: (id: string) => void;
   removeImages: (ids: string[]) => void;
@@ -51,6 +54,7 @@ interface WorkflowStore {
   setSelectedImageIds: (ids: string[]) => void;
   clearSelection: () => void;
   toggleBackPose: (imageId: string) => void;
+  setFaceSwapZone: (imageId: string, zone: 'face' | 'target') => void;
 
   flashingImageId: string | null;
   setFlashingImage: (id: string | null) => void;
@@ -96,6 +100,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     5: emptyTabData(),
     6: emptyTabData(),
     7: emptyTabData(),
+    8: emptyTabData(),
   },
   clientId: null,
   sessionId: null,
@@ -128,6 +133,21 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
           [tab]: {
             ...prev,
             backPoseToggles: { ...prev.backPoseToggles, [imageId]: !current },
+          },
+        },
+      };
+    });
+  },
+
+  setFaceSwapZone: (imageId, zone) => {
+    set((state) => {
+      const prev = state.tabData[8] || emptyTabData();
+      return {
+        tabData: {
+          ...state.tabData,
+          [8]: {
+            ...prev,
+            faceSwapZones: { ...prev.faceSwapZones, [imageId]: zone },
           },
         },
       };
@@ -187,6 +207,26 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     });
   },
 
+  addImagesGetIds: (files) => {
+    const newImages: ImageItem[] = files.map((file) => ({
+      id: `img_${Date.now()}_${imageCounter++}`,
+      file,
+      previewUrl: URL.createObjectURL(file),
+      originalName: file.name,
+    }));
+    set((state) => {
+      const tab = state.activeTab;
+      const prev = state.tabData[tab] || emptyTabData();
+      return {
+        tabData: {
+          ...state.tabData,
+          [tab]: { ...prev, images: [...prev.images, ...newImages] },
+        },
+      };
+    });
+    return newImages.map((img) => img.id);
+  },
+
   addImagesToTab: (tabId, files) => {
     const newImages: ImageItem[] = files.map((file) => ({
       id: `img_${Date.now()}_${imageCounter++}`,
@@ -217,6 +257,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       const { [id]: _s, ...restSelectedOutputIndex } = prev.selectedOutputIndex;
       const { [id]: _b, ...restBackPoseToggles } = prev.backPoseToggles;
       const { [id]: _c, ...restText2ImgConfigs } = prev.text2imgConfigs;
+      const { [id]: _z, ...restFaceSwapZones } = prev.faceSwapZones;
       return {
         tabData: {
           ...state.tabData,
@@ -228,6 +269,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
             selectedOutputIndex: restSelectedOutputIndex,
             backPoseToggles: restBackPoseToggles,
             text2imgConfigs: restText2ImgConfigs,
+            faceSwapZones: restFaceSwapZones,
           },
         },
       };
@@ -255,6 +297,9 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
             ),
             text2imgConfigs: Object.fromEntries(
               Object.entries(prev.text2imgConfigs).filter(([k]) => !idSet.has(k))
+            ),
+            faceSwapZones: Object.fromEntries(
+              Object.entries(prev.faceSwapZones).filter(([k]) => !idSet.has(k))
             ),
           },
         },
@@ -524,7 +569,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
 
   restoreSession: (activeTab, serializedTabData, restoredImages) => {
     const newTabData: Record<number, TabData> = {};
-    for (let tab = 0; tab <= 7; tab++) {
+    for (let tab = 0; tab <= 8; tab++) {
       const ser = serializedTabData[tab];
       if (!ser) {
         newTabData[tab] = emptyTabData();
@@ -553,6 +598,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         selectedOutputIndex: ser.selectedOutputIndex,
         backPoseToggles: ser.backPoseToggles,
         text2imgConfigs: ser.text2imgConfigs ?? {},
+        faceSwapZones: ser.faceSwapZones ?? {},
       };
     }
     set({ activeTab, tabData: newTabData });

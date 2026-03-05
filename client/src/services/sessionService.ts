@@ -39,6 +39,7 @@ export interface SerializedTabData {
   selectedOutputIndex: Record<string, number>;
   backPoseToggles: Record<string, boolean>;
   text2imgConfigs?: Record<string, Text2ImgConfig>;
+  faceSwapZones?: Record<string, 'face' | 'target'>;
 }
 
 export interface SessionData {

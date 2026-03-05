@@ -18,10 +18,11 @@ interface ImageCardProps {
   isMultiSelectMode: boolean;
   isSelected: boolean;
   isFlashing?: boolean;
+  hidePlayButton?: boolean;
   onLongPress: () => void;
   onToggleSelect: () => void;
 }
-export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, onLongPress, onToggleSelect }: ImageCardProps) {
+export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, hidePlayButton, onLongPress, onToggleSelect }: ImageCardProps) {
   const activeTab = useWorkflowStore((s) => s.activeTab);
   const workflows = useWorkflowStore((s) => s.workflows);
   const clientId = useWorkflowStore((s) => s.clientId);
@@ -902,7 +903,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
               </div>            </div>
           )}
           {/* Tab 7: Copy prompt button instead of Play/RotateCcw */}
-          {isTab7 ? (
+          {!hidePlayButton && (isTab7 ? (
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -954,7 +955,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, on
             >
               {status === 'done' && outputs.length > 0 ? <RotateCcw size={13} /> : <Play size={13} />}
             </button>
-          )}
+          ))}
         </div>
       </div>
 

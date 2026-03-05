@@ -5,11 +5,11 @@ import { useDragStore } from '../hooks/useDragStore.js';
 import { showToast } from '../hooks/useToast.js';
 import { QueuePanel } from './QueuePanel.js';
 import {
-  Wand2, Sparkles, ZoomIn, Scissors, Video, Maximize2, ListOrdered, Palette, ImagePlus,
+  Wand2, Sparkles, ZoomIn, Scissors, Video, Maximize2, ListOrdered, Palette, ImagePlus, UserRound,
 } from 'lucide-react';
 
 const GROUPS: { label: string; ids: number[] }[] = [
-  { label: '图像处理', ids: [0, 1, 2, 5, 6] },
+  { label: '图像处理', ids: [0, 1, 2, 5, 6, 8] },
   { label: '视频处理', ids: [3, 4] },
   { label: '图像生成', ids: [7] },
 ];
@@ -23,6 +23,7 @@ const WORKFLOW_ICONS: Record<number, LucideIcon> = {
   5: Scissors,
   6: Palette,
   7: ImagePlus,
+  8: UserRound,
 };
 
 export function Sidebar() {
@@ -125,6 +126,8 @@ export function Sidebar() {
 
     // Tab 7 is text-to-image only; it does not accept image drops
     if (targetTab === 7) return;
+    // Tab 8 manages its own zone drops via FaceSwapPhotoWall
+    if (targetTab === 8) return;
 
     const imageId = e.dataTransfer.getData('application/x-workflow-image');
     if (imageId) {

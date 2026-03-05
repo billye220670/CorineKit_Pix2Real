@@ -128,7 +128,7 @@ export function useSession(): UseSessionReturn {
   const serializeState = useCallback((): { activeTab: number; tabData: Record<number, SerializedTabData> } => {
     const state = useWorkflowStore.getState();
     const serializedTabData: Record<number, SerializedTabData> = {};
-    for (let tab = 0; tab <= 7; tab++) {
+    for (let tab = 0; tab <= 8; tab++) {
       const td = state.tabData[tab];
       if (!td) continue;
       serializedTabData[tab] = {
@@ -144,6 +144,7 @@ export function useSession(): UseSessionReturn {
         selectedOutputIndex: td.selectedOutputIndex,
         backPoseToggles: td.backPoseToggles,
         text2imgConfigs: td.text2imgConfigs,
+        faceSwapZones: td.faceSwapZones,
       };
     }
     return { activeTab: state.activeTab, tabData: serializedTabData };
@@ -171,7 +172,7 @@ export function useSession(): UseSessionReturn {
       if (isRestoring.current) return;
 
       // Detect new images and upload them
-      for (let tab = 0; tab <= 7; tab++) {
+      for (let tab = 0; tab <= 8; tab++) {
         const prevImages = prevState.tabData[tab]?.images ?? [];
         const currImages = state.tabData[tab]?.images ?? [];
         const prevIds = new Set(prevImages.map((i) => i.id));
@@ -229,7 +230,7 @@ export function useSession(): UseSessionReturn {
           const imageId = key.split(':')[0];
           const storeState = useWorkflowStore.getState();
           let tabId = 0;
-          for (let tab = 0; tab <= 7; tab++) {
+          for (let tab = 0; tab <= 8; tab++) {
             if (storeState.tabData[tab]?.images.some((i) => i.id === imageId)) {
               tabId = tab;
               break;
@@ -297,7 +298,7 @@ export function useSession(): UseSessionReturn {
           const restoredImages: Record<number, ImageItem[]> = {};
           const restoredMasks: Record<string, MaskEntry> = {};
 
-          for (let tab = 0; tab <= 7; tab++) {
+          for (let tab = 0; tab <= 8; tab++) {
             const td = session.tabData[tab];
             if (!td) continue;
 

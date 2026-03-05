@@ -14,6 +14,7 @@ const releaseMemoryTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/
 const removeEquipTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-解除装备Fixed.json');
 const text2imgTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-二次元生成.json');
 const promptAssistantTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-提示词助手.json');
+const faceSwapTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-换面.json');
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -151,6 +152,55 @@ router.get('/models/checkpoints', async (_req, res) => {
     res.json(models);
   } catch {
     res.status(502).json([]);
+  }
+});
+
+// POST /api/workflow/8/execute — 黑兽换脸: targetImage + faceImage
+const uploadFaceSwapFields = multer({ storage: multer.memoryStorage() })
+  .fields([{ name: 'targetImage', maxCount: 1 }, { name: 'faceImage', maxCount: 1 }]);
+
+router.post('/8/execute', uploadFaceSwapFields, async (req, res) => {
+  try {
+    const files = req.files as Record<string, Express.Multer.File[]> | undefined;
+    const targetFile = files?.['targetImage']?.[0];
+    const faceFile = files?.['faceImage']?.[0];
+
+    if (!targetFile) {
+      res.status(400).json({ error: 'No targetImage file provided' });
+      return;
+    }
+    if (!faceFile) {
+      res.status(400).json({ error: 'No faceImage file provided' });
+      return;
+    }
+
+    const clientId = (req.query.clientId as string | undefined) || req.body.clientId;
+    if (!clientId) {
+      res.status(400).json({ error: 'clientId is required' });
+      return;
+    }
+
+    // Upload both images to ComfyUI
+    const targetFilename = await uploadImage(targetFile.buffer, targetFile.originalname);
+    const faceFilename = await uploadImage(faceFile.buffer, faceFile.originalname);
+
+    // Patch template
+    const template = JSON.parse(fs.readFileSync(faceSwapTemplatePath, 'utf-8'));
+    template['91'].inputs.image = targetFilename;
+    template['20'].inputs.image = faceFilename;
+    template['158'].inputs.seed = Math.floor(Math.random() * 1125899906842624);
+
+    const result = await queuePrompt(template, clientId);
+
+    res.json({
+      promptId: result.prompt_id,
+      clientId,
+      workflowId: 8,
+      workflowName: '黑兽换脸',
+    });
+  } catch (err: any) {
+    console.error('[Workflow 8 Execute Error]', err);
+    res.status(500).json({ error: err.message || 'Internal server error' });
   }
 });
 

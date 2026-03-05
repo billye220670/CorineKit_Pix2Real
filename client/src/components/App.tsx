@@ -6,6 +6,7 @@ import { useSession } from '../hooks/useSession.js';
 import { Sidebar } from './Sidebar.js';
 import { DropZone } from './DropZone.js';
 import { PhotoWall, VIEW_CONFIG, type ViewSize } from './PhotoWall.js';
+import { FaceSwapPhotoWall } from './FaceSwapPhotoWall.js';
 import { Text2ImgSidebar } from './Text2ImgSidebar.js';
 import { ThemeToggle } from './ThemeToggle.js';
 import { SessionBar } from './SessionBar.js';
@@ -79,6 +80,7 @@ export function App() {
   // Main-area drag handlers — only activate for external file drops, not ImageCard drags
   const handleMainDragOver = useCallback((e: React.DragEvent) => {
     if (activeTab === 7) return; // tab 7 is text-to-image only
+    if (activeTab === 8) return; // tab 8 has its own zone drops
     if (e.dataTransfer.types.includes('application/x-workflow-image')) return;
     if (e.dataTransfer.types.includes('application/x-thumb-output')) return;
     if (!e.dataTransfer.types.includes('Files')) return;
@@ -99,6 +101,8 @@ export function App() {
 
     // Tab 7 is text-to-image only; ignore external file drops
     if (activeTab === 7) return;
+    // Tab 8 has its own zone drops in FaceSwapPhotoWall
+    if (activeTab === 8) return;
 
     const items = e.dataTransfer.items;
     const files: File[] = [];
@@ -198,12 +202,18 @@ export function App() {
             position: 'relative',
           }}
         >
-          {images.length === 0 && activeTab !== 7 ? (
+          {images.length === 0 && activeTab !== 7 && activeTab !== 8 ? (
             <DropZone fullscreen importFiles={importFiles} onDropHandled={() => setIsDragOver(false)} />
           ) : (
             <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-              <PhotoWall viewSize={viewSize} />
-              {activeTab === 7 && <Text2ImgSidebar />}
+              {activeTab === 8 ? (
+                <FaceSwapPhotoWall viewSize={viewSize} />
+              ) : (
+                <>
+                  <PhotoWall viewSize={viewSize} />
+                  {activeTab === 7 && <Text2ImgSidebar />}
+                </>
+              )}
             </div>
           )}
 
