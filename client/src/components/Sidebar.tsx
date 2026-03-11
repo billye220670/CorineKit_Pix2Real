@@ -119,7 +119,7 @@ export function Sidebar() {
     return () => document.removeEventListener('mousedown', handler);
   }, [isQueueOpen, closeQueue]);
 
-  // Same drop logic as TabSwitcher — copies selected image(s) to target tab
+  // Copies selected image(s) to target tab
   const handleDrop = useCallback(async (e: React.DragEvent, targetTab: number) => {
     e.preventDefault();
     setDragOverTab(null);
