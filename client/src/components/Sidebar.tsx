@@ -10,7 +10,7 @@ import {
 
 const GROUPS: { label: string; ids: number[] }[] = [
   { label: '图像处理', ids: [0, 1, 2, 5, 6, 8] },
-  { label: '视频处理', ids: [3, 4] },
+  // { label: '视频处理', ids: [3, 4] },  // 暂时屏蔽
   { label: '图像生成', ids: [7] },
 ];
 
