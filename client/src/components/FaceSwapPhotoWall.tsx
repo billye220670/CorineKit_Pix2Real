@@ -281,13 +281,39 @@ export function FaceSwapPhotoWall({ viewSize }: FaceSwapPhotoWallProps) {
     }
   }, [clientId, sessionId, startTask, sendMessage]);
 
+  // Shared helper: handle external file drop into target zone
+  const handleTargetFilesDrop = useCallback((e: React.DragEvent) => {
+    setIsDragOverTargetZone(false);
+    targetZoneDragCount.current = 0;
+    const files = Array.from(e.dataTransfer.files).filter(isImageFile);
+    if (files.length > 0) addImages(files);
+  }, [addImages]);
+
+  // Shared helper: handle external file drop into face zone
+  const handleFaceFilesDrop = useCallback((e: React.DragEvent) => {
+    setIsDragOverFaceZone(false);
+    faceZoneDragCount.current = 0;
+    const files = Array.from(e.dataTransfer.files).filter(isImageFile);
+    if (files.length > 0) {
+      const ids = addImagesGetIds(files);
+      ids.forEach((id) => setFaceSwapZone(id, 'face'));
+    }
+  }, [addImagesGetIds, setFaceSwapZone]);
+
   // Handle drop of face card onto a target card
   const handleTargetCardDrop = useCallback(async (e: React.DragEvent, targetImg: ImageItem) => {
     e.preventDefault();
-    e.stopPropagation();
     setDragOverTargetId(null);
     dragEnterCounters.current[targetImg.id] = 0;
 
+    // External file drop — import to target zone
+    if (e.dataTransfer.types.includes('Files')) {
+      e.stopPropagation();
+      handleTargetFilesDrop(e);
+      return;
+    }
+
+    e.stopPropagation();
     const faceImageId = e.dataTransfer.getData('application/x-face-swap-face');
     if (!faceImageId) return;
 
@@ -304,7 +330,7 @@ export function FaceSwapPhotoWall({ viewSize }: FaceSwapPhotoWallProps) {
     if (isMultiSelectMode && multiSelectZone === 'face') return;
 
     await executeFaceSwap(faceImg, targetImg);
-  }, [images, tasks, isMultiSelectMode, multiSelectZone, selectedImageIds, faceSwapZones, clearSelection, executeFaceSwap]);
+  }, [images, tasks, isMultiSelectMode, multiSelectZone, selectedImageIds, faceSwapZones, clearSelection, executeFaceSwap, handleTargetFilesDrop]);
 
   // Handle drop of external files into face zone, or target card cross-import
   const handleFaceZoneDrop = useCallback(async (e: React.DragEvent) => {
@@ -401,13 +427,19 @@ export function FaceSwapPhotoWall({ viewSize }: FaceSwapPhotoWallProps) {
   // Handle drop of a target card onto a face card — triggers face-swap
   const handleFaceCardDrop = useCallback(async (e: React.DragEvent, faceImg: ImageItem) => {
     e.preventDefault();
-    e.stopPropagation(); // prevent face zone's cross-import drop from also firing
     setDragOverFaceCardId(null);
     faceCardDragCounters.current[faceImg.id] = 0;
-    // Also clear the face zone highlight that was set when drag entered the zone
     setIsDragOverFaceZone(false);
     faceZoneDragCount.current = 0;
 
+    // External file drop — import to face zone
+    if (e.dataTransfer.types.includes('Files')) {
+      e.stopPropagation();
+      handleFaceFilesDrop(e);
+      return;
+    }
+
+    e.stopPropagation(); // prevent face zone's cross-import drop from also firing
     const targetImageId = e.dataTransfer.getData('application/x-face-swap-target');
     if (!targetImageId) return;
 
@@ -436,7 +468,7 @@ export function FaceSwapPhotoWall({ viewSize }: FaceSwapPhotoWallProps) {
       }
       await executeFaceSwap(faceImg, targetImg);
     }
-  }, [images, tasks, isMultiSelectMode, multiSelectZone, selectedImageIds, faceSwapZones, clearSelection, executeFaceSwap]);
+  }, [images, tasks, isMultiSelectMode, multiSelectZone, selectedImageIds, faceSwapZones, clearSelection, executeFaceSwap, handleFaceFilesDrop]);
 
   const selectedCount = selectedImageIds.length;
 
