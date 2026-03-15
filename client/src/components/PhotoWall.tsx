@@ -61,9 +61,9 @@ export function PhotoWall({ viewSize }: PhotoWallProps) {
   const someSelected = selectedCount > 0 && selectedCount < images.length;
 
   const maskEntryToBlob = useCallback(async (entry: import('../hooks/useMaskStore.js').MaskEntry): Promise<Blob> => {
-    const { data, workingWidth: w, workingHeight: h } = entry;
-    const oc = new OffscreenCanvas(w, h);
-    const ctx = oc.getContext('2d')!;
+    const { data, workingWidth: w, workingHeight: h, originalWidth: ow, originalHeight: oh } = entry;
+    const working = new OffscreenCanvas(w, h);
+    const ctx = working.getContext('2d')!;
     const id = new ImageData(w, h);
     for (let i = 0; i < data.length; i += 4) {
       const v = data[i + 3] > 0 ? 255 : 0;
@@ -73,7 +73,12 @@ export function PhotoWall({ viewSize }: PhotoWallProps) {
       id.data[i + 3] = 255;
     }
     ctx.putImageData(id, 0, 0);
-    return oc.convertToBlob({ type: 'image/png' });
+    if (ow !== w || oh !== h) {
+      const out = new OffscreenCanvas(ow, oh);
+      out.getContext('2d')!.drawImage(working, 0, 0, ow, oh);
+      return out.convertToBlob({ type: 'image/png' });
+    }
+    return working.convertToBlob({ type: 'image/png' });
   }, []);
 
   const handleSelectAll = useCallback(() => {
