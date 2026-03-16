@@ -250,6 +250,51 @@ router.post('/0/execute', upload.single('image'), async (req, res) => {
   }
 });
 
+// POST /api/workflow/2/execute — 精修放大: supports seedvr2 (default) and klein upscale models
+router.post('/2/execute', upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) {
+      res.status(400).json({ error: 'No image file provided' });
+      return;
+    }
+
+    const clientId = (req.query.clientId as string | undefined) || req.body.clientId;
+    if (!clientId) {
+      res.status(400).json({ error: 'clientId is required' });
+      return;
+    }
+
+    const model: string = req.body.model || 'seedvr2';
+    const comfyFilename = await uploadImage(req.file.buffer, req.file.originalname);
+
+    let promptJson: object;
+    if (model === 'klein') {
+      const kleinDefaultPrompt = 'realistic，补充细节，修复画面。超高清，极致细节，高对比度，清晰的光影细节，保持画面色调不变，8K画质。亚洲人。';
+      const template = JSON.parse(fs.readFileSync(kleinTemplatePath, 'utf-8'));
+      template['46'].inputs.image = comfyFilename;
+      template['304'].inputs.prompt = kleinDefaultPrompt;
+      template['370'].inputs.seed = Math.floor(Math.random() * 4294967295);
+      promptJson = template;
+    } else {
+      // seedvr2 (default)
+      const adapter = getAdapter(2)!;
+      promptJson = adapter.buildPrompt(comfyFilename, '');
+    }
+
+    const result = await queuePrompt(promptJson, clientId);
+
+    res.json({
+      promptId:     result.prompt_id,
+      clientId,
+      workflowId:   2,
+      workflowName: '精修放大',
+    });
+  } catch (err: any) {
+    console.error('[Workflow 2 Execute Error]', err);
+    res.status(500).json({ error: err.message || 'Internal server error' });
+  }
+});
+
 // POST /api/workflow/:id/execute - execute single image
 router.post('/:id/execute', upload.single('image'), async (req, res) => {
   try {

@@ -260,6 +260,16 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, hi
       }
     }
 
+    // Tab 2: pass selected upscale model (seedvr2 / klein) from persisted settings
+    if (activeTab === 2) {
+      try {
+        const s = JSON.parse(localStorage.getItem('wf2_settings') ?? '{}');
+        formData.append('model', s.upscaleModel ?? 'seedvr2');
+      } catch {
+        formData.append('model', 'seedvr2');
+      }
+    }
+
     try {
       const res = await fetch(`/api/workflow/${activeTab}/execute?clientId=${clientId}`, {
         method: 'POST',

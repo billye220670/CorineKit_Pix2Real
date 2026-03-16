@@ -9,6 +9,7 @@ import { PhotoWall, VIEW_CONFIG, type ViewSize } from './PhotoWall.js';
 import { FaceSwapPhotoWall } from './FaceSwapPhotoWall.js';
 import { Text2ImgSidebar } from './Text2ImgSidebar.js';
 import { Workflow0SettingsPanel } from './Workflow0SettingsPanel.js';
+import { Workflow2SettingsPanel } from './Workflow2SettingsPanel.js';
 import { ThemeToggle } from './ThemeToggle.js';
 import { SessionBar } from './SessionBar.js';
 import { StatusBar } from './StatusBar.js';
@@ -214,6 +215,7 @@ export function App() {
                   <PhotoWall viewSize={viewSize} />
                   {activeTab === 7 && <Text2ImgSidebar />}
                   {activeTab === 0 && <Workflow0SettingsPanel />}
+                  {activeTab === 2 && <Workflow2SettingsPanel />}
                 </>
               )}
             </div>
