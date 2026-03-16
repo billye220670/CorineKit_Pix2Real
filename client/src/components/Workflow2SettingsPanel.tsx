@@ -21,16 +21,15 @@ export function Workflow2SettingsPanel() {
     marginBottom: 6,
   };
 
-  const pillBtn = (active: boolean, disabled = false): React.CSSProperties => ({
+  const pillBtn = (active: boolean): React.CSSProperties => ({
     padding: '4px 8px',
     fontSize: '12px',
     border: active ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
     borderRadius: 6,
     backgroundColor: active ? 'rgba(33,150,243,0.12)' : 'transparent',
     color: active ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-    cursor: disabled ? 'not-allowed' : 'pointer',
+    cursor: 'pointer',
     flexShrink: 0,
-    opacity: disabled ? 0.4 : 1,
     transition: 'background-color 0.12s, border-color 0.12s, color 0.12s',
   });
 
@@ -50,7 +49,7 @@ export function Workflow2SettingsPanel() {
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             <button style={pillBtn(upscaleModel === 'seedvr2')} onClick={() => setUpscaleModel('seedvr2')}>SeedVR2</button>
             <button style={pillBtn(upscaleModel === 'klein')} onClick={() => setUpscaleModel('klein')}>Klein</button>
-            <button style={pillBtn(upscaleModel === 'sd', true)} disabled title="SD放大 - 敬请期待">SD放大</button>
+            <button style={pillBtn(upscaleModel === 'sd')} onClick={() => setUpscaleModel('sd')}>SD放大</button>
           </div>
         </div>
       </div>

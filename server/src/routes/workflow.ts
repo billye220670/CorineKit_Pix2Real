@@ -16,6 +16,7 @@ const text2imgTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2R
 const promptAssistantTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-提示词助手.json');
 const faceSwapTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-换面.json');
 const kleinTemplatePath    = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-高清重绘.json');
+const sdUpscaleTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-SD放大.json');
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -274,6 +275,11 @@ router.post('/2/execute', upload.single('image'), async (req, res) => {
       template['46'].inputs.image = comfyFilename;
       template['304'].inputs.prompt = kleinDefaultPrompt;
       template['370'].inputs.seed = Math.floor(Math.random() * 4294967295);
+      promptJson = template;
+    } else if (model === 'sd') {
+      const template = JSON.parse(fs.readFileSync(sdUpscaleTemplatePath, 'utf-8'));
+      template['483'].inputs.image = comfyFilename;
+      template['170'].inputs.seed = Math.floor(Math.random() * 1125899906842624);
       promptJson = template;
     } else {
       // seedvr2 (default)
