@@ -250,6 +250,16 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, hi
     formData.append('clientId', clientId);
     formData.append('prompt',   prompts[image.id] || '');
 
+    // Tab 0: pass selected draw model (qwen / klein) from persisted settings
+    if (activeTab === 0) {
+      try {
+        const s = JSON.parse(localStorage.getItem('wf0_settings') ?? '{}');
+        formData.append('model', s.drawModel ?? 'qwen');
+      } catch {
+        formData.append('model', 'qwen');
+      }
+    }
+
     try {
       const res = await fetch(`/api/workflow/${activeTab}/execute?clientId=${clientId}`, {
         method: 'POST',

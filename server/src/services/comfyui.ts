@@ -137,6 +137,8 @@ export function connectWebSocket(
 
   // Track which prompts have already fired onExecutionStart (per connection)
   const startedPrompts = new Set<string>();
+  // Guard against double-firing onComplete (executing:null + execution_success may both arrive)
+  const completedPrompts = new Set<string>();
 
   ws.on('message', (raw) => {
     try {
@@ -151,14 +153,23 @@ export function connectWebSocket(
       }
 
       if (type === 'executing') {
-        if (data.node !== null && !startedPrompts.has(data.prompt_id)) {
+        // Use loose equality so both null and undefined (missing key) are treated as "done"
+        if (data.node != null && !startedPrompts.has(data.prompt_id)) {
           startedPrompts.add(data.prompt_id);
           callbacks.onExecutionStart?.(data.prompt_id);
         }
-        if (data.node === null) {
+        if (data.node == null && !completedPrompts.has(data.prompt_id)) {
+          completedPrompts.add(data.prompt_id);
           startedPrompts.delete(data.prompt_id);
           callbacks.onComplete?.(data.prompt_id);
         }
+      }
+
+      // Newer ComfyUI versions also send execution_success as an explicit completion signal
+      if (type === 'execution_success' && !completedPrompts.has(data.prompt_id)) {
+        completedPrompts.add(data.prompt_id);
+        startedPrompts.delete(data.prompt_id);
+        callbacks.onComplete?.(data.prompt_id);
       }
 
       if (type === 'execution_error' && callbacks.onError) {

@@ -15,6 +15,7 @@ const removeEquipTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pi
 const text2imgTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-二次元生成.json');
 const promptAssistantTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-提示词助手.json');
 const faceSwapTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-换面.json');
+const kleinTemplatePath    = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-高清重绘.json');
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -200,6 +201,51 @@ router.post('/8/execute', uploadFaceSwapFields, async (req, res) => {
     });
   } catch (err: any) {
     console.error('[Workflow 8 Execute Error]', err);
+    res.status(500).json({ error: err.message || 'Internal server error' });
+  }
+});
+
+// POST /api/workflow/0/execute — 二次元转真人: supports qwen (default) and klein draw models
+router.post('/0/execute', upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) {
+      res.status(400).json({ error: 'No image file provided' });
+      return;
+    }
+
+    const clientId = (req.query.clientId as string | undefined) || req.body.clientId;
+    if (!clientId) {
+      res.status(400).json({ error: 'clientId is required' });
+      return;
+    }
+
+    const model: string = req.body.model || 'qwen';
+    const userPrompt: string = req.body.prompt || '';
+    const comfyFilename = await uploadImage(req.file.buffer, req.file.originalname);
+
+    let promptJson: object;
+    if (model === 'klein') {
+      const kleinDefaultPrompt = 'realistic, 将画面变为真实的照片，将动漫角色真人化，补充细节，修复画面。超高清，极致细节，高对比度，清晰的光影细节，保持画面色调不变，8K画质。亚洲人。';
+      const template = JSON.parse(fs.readFileSync(kleinTemplatePath, 'utf-8'));
+      template['46'].inputs.image = comfyFilename;
+      template['304'].inputs.prompt = userPrompt.trim() || kleinDefaultPrompt;
+      template['370'].inputs.seed = Math.floor(Math.random() * 4294967295);
+      promptJson = template;
+    } else {
+      const adapter = getAdapter(0)!;
+      promptJson = adapter.buildPrompt(comfyFilename, userPrompt);
+    }
+
+    const result = await queuePrompt(promptJson, clientId);
+
+    res.json({
+      promptId:     result.prompt_id,
+      clientId,
+      workflowId:   0,
+      workflowName: '二次元转真人',
+    });
+  } catch (err: any) {
+    console.error('[Workflow 0 Execute Error]', err);
     res.status(500).json({ error: err.message || 'Internal server error' });
   }
 });
