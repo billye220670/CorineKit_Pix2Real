@@ -92,22 +92,18 @@ async function fetchMaskEntry(url: string): Promise<MaskEntry> {
 
 const NAMES_KEY = 'pix2real_session_names';
 
-export interface StartupDialogState {
-  onRestore: () => void;
-  onStartNew: () => void;
-}
-
 export interface UseSessionReturn {
   sessionId: string;
   lastSavedAt: Date | null;
   newSession: (name?: string) => void;
-  startupDialog: StartupDialogState | null;
+  showWelcome: boolean;
+  setShowWelcome: (v: boolean) => void;
 }
 
 export function useSession(): UseSessionReturn {
   const [sessionId, setSessionId] = useState<string>(() => getOrCreateSessionId());
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
-  const [startupDialog, setStartupDialog] = useState<StartupDialogState | null>(null);
+  const [showWelcome, setShowWelcome] = useState(false);
 
   // Keep the store in sync whenever sessionId changes
   useEffect(() => {
@@ -355,18 +351,9 @@ export function useSession(): UseSessionReturn {
           isRestoring.current = false;
           newSession();
         } else {
-          // 'ask' — show dialog; keep isRestoring=true until user decides
-          setStartupDialog({
-            onRestore: () => {
-              setStartupDialog(null);
-              void doRestore();
-            },
-            onStartNew: () => {
-              setStartupDialog(null);
-              isRestoring.current = false;
-              newSession();
-            },
-          });
+          // 'welcome' — show welcome page; keep isRestoring=false, user selects session there
+          isRestoring.current = false;
+          setShowWelcome(true);
         }
       } catch (err) {
         console.warn('[Session] Failed to restore session:', err);
@@ -393,5 +380,5 @@ export function useSession(): UseSessionReturn {
     return () => window.removeEventListener('beforeunload', handler);
   }, [serializeState]);
 
-  return { sessionId, lastSavedAt, newSession, startupDialog };
+  return { sessionId, lastSavedAt, newSession, showWelcome, setShowWelcome };
 }

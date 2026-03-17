@@ -14,12 +14,12 @@ import { Workflow2SettingsPanel } from './Workflow2SettingsPanel.js';
 import { ThemeToggle } from './ThemeToggle.js';
 import { SessionBar } from './SessionBar.js';
 import { StatusBar } from './StatusBar.js';
-import { Settings, Upload } from 'lucide-react';
+import { Settings, Upload, Home } from 'lucide-react';
 import { Toast } from './Toast.js';
 import { MaskEditor } from './MaskEditor.js';
 import { SettingsModal } from './SettingsModal.js';
 import { PromptAssistantPanel } from './PromptAssistantPanel.js';
-import { StartupDialog } from './StartupDialog.js';
+import { WelcomePage } from './WelcomePage.js';
 import { useSettingsStore } from '../hooks/useSettingsStore.js';
 
 function isImageOrVideo(file: File): boolean {
@@ -55,7 +55,7 @@ export function App() {
   const images = useWorkflowStore((s) => s.tabData[s.activeTab]?.images ?? []);
   const activeTab = useWorkflowStore((s) => s.activeTab);
   const { importFiles, dialog, overwrite, keepBoth, cancel } = useImageImporter();
-  const { sessionId, lastSavedAt, newSession, startupDialog } = useSession();
+  const { sessionId, lastSavedAt, newSession, showWelcome, setShowWelcome } = useSession();
   const openSettings = useSettingsStore((s) => s.openSettings);
   const [isDragOver, setIsDragOver] = useState(false);
   const [viewSize, setViewSize] = useState<ViewSize>(() => {
@@ -154,6 +154,26 @@ export function App() {
         zIndex: 100,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, userSelect: 'none' }}>
+          {!showWelcome && (
+            <button
+              onClick={() => setShowWelcome(true)}
+              title="主页"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 'var(--spacing-sm)',
+                color: 'var(--color-text)',
+                border: 'none',
+                borderRadius: 0,
+                backgroundColor: 'transparent',
+                opacity: 0.45,
+                cursor: 'pointer',
+              }}
+            >
+              <Home size={16} />
+            </button>
+          )}
           <img src="/logo.png" alt="logo" style={{ width: 28, height: 28, objectFit: 'contain' }} />
           <span style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-text)' }}>
             Pix2Real
@@ -185,6 +205,12 @@ export function App() {
       </header>
 
       {/* Body: Sidebar + Main content */}
+      {showWelcome ? (
+        <WelcomePage
+          onNewSession={() => { newSession(); setShowWelcome(false); }}
+          onEnterApp={() => setShowWelcome(false)}
+        />
+      ) : (
       <div style={{
         flex: 1,
         minHeight: 0,
@@ -250,6 +276,7 @@ export function App() {
           )}
         </main>
       </div>
+      )}
 
       {/* Status bar */}
       <StatusBar lastSavedAt={lastSavedAt} sessionId={sessionId} viewLabel={VIEW_CONFIG[viewSize].label} onCycleViewSize={cycleViewSize} />
@@ -298,12 +325,6 @@ export function App() {
         </div>
       )}
 
-      {startupDialog && (
-        <StartupDialog
-          onRestore={startupDialog.onRestore}
-          onStartNew={startupDialog.onStartNew}
-        />
-      )}
       <Toast />
       <MaskEditor />
       <SettingsModal />

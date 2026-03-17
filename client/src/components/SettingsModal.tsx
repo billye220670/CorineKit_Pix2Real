@@ -12,7 +12,7 @@ const REVERSE_PROMPT_MODELS: { value: ReversePromptModel; label: string }[] = [
 const STARTUP_BEHAVIOR_OPTIONS: { value: StartupBehavior; label: string }[] = [
   { value: 'restore', label: '恢复上次' },
   { value: 'new', label: '开新会话' },
-  { value: 'ask', label: '询问我' },
+  { value: 'welcome', label: '欢迎页' },
 ];
 
 const CATEGORIES = [

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 export type ReversePromptModel = 'Qwen3VL' | 'Florence' | 'WD-14';
-export type StartupBehavior = 'restore' | 'new' | 'ask';
+export type StartupBehavior = 'restore' | 'new' | 'welcome';
 
 interface SettingsState {
   reversePromptModel: ReversePromptModel;
