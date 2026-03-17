@@ -12,6 +12,21 @@ export interface Text2ImgConfig {
   scheduler: string;
 }
 
+export interface ZitConfig {
+  unetModel: string;
+  loraModel: string;
+  loraEnabled: boolean;
+  shiftEnabled: boolean;
+  shift: number;
+  prompt: string;
+  width: number;
+  height: number;
+  steps: number;
+  cfg: number;
+  sampler: string;
+  scheduler: string;
+}
+
 export interface SessionMeta {
   sessionId: string;
   createdAt: string;
@@ -39,6 +54,7 @@ export interface SerializedTabData {
   selectedOutputIndex: Record<string, number>;
   backPoseToggles: Record<string, boolean>;
   text2imgConfigs?: Record<string, Text2ImgConfig>;
+  zitConfigs?: Record<string, ZitConfig>;
   faceSwapZones?: Record<string, 'face' | 'target'>;
 }
 

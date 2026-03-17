@@ -234,6 +234,24 @@ export async function getCheckpointModels(): Promise<string[]> {
   return data?.CheckpointLoaderSimple?.input?.required?.ckpt_name?.[0] ?? [];
 }
 
+export async function getUnetModels(): Promise<string[]> {
+  const res = await fetch(`${COMFYUI_URL}/object_info/UNETLoader`);
+  if (!res.ok) throw new Error(`object_info failed: ${res.status}`);
+  const data = (await res.json()) as {
+    UNETLoader: { input: { required: { unet_name: [string[]] } } };
+  };
+  return data?.UNETLoader?.input?.required?.unet_name?.[0] ?? [];
+}
+
+export async function getLoraModels(): Promise<string[]> {
+  const res = await fetch(`${COMFYUI_URL}/object_info/LoraLoader`);
+  if (!res.ok) throw new Error(`object_info failed: ${res.status}`);
+  const data = (await res.json()) as {
+    LoraLoader: { input: { required: { lora_name: [string[]] } } };
+  };
+  return data?.LoraLoader?.input?.required?.lora_name?.[0] ?? [];
+}
+
 export async function prioritizeQueueItem(targetPromptId: string): Promise<PromptIdRemap[]> {
   const queue = await getQueue();
   const allPending = queue.pending;

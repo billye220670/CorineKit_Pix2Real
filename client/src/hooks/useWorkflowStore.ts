@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { ImageItem, TaskInfo, TaskStatus } from '../types/index.js';
-import type { SerializedTabData, Text2ImgConfig } from '../services/sessionService.js';
-export type { Text2ImgConfig };
+import type { SerializedTabData, Text2ImgConfig, ZitConfig } from '../services/sessionService.js';
+export type { Text2ImgConfig, ZitConfig };
 
 const WORKFLOWS = [
   { id: 0, name: '二次元转真人', needsPrompt: true },
@@ -13,6 +13,7 @@ const WORKFLOWS = [
   { id: 6, name: '真人转二次元', needsPrompt: true },
   { id: 7, name: '快速出图', needsPrompt: false },
   { id: 8, name: '黑兽换脸', needsPrompt: false },
+  { id: 9, name: 'ZIT快出', needsPrompt: false },
 ];
 
 interface TabData {
@@ -23,11 +24,12 @@ interface TabData {
   selectedOutputIndex: Record<string, number>;
   backPoseToggles: Record<string, boolean>;
   text2imgConfigs: Record<string, Text2ImgConfig>;
+  zitConfigs: Record<string, ZitConfig>;
   faceSwapZones: Record<string, 'face' | 'target'>;
 }
 
 function emptyTabData(): TabData {
-  return { images: [], prompts: {}, tasks: {}, imagePromptMap: {}, selectedOutputIndex: {}, backPoseToggles: {}, text2imgConfigs: {}, faceSwapZones: {} };
+  return { images: [], prompts: {}, tasks: {}, imagePromptMap: {}, selectedOutputIndex: {}, backPoseToggles: {}, text2imgConfigs: {}, zitConfigs: {}, faceSwapZones: {} };
 }
 
 interface WorkflowStore {
@@ -74,6 +76,9 @@ interface WorkflowStore {
   // Text2Img card creation (Tab 7)
   addText2ImgCard: (config: Text2ImgConfig, displayName?: string) => string;
 
+  // ZIT card creation (Tab 9)
+  addZitCard: (config: ZitConfig, displayName?: string) => string;
+
   // Computed helpers
   needsPrompt: () => boolean;
   isProcessing: () => boolean;
@@ -101,6 +106,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     6: emptyTabData(),
     7: emptyTabData(),
     8: emptyTabData(),
+    9: emptyTabData(),
   },
   clientId: null,
   sessionId: null,
@@ -562,6 +568,30 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     return id;
   },
 
+  addZitCard: (config, displayName) => {
+    const b64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQAABjE+ibYAAAAASUVORK5CYII=';
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const blob = new Blob([bytes], { type: 'image/png' });
+    const name = displayName ?? 'zit';
+    const file = new File([blob], `${name}.png`, { type: 'image/png' });
+    const id = `img_${Date.now()}_${imageCounter++}`;
+    const previewUrl = URL.createObjectURL(blob);
+    set((state) => {
+      const prev = state.tabData[9] || emptyTabData();
+      return {
+        tabData: {
+          ...state.tabData,
+          [9]: {
+            ...prev,
+            images: [...prev.images, { id, file, previewUrl, originalName: `${name}.png` }],
+            zitConfigs: { ...prev.zitConfigs, [id]: config },
+          },
+        },
+      };
+    });
+    return id;
+  },
+
   needsPrompt: () => {
     const { activeTab, workflows } = get();
     return workflows[activeTab]?.needsPrompt ?? false;
@@ -569,7 +599,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
 
   restoreSession: (activeTab, serializedTabData, restoredImages) => {
     const newTabData: Record<number, TabData> = {};
-    for (let tab = 0; tab <= 8; tab++) {
+    for (let tab = 0; tab <= 9; tab++) {
       const ser = serializedTabData[tab];
       if (!ser) {
         newTabData[tab] = emptyTabData();
@@ -598,6 +628,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         selectedOutputIndex: ser.selectedOutputIndex,
         backPoseToggles: ser.backPoseToggles,
         text2imgConfigs: ser.text2imgConfigs ?? {},
+        zitConfigs: ser.zitConfigs ?? {},
         faceSwapZones: ser.faceSwapZones ?? {},
       };
     }

@@ -6,7 +6,7 @@ import { exec } from 'child_process';
 import multer from 'multer';
 import { getAdapter, adapters } from '../adapters/index.js';
 import { workflow5Adapter } from '../adapters/Workflow5Adapter.js';
-import { uploadImage, uploadVideo, queuePrompt, deleteQueueItem, getSystemStats, getQueue, prioritizeQueueItem, getHistory, getImageBuffer, getCheckpointModels } from '../services/comfyui.js';
+import { uploadImage, uploadVideo, queuePrompt, deleteQueueItem, getSystemStats, getQueue, prioritizeQueueItem, getHistory, getImageBuffer, getCheckpointModels, getUnetModels, getLoraModels } from '../services/comfyui.js';
 import { sessionsBase } from '../services/sessionManager.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -17,6 +17,7 @@ const promptAssistantTemplatePath = path.resolve(__dirname, '../../../ComfyUI_AP
 const faceSwapTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-换面.json');
 const kleinTemplatePath    = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-高清重绘.json');
 const sdUpscaleTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-SD放大.json');
+const zitTemplatePath      = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-ZIT文生图NEW.json');
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -154,6 +155,108 @@ router.get('/models/checkpoints', async (_req, res) => {
     res.json(models);
   } catch {
     res.status(502).json([]);
+  }
+});
+
+// GET /api/workflow/models/unets — list available UNET models from ComfyUI
+router.get('/models/unets', async (_req, res) => {
+  try {
+    const models = await getUnetModels();
+    res.json(models);
+  } catch {
+    res.status(502).json([]);
+  }
+});
+
+// GET /api/workflow/models/loras — list available LoRA models from ComfyUI
+router.get('/models/loras', async (_req, res) => {
+  try {
+    const models = await getLoraModels();
+    res.json(models);
+  } catch {
+    res.status(502).json([]);
+  }
+});
+
+// POST /api/workflow/9/execute — ZIT快出: text-to-image with UNet + LoRA, JSON body (no file upload)
+router.post('/9/execute', express.json(), async (req, res) => {
+  try {
+    const { clientId, unetModel, loraModel, loraEnabled, shiftEnabled, shift, prompt, width, height, steps, cfg, sampler, scheduler, name } = req.body as {
+      clientId: string;
+      unetModel: string;
+      loraModel: string;
+      loraEnabled: boolean;
+      shiftEnabled: boolean;
+      shift: number;
+      prompt: string;
+      width: number;
+      height: number;
+      steps: number;
+      cfg: number;
+      sampler: string;
+      scheduler: string;
+      name?: string;
+    };
+
+    if (!clientId) {
+      res.status(400).json({ error: 'clientId is required' });
+      return;
+    }
+
+    const template = JSON.parse(fs.readFileSync(zitTemplatePath, 'utf-8'));
+
+    // Node 25: UNET model
+    template['25'].inputs.unet_name = unetModel;
+    // Node 36: LoRA model
+    template['36'].inputs.lora_name = loraModel;
+    // Node 45: AuraFlow shift value
+    template['45'].inputs.shift = shift ?? 3;
+    // Node 7: image dimensions
+    template['7'].inputs.width = width;
+    template['7'].inputs.height = height;
+    // Node 4: sampler settings + random seed
+    template['4'].inputs.seed = Math.floor(Math.random() * 1125899906842624);
+    template['4'].inputs.steps = steps;
+    template['4'].inputs.cfg = cfg;
+    template['4'].inputs.sampler_name = sampler;
+    template['4'].inputs.scheduler = scheduler;
+    // Node 5: prompt text
+    if (prompt !== undefined) {
+      template['5'].inputs.text = prompt;
+    }
+    // Rewire model/clip based on loraEnabled + shiftEnabled
+    // Default chain: #25 → #36 → #45 → #4; clip: #36 → #5
+    if (!loraEnabled) {
+      // Bypass LoRA: clip goes directly from #26, model skips #36
+      template['5'].inputs.clip = ['26', 0];
+      if (shiftEnabled) {
+        // #25 → #45 → #4 (shift active, lora skipped)
+        template['45'].inputs.model = ['25', 0];
+      } else {
+        // #25 → #4 (both lora and shift skipped)
+        template['4'].inputs.model = ['25', 0];
+      }
+    } else if (!shiftEnabled) {
+      // LoRA active, shift skipped: #25 → #36 → #4
+      template['4'].inputs.model = ['36', 0];
+    }
+    // (loraEnabled && shiftEnabled) = default chain, no rewiring needed
+    // Node 24: output filename prefix
+    if (name) {
+      template['24'].inputs.filename_prefix = name;
+    }
+
+    const result = await queuePrompt(template, clientId);
+
+    res.json({
+      promptId: result.prompt_id,
+      clientId,
+      workflowId: 9,
+      workflowName: 'ZIT快出',
+    });
+  } catch (err: any) {
+    console.error('[Workflow 9 Execute Error]', err);
+    res.status(500).json({ error: err.message || 'Internal server error' });
   }
 });
 
