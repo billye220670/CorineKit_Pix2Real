@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { Plus, X, Pencil } from 'lucide-react';
+import { Plus, X, Pencil, Check } from 'lucide-react';
 import {
   listSessions,
   getSession,
@@ -17,7 +17,7 @@ interface SessionCard {
 }
 
 interface WelcomePageProps {
-  onNewSession: () => void;
+  onNewSession: (name?: string) => void;
   onEnterApp: () => void;
 }
 
@@ -63,6 +63,9 @@ export function WelcomePage({ onNewSession, onEnterApp }: WelcomePageProps) {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const renameInputRef = useRef<HTMLInputElement>(null);
+  const [namingNew, setNamingNew] = useState(false);
+  const [newName, setNewName] = useState('');
+  const newNameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     void (async () => {
@@ -91,6 +94,16 @@ export function WelcomePage({ onNewSession, onEnterApp }: WelcomePageProps) {
       renameInputRef.current.select();
     }
   }, [renamingId]);
+
+  useEffect(() => {
+    if (namingNew && newNameInputRef.current) {
+      newNameInputRef.current.focus();
+    }
+  }, [namingNew]);
+
+  const confirmNewSession = useCallback(() => {
+    onNewSession(newName.trim() || undefined);
+  }, [newName, onNewSession]);
 
   const enterSession = useCallback((sessionId: string) => {
     localStorage.setItem(SESSION_ID_KEY, sessionId);
@@ -173,25 +186,73 @@ export function WelcomePage({ onNewSession, onEnterApp }: WelcomePageProps) {
               继续当前会话
             </button>
           )}
-          <button
-            onClick={onNewSession}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '7px 14px',
-              fontSize: 13,
-              fontWeight: 600,
-              color: 'var(--color-bg)',
-              backgroundColor: 'var(--color-primary)',
-              border: 'none',
-              borderRadius: 6,
-              cursor: 'pointer',
-            }}
-          >
-            <Plus size={15} />
-            新建会话
-          </button>
+          {namingNew ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input
+                ref={newNameInputRef}
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') confirmNewSession();
+                  if (e.key === 'Escape') { setNamingNew(false); setNewName(''); }
+                }}
+                placeholder="会话名称（可留空）"
+                style={{
+                  height: 32,
+                  padding: '0 10px',
+                  fontSize: 13,
+                  border: '1px solid var(--color-primary)',
+                  borderRadius: 6,
+                  backgroundColor: 'var(--color-bg)',
+                  color: 'var(--color-text)',
+                  outline: 'none',
+                  width: 180,
+                }}
+              />
+              <button
+                onClick={confirmNewSession}
+                title="确认"
+                style={{
+                  height: 32, width: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  backgroundColor: 'var(--color-primary)', color: 'var(--color-bg)',
+                  border: 'none', borderRadius: 6, cursor: 'pointer', flexShrink: 0,
+                }}
+              >
+                <Check size={14} />
+              </button>
+              <button
+                onClick={() => { setNamingNew(false); setNewName(''); }}
+                title="取消"
+                style={{
+                  height: 32, width: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  backgroundColor: 'transparent', color: 'var(--color-text-secondary)',
+                  border: '1px solid var(--color-border)', borderRadius: 6, cursor: 'pointer', flexShrink: 0,
+                }}
+              >
+                <X size={14} />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => { setNamingNew(true); setNewName(''); }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '7px 14px',
+                fontSize: 13,
+                fontWeight: 600,
+                color: 'var(--color-bg)',
+                backgroundColor: 'var(--color-primary)',
+                border: 'none',
+                borderRadius: 6,
+                cursor: 'pointer',
+              }}
+            >
+              <Plus size={15} />
+              新建会话
+            </button>
+          )}
         </div>
       </div>
 

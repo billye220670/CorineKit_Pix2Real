@@ -207,7 +207,7 @@ export function App() {
       {/* Body: Sidebar + Main content */}
       {showWelcome ? (
         <WelcomePage
-          onNewSession={() => { newSession(); setShowWelcome(false); }}
+          onNewSession={(name?: string) => { newSession(name); setShowWelcome(false); }}
           onEnterApp={() => setShowWelcome(false)}
         />
       ) : (
