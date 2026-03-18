@@ -10,6 +10,7 @@ import {
   uploadSessionMask,
   putSessionState,
   getSession,
+  deleteSession,
   type SerializedTabData,
 } from '../services/sessionService.js';
 import type { ImageItem } from '../types/index.js';
@@ -92,6 +93,18 @@ async function fetchMaskEntry(url: string): Promise<MaskEntry> {
 
 const NAMES_KEY = 'pix2real_session_names';
 
+// A session is "empty" if it has no images and no task outputs in any tab.
+function isSessionEmpty(): boolean {
+  const state = useWorkflowStore.getState();
+  for (let tab = 0; tab <= 9; tab++) {
+    const td = state.tabData[tab];
+    if (!td) continue;
+    if (td.images.length > 0) return false;
+    if (Object.values(td.tasks).some((t) => t.outputs.length > 0)) return false;
+  }
+  return true;
+}
+
 export interface UseSessionReturn {
   sessionId: string;
   lastSavedAt: Date | null;
@@ -113,6 +126,7 @@ export function useSession(): UseSessionReturn {
   sessionIdRef.current = sessionId;
 
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSavedAtRef = useRef<Date | null>(null);
   // Track which (tab:imageId) have already been uploaded to avoid re-uploading
   const uploadedImages = useRef<Set<string>>(new Set());
   // Track which maskKeys have already been saved
@@ -149,9 +163,12 @@ export function useSession(): UseSessionReturn {
 
   const doSaveState = useCallback(async () => {
     if (isRestoring.current) return;
+    if (isSessionEmpty()) return; // Never persist empty sessions
     try {
       await putSessionState(sessionIdRef.current, serializeState());
-      setLastSavedAt(new Date());
+      const now = new Date();
+      setLastSavedAt(now);
+      lastSavedAtRef.current = now;
     } catch (err) {
       console.warn('[Session] Failed to save state:', err);
     }
@@ -249,6 +266,10 @@ export function useSession(): UseSessionReturn {
 
   // ── New session ── (defined before mount effect so it can be referenced inside)
   const newSession = useCallback((name?: string) => {
+    // If the current session is empty and was previously saved, delete it from the server
+    if (isSessionEmpty() && lastSavedAtRef.current !== null) {
+      void deleteSession(sessionIdRef.current).catch(() => {});
+    }
     const id = generateSessionId();
     localStorage.setItem(SESSION_ID_KEY, id);
     if (name?.trim()) {
@@ -287,6 +308,7 @@ export function useSession(): UseSessionReturn {
 
         if (!session) {
           isRestoring.current = false;
+          if (behavior === 'welcome') setShowWelcome(true);
           return;
         }
 
@@ -364,6 +386,14 @@ export function useSession(): UseSessionReturn {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── Clean up empty session when returning to welcome page ────────────────
+  useEffect(() => {
+    if (!showWelcome) return;
+    if (!isSessionEmpty()) return;
+    if (lastSavedAtRef.current === null) return; // Never saved → no server record to delete
+    void deleteSession(sessionIdRef.current).catch(() => {});
+  }, [showWelcome]);
+
   // ── beforeunload flush ───────────────────────────────────────────────────
   useEffect(() => {
     const handler = () => {
@@ -371,6 +401,13 @@ export function useSession(): UseSessionReturn {
       if (debounceTimer.current) {
         clearTimeout(debounceTimer.current);
         debounceTimer.current = null;
+      }
+      if (isSessionEmpty()) {
+        // Don't save; if previously saved, delete the now-empty server record
+        if (lastSavedAtRef.current !== null) {
+          void fetch(`/api/session/${sessionIdRef.current}`, { method: 'DELETE', keepalive: true });
+        }
+        return;
       }
       const state = serializeState();
       const blob = new Blob([JSON.stringify(state)], { type: 'application/json' });

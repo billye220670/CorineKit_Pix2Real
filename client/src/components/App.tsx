@@ -181,7 +181,7 @@ export function App() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
-          <SessionBar sessionId={sessionId} onNewSession={newSession} />
+          {!showWelcome && <SessionBar sessionId={sessionId} onNewSession={newSession} />}
           <ThemeToggle />
           <button
             onClick={openSettings}
@@ -279,7 +279,7 @@ export function App() {
       )}
 
       {/* Status bar */}
-      <StatusBar lastSavedAt={lastSavedAt} sessionId={sessionId} viewLabel={VIEW_CONFIG[viewSize].label} onCycleViewSize={cycleViewSize} />
+      {!showWelcome && <StatusBar lastSavedAt={lastSavedAt} sessionId={sessionId} viewLabel={VIEW_CONFIG[viewSize].label} onCycleViewSize={cycleViewSize} />}
 
       {/* Duplicate filename confirmation dialog */}
       {dialog && (

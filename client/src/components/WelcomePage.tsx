@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { Plus, X } from 'lucide-react';
+import { Plus, X, Pencil } from 'lucide-react';
 import {
   listSessions,
   getSession,
@@ -63,7 +63,6 @@ export function WelcomePage({ onNewSession, onEnterApp }: WelcomePageProps) {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const renameInputRef = useRef<HTMLInputElement>(null);
-  const holdTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   useEffect(() => {
     void (async () => {
@@ -99,8 +98,9 @@ export function WelcomePage({ onNewSession, onEnterApp }: WelcomePageProps) {
     window.location.reload();
   }, []);
 
-  const handleDelete = useCallback((e: React.MouseEvent, sessionId: string) => {
+  const handleDelete = useCallback((e: React.MouseEvent, sessionId: string, sessionName: string) => {
     e.stopPropagation();
+    if (!window.confirm(`确定要删除「${sessionName}」吗？本地文件将一并删除，无法恢复。`)) return;
     void deleteSession(sessionId);
     setCards((prev) => prev.filter((c) => c.meta.sessionId !== sessionId));
     const names = JSON.parse(localStorage.getItem(NAMES_KEY) ?? '{}') as Record<string, string>;
@@ -121,16 +121,10 @@ export function WelcomePage({ onNewSession, onEnterApp }: WelcomePageProps) {
     setRenamingId(null);
   }, [renameValue]);
 
-  const handleTitleMouseDown = useCallback((e: React.MouseEvent, sessionId: string, currentName: string) => {
+  const startRename = useCallback((e: React.MouseEvent, sessionId: string, currentName: string) => {
     e.stopPropagation();
-    holdTimers.current[sessionId] = setTimeout(() => {
-      setRenamingId(sessionId);
-      setRenameValue(currentName);
-    }, 800);
-  }, []);
-
-  const handleTitleMouseUp = useCallback((sessionId: string) => {
-    clearTimeout(holdTimers.current[sessionId]);
+    setRenamingId(sessionId);
+    setRenameValue(currentName);
   }, []);
 
   const currentSessionId = localStorage.getItem(SESSION_ID_KEY);
@@ -158,7 +152,7 @@ export function WelcomePage({ onNewSession, onEnterApp }: WelcomePageProps) {
             最近会话
           </div>
           <div style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
-            点击卡片进入会话，长按名称可重命名
+            点击卡片进入会话，悬停后点击编辑图标可重命名
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -248,10 +242,7 @@ export function WelcomePage({ onNewSession, onEnterApp }: WelcomePageProps) {
                   key={card.meta.sessionId}
                   onClick={() => !isRenaming && enterSession(card.meta.sessionId)}
                   onMouseEnter={() => setHoveredId(card.meta.sessionId)}
-                  onMouseLeave={() => {
-                    setHoveredId(null);
-                    clearTimeout(holdTimers.current[card.meta.sessionId]);
-                  }}
+                  onMouseLeave={() => setHoveredId(null)}
                   style={{
                     position: 'relative',
                     width: 180,
@@ -329,22 +320,45 @@ export function WelcomePage({ onNewSession, onEnterApp }: WelcomePageProps) {
                         }}
                       />
                     ) : (
-                      <div
-                        onMouseDown={(e) => handleTitleMouseDown(e, card.meta.sessionId, card.name)}
-                        onMouseUp={() => handleTitleMouseUp(card.meta.sessionId)}
-                        style={{
-                          fontSize: 13,
-                          fontWeight: 600,
-                          color: 'var(--color-text)',
-                          overflow: 'hidden',
-                          whiteSpace: 'nowrap',
-                          textOverflow: 'ellipsis',
-                          userSelect: 'none',
-                          cursor: 'pointer',
-                        }}
-                        title={card.name}
-                      >
-                        {card.name}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+                        <div
+                          style={{
+                            flex: 1,
+                            minWidth: 0,
+                            fontSize: 13,
+                            fontWeight: 600,
+                            color: 'var(--color-text)',
+                            overflow: 'hidden',
+                            whiteSpace: 'nowrap',
+                            textOverflow: 'ellipsis',
+                            userSelect: 'none',
+                          }}
+                          title={card.name}
+                        >
+                          {card.name}
+                        </div>
+                        <button
+                          onClick={(e) => startRename(e, card.meta.sessionId, card.name)}
+                          title="重命名"
+                          style={{
+                            flexShrink: 0,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: 18,
+                            height: 18,
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: 'var(--color-text-secondary)',
+                            padding: 0,
+                            opacity: isHovered ? 1 : 0,
+                            transition: 'opacity 0.15s',
+                            pointerEvents: isHovered ? 'auto' : 'none',
+                          }}
+                        >
+                          <Pencil size={11} />
+                        </button>
                       </div>
                     )}
                     <div style={{
@@ -360,7 +374,7 @@ export function WelcomePage({ onNewSession, onEnterApp }: WelcomePageProps) {
 
                   {/* Delete button (hover reveal) */}
                   <button
-                    onClick={(e) => handleDelete(e, card.meta.sessionId)}
+                    onClick={(e) => handleDelete(e, card.meta.sessionId, card.name)}
                     title="删除会话"
                     style={{
                       position: 'absolute',
