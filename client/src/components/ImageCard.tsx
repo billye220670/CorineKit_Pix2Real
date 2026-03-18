@@ -732,22 +732,22 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, hi
           />
         )}
 
-        {/* Reverse-prompt button — bottom-right of image, non-video only */}
-        {!isVideoWorkflow && (
+        {/* Reverse-prompt button — top-right of card, visible on card hover, hidden in multi-select */}
+        {!isVideoWorkflow && !isMultiSelectMode && (isCardHovered || isReversingPrompt) && (
           <div
             onClick={(e) => { e.stopPropagation(); if (!isReversingPrompt) handleReversePrompt(); }}
             title="反推提示词"
             style={{
               position: 'absolute',
-              bottom: 6,
-              right: 6,
+              top: 8,
+              right: 8,
               zIndex: 10,
               display: 'flex',
               alignItems: 'center',
               background: 'rgba(0,0,0,0.68)',
               borderRadius: 6,
               padding: '5px 7px',
-              cursor: 'pointer',
+              cursor: isReversingPrompt ? 'not-allowed' : 'pointer',
               opacity: isReversingPrompt ? 0.6 : 1,
               userSelect: 'none',
             }}
@@ -824,7 +824,8 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, hi
                   borderRadius: 6,
                   padding: '2px 4px',
                   transition: 'opacity 0.15s, background 0.15s, border-color 0.15s',
-                }}              >
+                }}
+              >
                 {/* Quick action buttons — slide in on hover */}
                 <div style={{
                   display: 'flex',
@@ -925,7 +926,8 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, hi
                 >
                   <BookText size={13} />
                 </button>
-              </div>            </div>
+              </div>
+            </div>
           )}
           {/* Tab 7: Copy prompt button instead of Play/RotateCcw */}
           {!hidePlayButton && (isTab7 ? (
