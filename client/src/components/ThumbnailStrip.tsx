@@ -154,12 +154,16 @@ export function ThumbnailStrip({
               onDragStart={i === 0 ? (e) => e.preventDefault() : i > 0 && onOutputDragStart ? (e) => {
                 e.stopPropagation();
                 e.dataTransfer.setData('application/x-thumb-output', String(i - 1));
-                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.effectAllowed = 'copyMove';
                 // Use the thumbnail image itself as drag ghost
                 const media = (e.currentTarget as HTMLElement).querySelector('img, video') as HTMLElement | null;
                 if (media) {
                   e.dataTransfer.setDragImage(media, media.offsetWidth / 2, media.offsetHeight / 2);
                 }
+                // Add DownloadURL for external drag (e.g., to desktop)
+                // Format: application/octet-stream:<filename>:<url>
+                const downloadUrl = `application/octet-stream:${encodeURIComponent(item.filename)}:${window.location.origin}${item.url}`;
+                e.dataTransfer.setData('DownloadURL', downloadUrl);
                 onOutputDragStart(i - 1);
               } : undefined}
               onDragEnd={i > 0 && onOutputDragEnd ? (e) => {

@@ -421,8 +421,25 @@ export function FaceSwapPhotoWall({ viewSize }: FaceSwapPhotoWallProps) {
   // Face drag start handler
   const handleFaceDragStart = useCallback((e: React.DragEvent, imageId: string) => {
     e.dataTransfer.setData('application/x-face-swap-face', imageId);
-    e.dataTransfer.effectAllowed = 'copy';
-  }, []);
+    e.dataTransfer.effectAllowed = 'copyMove';
+
+    // Find the image to export
+    const img = images.find((i) => i.id === imageId);
+    if (img) {
+      try {
+        if (img.file) {
+          // Add the File object for external drag (e.g., to desktop)
+          e.dataTransfer.items.add(img.file);
+        } else if (img.sessionUrl) {
+          // Use DownloadURL method for session-stored images
+          const downloadUrl = `application/octet-stream:${encodeURIComponent(img.originalName)}:${window.location.origin}${img.sessionUrl}`;
+          e.dataTransfer.setData('DownloadURL', downloadUrl);
+        }
+      } catch (err) {
+        console.warn('[FaceDragExport] Failed to prepare file for external drag:', err);
+      }
+    }
+  }, [images]);
 
   // Handle drop of a target card onto a face card — triggers face-swap
   const handleFaceCardDrop = useCallback(async (e: React.DragEvent, faceImg: ImageItem) => {
@@ -731,6 +748,7 @@ export function FaceSwapPhotoWall({ viewSize }: FaceSwapPhotoWallProps) {
                   onDragStart={(e) => {
                     // Add explicit cross-import data type alongside ImageCard's x-workflow-image
                     e.dataTransfer.setData('application/x-face-swap-target', img.id);
+                    // Note: File export is handled by ImageCard's handleDragStart
                   }}
                   onDragOver={(e) => {
                     if (e.dataTransfer.types.includes('application/x-face-swap-face')) {

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, memo } from 'react';
 import { useWorkflowStore } from '../hooks/useWorkflowStore.js';
 import { useMaskStore } from '../hooks/useMaskStore.js';
 import { useDragStore } from '../hooks/useDragStore.js';
@@ -9,11 +9,92 @@ import { useWebSocket } from '../hooks/useWebSocket.js';
 
 export type ViewSize = 'small' | 'medium' | 'large';
 
-export const VIEW_CONFIG: Record<ViewSize, { columnWidth: string; label: string }> = {
-  small: { columnWidth: '180px', label: '小' },
-  medium: { columnWidth: '280px', label: '中' },
-  large: { columnWidth: '600px', label: '大' },
+export const VIEW_CONFIG: Record<ViewSize, { columnWidth: string; label: string; estimatedCardHeight: number }> = {
+  small: { columnWidth: '180px', label: '小', estimatedCardHeight: 320 },
+  medium: { columnWidth: '280px', label: '中', estimatedCardHeight: 450 },
+  large: { columnWidth: '600px', label: '大', estimatedCardHeight: 600 },
 };
+
+// LazyCard: lightweight wrapper using IntersectionObserver for lazy rendering
+const LazyCard = memo(function LazyCard({ children, estimatedHeight }: { children: React.ReactNode; estimatedHeight: number }) {
+  const [isVisible, setIsVisible] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const wasPlaceholder = useRef(true);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          // Once visible, stop observing to prevent flickering
+          observer.unobserve(el);
+        }
+      },
+      // Asymmetric rootMargin: small top (200px) to reduce upward content shift,
+      // large bottom (1200px) to preload while scrolling down
+      { rootMargin: '200px 0px 1200px 0px' }
+    );
+    
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  // Manual scroll compensation when transitioning from placeholder to real content
+  useEffect(() => {
+    if (isVisible && wasPlaceholder.current && ref.current) {
+      wasPlaceholder.current = false;
+      requestAnimationFrame(() => {
+        const el = ref.current;
+        if (!el) return;
+        
+        const scrollContainer = el.closest('[data-photo-wall-scroll]') as HTMLElement | null;
+        if (!scrollContainer) return;
+        
+        const rect = el.getBoundingClientRect();
+        const containerRect = scrollContainer.getBoundingClientRect();
+        
+        // If this card is above the viewport (its bottom is above the container's visible area)
+        // its height change may have caused viewport shift - compensate scrollTop
+        if (rect.bottom < containerRect.top) {
+          const actualHeight = el.offsetHeight;
+          const heightDiff = actualHeight - estimatedHeight;
+          if (heightDiff > 0) {
+            scrollContainer.scrollTop += heightDiff;
+          }
+        }
+      });
+    }
+  }, [isVisible, estimatedHeight]);
+
+  if (!isVisible) {
+    return (
+      <div
+        ref={ref}
+        style={{
+          minHeight: estimatedHeight,
+          breakInside: 'avoid',
+          borderRadius: 'var(--radius-lg, 12px)',
+          background: 'rgba(128, 128, 128, 0.05)',
+          overflowAnchor: 'none', // Don't use placeholder as scroll anchor
+        }}
+      />
+    );
+  }
+
+  return (
+    <div
+      ref={ref}
+      style={{
+        breakInside: 'avoid',
+      }}
+    >
+      {children}
+    </div>
+  );
+});
 
 interface PhotoWallProps {
   viewSize: ViewSize;
@@ -191,6 +272,9 @@ export function PhotoWall({ viewSize }: PhotoWallProps) {
     e.stopPropagation();
     const drag = dragging;
     setDragging(null);
+
+    // Clean up dragging cursor state - handleDragEnd may not fire when dropping on delete zone
+    document.body.classList.remove('is-dragging-card');
 
     // Fallback: read imageId from dataTransfer in case dragging state is stale
     const fallbackCardId = e.dataTransfer.getData('application/x-workflow-image');
@@ -377,7 +461,14 @@ export function PhotoWall({ viewSize }: PhotoWallProps) {
       <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
         <div
           className="photowall-bg"
-          style={{ position: 'absolute', inset: 0, overflow: 'auto', padding: 'var(--spacing-lg)' }}
+          data-photo-wall-scroll
+          style={{
+            position: 'absolute',
+            inset: 0,
+            overflow: 'auto',
+            padding: 'var(--spacing-lg)',
+            overflowAnchor: 'auto', // Enable CSS scroll anchoring
+          }}
           onClick={(e) => { if (isMultiSelectMode && e.target === e.currentTarget) clearSelection(); }}
         >
         {/* Tab 7 empty state */}
@@ -403,16 +494,18 @@ export function PhotoWall({ viewSize }: PhotoWallProps) {
           onClick={(e) => { if (isMultiSelectMode && e.target === e.currentTarget) clearSelection(); }}
         >
           {images.map((img) => (
-            <div key={img.id} id={`card-${img.id}`} style={{ breakInside: 'avoid', marginBottom: 'var(--spacing-md)' }}>
-              <ImageCard
-                image={img}
-                isMultiSelectMode={isMultiSelectMode}
-                isSelected={selectedImageIds.includes(img.id)}
-                isFlashing={flashingImageId === img.id}
-                onLongPress={() => enterMultiSelect(img.id)}
-                onToggleSelect={() => toggleImageSelection(img.id)}
-              />
-            </div>
+            <LazyCard key={img.id} estimatedHeight={VIEW_CONFIG[viewSize].estimatedCardHeight}>
+              <div id={`card-${img.id}`} style={{ breakInside: 'avoid', marginBottom: 'var(--spacing-md)' }}>
+                <ImageCard
+                  image={img}
+                  isMultiSelectMode={isMultiSelectMode}
+                  isSelected={selectedImageIds.includes(img.id)}
+                  isFlashing={flashingImageId === img.id}
+                  onLongPress={() => enterMultiSelect(img.id)}
+                  onToggleSelect={() => toggleImageSelection(img.id)}
+                />
+              </div>
+            </LazyCard>
           ))}
         </div>
       </div>

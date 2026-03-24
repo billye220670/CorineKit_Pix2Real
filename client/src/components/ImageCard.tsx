@@ -1,5 +1,6 @@
-import { useCallback, useState, useRef, useEffect } from 'react';
+import { useCallback, useState, useRef, useEffect, memo } from 'react';
 import { X, Play, RotateCcw, Check, AlertCircle, Layers, ChevronDown, Flower, Sparkles, Copy, BookText, Hash, AlignLeft, Wand2, Loader2 } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 import { SYSTEM_PROMPTS } from './prompt-assistant/systemPrompts.js';
 import { useWorkflowStore } from '../hooks/useWorkflowStore.js';
 import { useWebSocket } from '../hooks/useWebSocket.js';
@@ -22,22 +23,69 @@ interface ImageCardProps {
   onLongPress: () => void;
   onToggleSelect: () => void;
 }
-export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, hidePlayButton, onLongPress, onToggleSelect }: ImageCardProps) {
-  const activeTab = useWorkflowStore((s) => s.activeTab);
-  const workflows = useWorkflowStore((s) => s.workflows);
-  const clientId = useWorkflowStore((s) => s.clientId);
-  const sessionId = useWorkflowStore((s) => s.sessionId);
-  const prompts = useWorkflowStore((s) => s.tabData[s.activeTab]?.prompts ?? {});
-  const tasks = useWorkflowStore((s) => s.tabData[s.activeTab]?.tasks ?? {});
-  const removeImage = useWorkflowStore((s) => s.removeImage);
-  const setPrompt = useWorkflowStore((s) => s.setPrompt);
-  const startTask = useWorkflowStore((s) => s.startTask);
-  const resetTask = useWorkflowStore((s) => s.resetTask);
-  const setFlashingImage = useWorkflowStore((s) => s.setFlashingImage);
-  const selectedOutputIdx = useWorkflowStore(
-    (s) => s.tabData[s.activeTab]?.selectedOutputIndex?.[image.id] ?? Math.max(0, (s.tabData[s.activeTab]?.tasks?.[image.id]?.outputs?.length ?? 1) - 1)
+
+// arePropsEqual: Only compare key props that affect rendering
+function arePropsEqual(prev: ImageCardProps, next: ImageCardProps): boolean {
+  return (
+    prev.image.id === next.image.id &&
+    prev.image.previewUrl === next.image.previewUrl &&
+    prev.image.originalName === next.image.originalName &&
+    prev.isMultiSelectMode === next.isMultiSelectMode &&
+    prev.isSelected === next.isSelected &&
+    prev.isFlashing === next.isFlashing &&
+    prev.hidePlayButton === next.hidePlayButton &&
+    prev.onLongPress === next.onLongPress &&
+    prev.onToggleSelect === next.onToggleSelect
   );
-  const setSelectedOutputIndex = useWorkflowStore((s) => s.setSelectedOutputIndex);
+}
+
+export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, hidePlayButton, onLongPress, onToggleSelect }: ImageCardProps) {
+  // ─── Zustand subscriptions (consolidated) ───────────────────────────
+
+  // 1. Actions (stable references, rarely change)
+  const actions = useWorkflowStore(
+    useShallow((s) => ({
+      setPrompt: s.setPrompt,
+      startTask: s.startTask,
+      resetTask: s.resetTask,
+      setFlashingImage: s.setFlashingImage,
+      setSelectedOutputIndex: s.setSelectedOutputIndex,
+      toggleBackPose: s.toggleBackPose,
+      removeImage: s.removeImage,
+    }))
+  );
+
+  // 2. Global state (changes affect all cards)
+  const globalState = useWorkflowStore(
+    useShallow((s) => ({
+      activeTab: s.activeTab,
+      workflows: s.workflows,
+      clientId: s.clientId,
+      sessionId: s.sessionId,
+    }))
+  );
+
+  // 3. Card-specific data (only this card's data, filtered by image.id)
+  const cardData = useWorkflowStore(
+    useShallow((s) => {
+      const tab = s.activeTab;
+      const tabData = s.tabData[tab];
+      const task = tabData?.tasks?.[image.id];
+      const outputsLen = task?.outputs?.length ?? 0;
+      return {
+        promptValue: tabData?.prompts?.[image.id] || '',
+        task: task ?? null,
+        selectedOutputIdx: tabData?.selectedOutputIndex?.[image.id] ?? Math.max(0, outputsLen - 1),
+        text2imgConfig: tab === 7 ? s.tabData[7]?.text2imgConfigs?.[image.id] : undefined,
+        backPose: tabData?.backPoseToggles?.[image.id] ?? false,
+      };
+    })
+  );
+
+  // Destructure for easier access
+  const { setPrompt, startTask, resetTask, setFlashingImage, setSelectedOutputIndex, toggleBackPose } = actions;
+  const { activeTab, workflows, clientId, sessionId } = globalState;
+  const { promptValue, task, selectedOutputIdx, text2imgConfig, backPose } = cardData;
   const { sendMessage } = useWebSocket();
 
   const [isHovered, setIsHovered] = useState(false);
@@ -49,7 +97,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, hi
   const longPressFired = useRef(false);
   const mouseDownFromInput = useRef(false);
 
-  const task = tasks[image.id];
+  // Derived state from cardData
   const status = task?.status || 'idle';
   const progress = task?.progress || 0;
   const needsPrompt = workflows[activeTab]?.needsPrompt ?? false;
@@ -57,10 +105,6 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, hi
   const isTab7 = activeTab === 7;
   const isProcessing = status === 'processing' || status === 'queued';
   const canExecute = !!clientId && !isProcessing;
-
-  const text2imgConfig = useWorkflowStore((s) =>
-    s.activeTab === 7 ? s.tabData[7]?.text2imgConfigs?.[image.id] : undefined
-  );
 
   // Direct DOM mutation to block card drag when mouse is in the thumbnail strip.
   // State-based approach is unreliable: browser fires onMouseLeave before dragstart,
@@ -75,13 +119,19 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, hi
   const showMaskUI = tabMaskMode !== 'none';
   const currentMaskOutputIndex = tabMaskMode === 'B' ? selectedOutputIdx : -1;
   const currentMaskKey = maskKey(image.id, currentMaskOutputIndex);
-  const hasMask = useMaskStore((s) => !!s.masks[currentMaskKey]);
-  const deleteMask = useMaskStore((s) => s.deleteMask);
-  const openEditor = useMaskStore((s) => s.openEditor);
-  const maskEntryForMode = useMaskStore((s) => s.masks[maskKey(image.id, -1)]);
-  const backPose         = useWorkflowStore((s) => s.tabData[s.activeTab]?.backPoseToggles?.[image.id] ?? false);
-  const toggleBackPose   = useWorkflowStore((s) => s.toggleBackPose);
-  const setDragging      = useDragStore((s) => s.setDragging);
+
+  // Mask store subscriptions (consolidated)
+  const maskState = useMaskStore(
+    useShallow((s) => ({
+      hasMask: !!s.masks[currentMaskKey],
+      deleteMask: s.deleteMask,
+      openEditor: s.openEditor,
+      maskEntryForMode: s.masks[maskKey(image.id, -1)],
+    }))
+  );
+  const { hasMask, deleteMask, openEditor, maskEntryForMode } = maskState;
+
+  const setDragging = useDragStore((s) => s.setDragging);
   const reversePromptModel = useSettingsStore((s) => s.reversePromptModel);
 
   const [maskMenuOpen, setMaskMenuOpen] = useState(false);
@@ -91,7 +141,6 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, hi
   const [quickActionLoading, setQuickActionLoading] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const promptValue = prompts[image.id] || '';
   useEffect(() => {
     const t = textareaRef.current;
     if (!t) return;
@@ -168,12 +217,37 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, hi
   const handleDragStart = useCallback((e: React.DragEvent) => {
     if (mouseDownFromInput.current) { e.preventDefault(); return; }
     cancelLongPress();
+
+    // Set internal drag data for in-app operations
     e.dataTransfer.setData('application/x-workflow-image', image.id);
-    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.effectAllowed = 'copyMove';
+
+    // Prepare file for external drag (e.g., to desktop)
+    // Determine which image to export: output if selected, otherwise input
+    const exportOutput = displayOutput && selectedOutputIdx >= 0;
+
+    try {
+      if (exportOutput) {
+        // For output images, use DownloadURL method (Chrome/Edge extension)
+        // Format: application/octet-stream:<filename>:<url>
+        const downloadUrl = `application/octet-stream:${encodeURIComponent(displayOutput.filename)}:${window.location.origin}${displayOutput.url}`;
+        e.dataTransfer.setData('DownloadURL', downloadUrl);
+      } else if (image.file) {
+        // For input images, directly add the File object (synchronous)
+        e.dataTransfer.items.add(image.file);
+      } else if (image.sessionUrl) {
+        // If only sessionUrl exists (restored from session), use DownloadURL method
+        const downloadUrl = `application/octet-stream:${encodeURIComponent(image.originalName)}:${window.location.origin}${image.sessionUrl}`;
+        e.dataTransfer.setData('DownloadURL', downloadUrl);
+      }
+    } catch (err) {
+      console.warn('[DragExport] Failed to prepare file for external drag:', err);
+    }
+
     document.body.classList.add('is-dragging-card');
     setDragging({ type: 'card', imageId: image.id });
     setIsDragging(true);
-  }, [image.id, cancelLongPress, setDragging]);
+  }, [image.id, image.file, image.sessionUrl, image.originalName, displayOutput, selectedOutputIdx, cancelLongPress, setDragging]);
 
   const handleDragEnd = useCallback(() => {
     document.body.classList.remove('is-dragging-card');
@@ -226,7 +300,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, hi
       formData.append('image',    image.file);
       formData.append('mask',     maskBlob, 'mask.png');
       formData.append('clientId', clientId);
-      formData.append('prompt',   prompts[image.id] || '');
+      formData.append('prompt',   promptValue);
       formData.append('backPose', String(backPose));
 
       try {
@@ -248,7 +322,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, hi
     const formData = new FormData();
     formData.append('image',    image.file);
     formData.append('clientId', clientId);
-    formData.append('prompt',   prompts[image.id] || '');
+    formData.append('prompt',   promptValue);
 
     // Tab 0: pass selected draw model (qwen / klein) from persisted settings
     if (activeTab === 0) {
@@ -282,7 +356,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, hi
     } catch (err) {
       console.error('Execute error:', err);
     }
-  }, [clientId, image, activeTab, prompts, startTask, sendMessage, maskEntryForMode, backPose, maskEntryToBlob, sessionId]);
+  }, [clientId, image, activeTab, promptValue, startTask, sendMessage, maskEntryForMode, backPose, maskEntryToBlob, sessionId]);
   const openMaskEditor = useCallback(() => {
     if (tabMaskMode === 'none') return;
 
@@ -345,7 +419,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, hi
   }, [selectedOutputIdx, displayOutput, image, reversePromptModel]);
 
   const handleQuickAction = useCallback(async (mode: 'naturalToTags' | 'tagsToNatural' | 'detailer') => {
-    const text = prompts[image.id] || '';
+    const text = promptValue;
     if (!text.trim()) return;
     setQuickActionLoading(mode);
     try {
@@ -366,7 +440,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, hi
     } finally {
       setQuickActionLoading(null);
     }
-  }, [prompts, image.id, setPrompt]);
+  }, [promptValue, image.id, setPrompt]);
 
   return (
     <div
@@ -389,12 +463,14 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, hi
         opacity: isDragging ? 0.5 : 1,
         cursor: isDragging ? 'grabbing' : 'default',
         transform: isCardHovered && !isDragging ? 'translateY(-3px)' : 'none',
-        transition: 'opacity 0.15s, box-shadow 0.2s ease, transform 0.2s ease',
-        boxShadow: isSelected
-          ? '0 0 0 2px var(--color-primary)'
+        transition: 'opacity 0.15s, transform 0.2s ease, outline-color 0.2s ease',
+        outline: isSelected
+          ? '2px solid var(--color-primary)'
           : isCardHovered && !isDragging
-            ? '0 8px 24px rgba(0,0,0,0.2)'
-            : 'none',
+            ? '2px solid rgba(99, 102, 241, 0.5)'
+            : '2px solid transparent',
+        outlineOffset: -1,
+        willChange: 'transform',
         userSelect: 'none',
       }}
     >
@@ -433,6 +509,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, hi
           <img
             src={displayOutput.url}
             alt="Output"
+            loading="lazy"
             draggable={false}
             style={{ width: '100%', display: 'block' }}
             onDoubleClick={(e) => { e.stopPropagation(); openMaskEditor(); }}
@@ -441,6 +518,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, hi
           <img
             src={image.previewUrl}
             alt={image.originalName}
+            loading="lazy"
             draggable={false}
             style={{ width: '100%', display: 'block' }}
             onDoubleClick={(e) => {
@@ -478,6 +556,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, hi
             <img
               src={displayOutput.url}
               alt="Output"
+              loading="lazy"
               draggable={false}
               style={{
                 position: 'absolute',
@@ -732,8 +811,8 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, hi
           />
         )}
 
-        {/* Reverse-prompt button — top-right of card, visible on card hover, hidden in multi-select */}
-        {!isVideoWorkflow && !isMultiSelectMode && (isCardHovered || isReversingPrompt) && (
+        {/* Reverse-prompt button — top-right of card, visible on card hover, hidden in multi-select or processing */}
+        {!isVideoWorkflow && !isMultiSelectMode && !isProcessing && (isCardHovered || isReversingPrompt) && (
           <div
             onClick={(e) => { e.stopPropagation(); if (!isReversingPrompt) handleReversePrompt(); }}
             title="反推提示词"
@@ -780,7 +859,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, hi
               <textarea
                 ref={textareaRef}
                 placeholder={activeTab === 5 ? "留空使用默认提示词" : activeTab === 3 ? "输入提示词（留空使用默认）" : "额外提示词（可选）"}
-                value={prompts[image.id] || ''}
+                value={promptValue}
                 onChange={(e) => setPrompt(image.id, e.target.value)}
                 disabled={isProcessing}
                 readOnly={quickActionLoading !== null}
@@ -909,7 +988,7 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, hi
                   onClick={(e) => {
                     e.stopPropagation();
                     usePromptAssistantStore.getState().openPanel({
-                      initialText: prompts[image.id] || '',
+                      initialText: promptValue,
                     });
                   }}
                   title="提示词助理"
@@ -997,4 +1076,4 @@ export function ImageCard({ image, isMultiSelectMode, isSelected, isFlashing, hi
       )}
     </div>
   );
-}
+}, arePropsEqual);

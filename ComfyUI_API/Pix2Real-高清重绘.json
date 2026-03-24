@@ -1,0 +1,446 @@
+{
+  "29": {
+    "inputs": {
+      "pixels": [
+        "174",
+        0
+      ],
+      "vae": [
+        "37",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAE编码"
+    }
+  },
+  "30": {
+    "inputs": {
+      "conditioning": [
+        "41",
+        0
+      ],
+      "latent": [
+        "29",
+        0
+      ]
+    },
+    "class_type": "ReferenceLatent",
+    "_meta": {
+      "title": "参考Latent"
+    }
+  },
+  "31": {
+    "inputs": {
+      "conditioning": [
+        "39",
+        0
+      ],
+      "latent": [
+        "29",
+        0
+      ]
+    },
+    "class_type": "ReferenceLatent",
+    "_meta": {
+      "title": "参考Latent"
+    }
+  },
+  "32": {
+    "inputs": {
+      "samples": [
+        "64",
+        0
+      ],
+      "vae": [
+        "37",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE解码"
+    }
+  },
+  "34": {
+    "inputs": {
+      "clip_name": "qwen_3_8b_fp8mixed.safetensors",
+      "type": "flux2",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "加载CLIP"
+    }
+  },
+  "35": {
+    "inputs": {
+      "rgthree_comparer": {
+        "images": [
+          {
+            "name": "A",
+            "selected": true,
+            "url": "/api/view?filename=rgthree.compare._temp_ajoly_00009_.png&type=temp&subfolder=&rand=0.6018418339572569"
+          },
+          {
+            "name": "B",
+            "selected": true,
+            "url": "/api/view?filename=rgthree.compare._temp_ajoly_00010_.png&type=temp&subfolder=&rand=0.21039269828089324"
+          }
+        ]
+      },
+      "image_a": [
+        "46",
+        0
+      ],
+      "image_b": [
+        "306",
+        0
+      ]
+    },
+    "class_type": "Image Comparer (rgthree)",
+    "_meta": {
+      "title": "图像对比"
+    }
+  },
+  "37": {
+    "inputs": {
+      "vae_name": "flux2-vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "加载VAE"
+    }
+  },
+  "38": {
+    "inputs": {
+      "image": [
+        "174",
+        0
+      ]
+    },
+    "class_type": "GetImageSize",
+    "_meta": {
+      "title": "获取图像尺寸"
+    }
+  },
+  "39": {
+    "inputs": {
+      "conditioning": [
+        "41",
+        0
+      ]
+    },
+    "class_type": "ConditioningZeroOut",
+    "_meta": {
+      "title": "条件零化"
+    }
+  },
+  "41": {
+    "inputs": {
+      "text": [
+        "302",
+        0
+      ],
+      "clip": [
+        "34",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP文本编码"
+    }
+  },
+  "43": {
+    "inputs": {
+      "unet_name": "flux-2-klein\\flux-2-klein-9b-fp8.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "UNet加载器"
+    }
+  },
+  "44": {
+    "inputs": {
+      "filename_prefix": "Comfy",
+      "images": [
+        "306",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "保存图像"
+    }
+  },
+  "46": {
+    "inputs": {
+      "image": "129041698_p9.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像"
+    }
+  },
+  "49": {
+    "inputs": {
+      "lora_name": "flux-2-klein\\F2K_9b-realistic.safetensors",
+      "strength_model": 0.6,
+      "model": [
+        "43",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoRA加载器（仅模型）"
+    }
+  },
+  "58": {
+    "inputs": {
+      "width": [
+        "38",
+        0
+      ],
+      "height": [
+        "38",
+        1
+      ],
+      "batch_size": 1
+    },
+    "class_type": "EmptyFlux2LatentImage",
+    "_meta": {
+      "title": "空Latent图像（Flux2）"
+    }
+  },
+  "64": {
+    "inputs": {
+      "purge_cache": true,
+      "purge_models": true,
+      "anything": [
+        "372",
+        0
+      ]
+    },
+    "class_type": "LayerUtility: PurgeVRAM V2",
+    "_meta": {
+      "title": "图层工具：清除VRAM V2"
+    }
+  },
+  "65": {
+    "inputs": {
+      "method": "mkl",
+      "strength": 0.6,
+      "multithread": true,
+      "image_ref": [
+        "174",
+        0
+      ],
+      "image_target": [
+        "32",
+        0
+      ]
+    },
+    "class_type": "ColorMatch",
+    "_meta": {
+      "title": "图像调色"
+    }
+  },
+  "174": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "megapixels": 1.5,
+      "resolution_steps": 1,
+      "image": [
+        "46",
+        0
+      ]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {
+      "title": "缩放图像（像素）"
+    }
+  },
+  "302": {
+    "inputs": {
+      "separator": "",
+      "text1": [
+        "304",
+        0
+      ],
+      "text2": [
+        "303",
+        0
+      ]
+    },
+    "class_type": "CR Text Concatenate",
+    "_meta": {
+      "title": "文本联结"
+    }
+  },
+  "303": {
+    "inputs": {
+      "model": "wd-vit-tagger-v3",
+      "threshold": 0.35,
+      "character_threshold": 0.85,
+      "replace_underscore": false,
+      "trailing_comma": false,
+      "exclude_tags": "",
+      "image": [
+        "46",
+        0
+      ]
+    },
+    "class_type": "WD14Tagger|pysssss",
+    "_meta": {
+      "title": "WD14反推提示词"
+    }
+  },
+  "304": {
+    "inputs": {
+      "prompt": "realistic, 将画面变为真实的照片，将动漫角色真人化，补充细节，修复画面。超高清，极致细节，高对比度，清晰的光影细节，保持画面色调不变，8K画质。亚洲人。"
+    },
+    "class_type": "CR Prompt Text",
+    "_meta": {
+      "title": "补充提示词（可不填）"
+    }
+  },
+  "306": {
+    "inputs": {
+      "width": [
+        "38",
+        0
+      ],
+      "height": [
+        "38",
+        1
+      ],
+      "upscale_method": "lanczos",
+      "keep_proportion": "pad_edge_pixel",
+      "pad_color": "0, 0, 0",
+      "crop_position": "center",
+      "divisible_by": 2,
+      "device": "cpu",
+      "image": [
+        "65",
+        0
+      ]
+    },
+    "class_type": "ImageResizeKJv2",
+    "_meta": {
+      "title": "图像缩放KJ v2"
+    }
+  },
+  "365": {
+    "inputs": {
+      "steps": 5,
+      "width": [
+        "38",
+        0
+      ],
+      "height": [
+        "38",
+        1
+      ]
+    },
+    "class_type": "Flux2Scheduler",
+    "_meta": {
+      "title": "Flux2调度器"
+    }
+  },
+  "367": {
+    "inputs": {
+      "noise_seed": [
+        "370",
+        0
+      ]
+    },
+    "class_type": "RandomNoise",
+    "_meta": {
+      "title": "随机噪波"
+    }
+  },
+  "370": {
+    "inputs": {
+      "seed": -1
+    },
+    "class_type": "Seed (rgthree)",
+    "_meta": {
+      "title": "随机种子"
+    }
+  },
+  "372": {
+    "inputs": {
+      "noise": [
+        "367",
+        0
+      ],
+      "guider": [
+        "373",
+        0
+      ],
+      "sampler": [
+        "374",
+        0
+      ],
+      "sigmas": [
+        "365",
+        0
+      ],
+      "latent_image": [
+        "58",
+        0
+      ]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {
+      "title": "自定义采样器（高级）"
+    }
+  },
+  "373": {
+    "inputs": {
+      "cfg": 1,
+      "model": [
+        "49",
+        0
+      ],
+      "positive": [
+        "30",
+        0
+      ],
+      "negative": [
+        "31",
+        0
+      ]
+    },
+    "class_type": "CFGGuider",
+    "_meta": {
+      "title": "CFG引导器"
+    }
+  },
+  "374": {
+    "inputs": {
+      "sampler_name": "euler"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": {
+      "title": "K采样器选择"
+    }
+  },
+  "419": {
+    "inputs": {
+      "text_0": "realistic, 将画面变为真实的照片，将动漫角色真人化，补充细节，修复画面。超高清，极致细节，高对比度，清晰的光影细节，保持画面色调不变，8K画质。亚洲人。1girl, long_hair, breasts, looking_at_viewer, blush, simple_background, shirt, large_breasts, skirt, blonde_hair, hair_ornament, white_background, 1boy, ribbon, closed_mouth, very_long_hair, twintails, school_uniform, white_shirt, yellow_eyes, ahoge, hair_ribbon, short_sleeves, hetero, nude, pleated_skirt, censored, penis, choker, solo_focus, serafuku, black_skirt, sailor_collar, mosaic_censoring, covered_nipples, neckerchief, fake_animal_ears, black_choker, pov, headphones, drill_hair, dark-skinned_male, twin_drills, paizuri, clothed_female_nude_male, breasts_squeezed_together, yellow_neckerchief, pov_crotch, paizuri_under_clothes",
+      "text": [
+        "302",
+        0
+      ]
+    },
+    "class_type": "ShowText|pysssss",
+    "_meta": {
+      "title": "展示文本"
+    }
+  }
+}

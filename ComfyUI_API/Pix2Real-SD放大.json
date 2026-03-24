@@ -1,0 +1,229 @@
+{
+  "39": {
+    "inputs": {
+      "clip_name": "qwen_3_4b.safetensors",
+      "type": "lumina2",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "加载CLIP"
+    }
+  },
+  "40": {
+    "inputs": {
+      "vae_name": "ae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "加载VAE"
+    }
+  },
+  "42": {
+    "inputs": {
+      "conditioning": [
+        "45",
+        0
+      ]
+    },
+    "class_type": "ConditioningZeroOut",
+    "_meta": {
+      "title": "条件零化"
+    }
+  },
+  "45": {
+    "inputs": {
+      "text": "19岁韩国美女，韩式网红风格，精致妆容，极致冷白皮，overexposure，浅粉色唇釉带着光泽，通体雪白如瓷器凝脂，细腻毛孔与真实绒毛清晰可见，有着Z-CUP超乳，胸部巨大到几乎人类的极限，胸部下垂严重，蓝色横条三角比基尼泳衣，泳池派对\n\n\n",
+      "clip": [
+        "39",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP文本编码"
+    }
+  },
+  "46": {
+    "inputs": {
+      "unet_name": "z_image\\Z-image-ZiT-moodyPornMix_zitV7-fp8.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "UNet加载器"
+    }
+  },
+  "47": {
+    "inputs": {
+      "shift": 3,
+      "model": [
+        "46",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingAuraFlow",
+    "_meta": {
+      "title": "采样算法（AuraFlow）"
+    }
+  },
+  "170": {
+    "inputs": {
+      "upscale_by": [
+        "175",
+        0
+      ],
+      "seed": 677826103351451,
+      "steps": 2,
+      "cfg": 1,
+      "sampler_name": "res_multistep",
+      "scheduler": "simple",
+      "denoise": 0.15,
+      "mode_type": "Linear",
+      "tile_width": [
+        "176",
+        0
+      ],
+      "tile_height": [
+        "172",
+        0
+      ],
+      "mask_blur": 16,
+      "tile_padding": 32,
+      "seam_fix_mode": "None",
+      "seam_fix_denoise": 1,
+      "seam_fix_width": 64,
+      "seam_fix_mask_blur": 8,
+      "seam_fix_padding": 16,
+      "force_uniform_tiles": true,
+      "tiled_decode": false,
+      "image": [
+        "483",
+        0
+      ],
+      "model": [
+        "47",
+        0
+      ],
+      "positive": [
+        "45",
+        0
+      ],
+      "negative": [
+        "42",
+        0
+      ],
+      "vae": [
+        "40",
+        0
+      ],
+      "upscale_model": [
+        "171",
+        0
+      ]
+    },
+    "class_type": "UltimateSDUpscale",
+    "_meta": {
+      "title": "SD放大"
+    }
+  },
+  "171": {
+    "inputs": {
+      "model_name": "4x-UltraSharp.pth"
+    },
+    "class_type": "UpscaleModelLoader",
+    "_meta": {
+      "title": "加载放大模型"
+    }
+  },
+  "172": {
+    "inputs": {
+      "value": "(a*b + (32 * 2))/2",
+      "a": [
+        "450",
+        1
+      ],
+      "b": [
+        "175",
+        0
+      ]
+    },
+    "class_type": "SimpleMath+",
+    "_meta": {
+      "title": "Calculate optimized height"
+    }
+  },
+  "175": {
+    "inputs": {
+      "value": 2
+    },
+    "class_type": "FloatConstant",
+    "_meta": {
+      "title": "Upscale Factor"
+    }
+  },
+  "176": {
+    "inputs": {
+      "value": "(a*b + (32 * 2))/2",
+      "a": [
+        "450",
+        0
+      ],
+      "b": [
+        "175",
+        0
+      ]
+    },
+    "class_type": "SimpleMath+",
+    "_meta": {
+      "title": "Calculate optimized width"
+    }
+  },
+  "450": {
+    "inputs": {
+      "image": [
+        "483",
+        0
+      ]
+    },
+    "class_type": "GetImageSize",
+    "_meta": {
+      "title": "获取图像尺寸"
+    }
+  },
+  "471": {
+    "inputs": {
+      "filename_prefix": "Pix2Real_",
+      "images": [
+        "484",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "保存图像"
+    }
+  },
+  "483": {
+    "inputs": {
+      "image": "#234 è§¦æéå°_124484984 (4).png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像"
+    }
+  },
+  "484": {
+    "inputs": {
+      "quality": 90,
+      "image": [
+        "170",
+        0
+      ]
+    },
+    "class_type": "KOOK_ImageCompression",
+    "_meta": {
+      "title": "高质量图片压缩"
+    }
+  }
+}

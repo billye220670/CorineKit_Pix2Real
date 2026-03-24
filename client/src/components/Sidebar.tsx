@@ -9,9 +9,11 @@ import {
 } from 'lucide-react';
 
 const GROUPS: { label: string; ids: number[] }[] = [
-  { label: '图像处理', ids: [0, 1, 2, 5, 6, 8] },
-  // { label: '视频处理', ids: [3, 4] },  // 暂时屏蔽
   { label: '图像生成', ids: [7, 9] },
+  { label: '图像处理', ids: [2] },
+  { label: '风格转换', ids: [0, 6] },
+  { label: '区域重绘', ids: [1, 5, 8] },
+  // { label: '视频处理', ids: [3, 4] },  // 暂时屏蔽
 ];
 
 const WORKFLOW_ICONS: Record<number, LucideIcon> = {
@@ -124,6 +126,9 @@ export function Sidebar() {
   const handleDrop = useCallback(async (e: React.DragEvent, targetTab: number) => {
     e.preventDefault();
     setDragOverTab(null);
+
+    // Clean up dragging cursor state - handleDragEnd may not fire when dropping on sidebar
+    document.body.classList.remove('is-dragging-card');
 
     // Tab 7 is text-to-image only; it does not accept image drops
     if (targetTab === 7) return;
