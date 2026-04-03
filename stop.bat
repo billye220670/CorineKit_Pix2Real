@@ -26,8 +26,17 @@ for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":5173 " ^| findstr "L
 )
 if "%killed2%"=="0" echo     No client found on port 5173
 
+set "killed3=0"
+echo Checking port 8188 (ComfyUI)...
+for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":8188 " ^| findstr "LISTENING"') do (
+    taskkill /F /PID %%a >nul 2>&1
+    echo [ok] Killed PID %%a (ComfyUI)
+    set "killed3=1"
+)
+if "%killed3%"=="0" echo     No ComfyUI found on port 8188
+
 echo.
-if "%killed%%killed2%"=="00" (
+if "%killed%%killed2%%killed3%"=="000" (
     echo No services were running.
 ) else (
     echo All services stopped.

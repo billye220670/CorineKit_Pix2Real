@@ -108,15 +108,18 @@ img {
   animation: card-flash 0.35s ease-in-out 4;
 }
 
-@keyframes card-ai-glow {
-  0%   { box-shadow: 0 0 0 2px #6366f1, 0 0 14px 4px rgba(99,102,241,0.55); }
-  33%  { box-shadow: 0 0 0 2px #a855f7, 0 0 20px 8px rgba(168,85,247,0.60); }
-  66%  { box-shadow: 0 0 0 2px #06b6d4, 0 0 20px 8px rgba(6,182,212,0.60); }
-  100% { box-shadow: 0 0 0 2px #6366f1, 0 0 14px 4px rgba(99,102,241,0.55); }
+/* card-ai-glow: Use outline animation instead of expensive box-shadow animation.
+ * Outline animates on GPU and does not trigger layout/paint like box-shadow. */
+@keyframes card-ai-glow-border {
+  0%, 100% { outline-color: #6366f1; }
+  33%      { outline-color: #a855f7; }
+  66%      { outline-color: #06b6d4; }
 }
 
 .card-ai-glow {
-  animation: card-ai-glow 2s ease-in-out infinite !important;
+  outline: 2.5px solid #6366f1 !important;
+  outline-offset: -1px !important;
+  animation: card-ai-glow-border 2s ease-in-out infinite !important;
 }
 
 .no-scrollbar::-webkit-scrollbar { display: none; }
@@ -212,4 +215,10 @@ input[type=number].no-spin::-webkit-outer-spin-button {
 }
 input[type=number].no-spin {
   -moz-appearance: textfield;
+}
+
+/* LazyCard fade-in animation (GPU accelerated: only opacity + transform) */
+@keyframes lazyCardFadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
