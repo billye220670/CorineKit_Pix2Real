@@ -3,6 +3,8 @@
 
 export interface Text2ImgConfig {
   model: string;
+  loraModel: string;
+  loraEnabled: boolean;
   prompt: string;
   width: number;
   height: number;

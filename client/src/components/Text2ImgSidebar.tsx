@@ -4,6 +4,7 @@ import { usePromptAssistantStore } from '../hooks/usePromptAssistantStore.js';
 import { useWebSocket } from '../hooks/useWebSocket.js';
 import { ChevronRight, ChevronDown, Loader, BookText, Hash, AlignLeft, Wand2, Loader2 } from 'lucide-react';
 import { SYSTEM_PROMPTS } from './prompt-assistant/systemPrompts.js';
+import { ModelSelect, useModelFavorites } from './ModelSelect.js';
 
 const RATIO_PRESETS = [
   { label: '1:1',  width: 1024, height: 1024 },
@@ -44,6 +45,23 @@ export function Text2ImgSidebar() {
   const [models, setModels] = useState<string[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
 
+  // Model favorites
+  const { favorites: checkpointFavorites, toggleFavorite: toggleCheckpointFavorite } = useModelFavorites('checkpoints');
+  const { favorites: loraFavorites, toggleFavorite: toggleLoraFavorite } = useModelFavorites('loras');
+
+  // LoRA model list
+  const [loraModels, setLoraModels] = useState<string[]>([]);
+  const [loraListLoading, setLoraListLoading] = useState(false);
+
+  useEffect(() => {
+    setLoraListLoading(true);
+    fetch('/api/workflow/models/loras')
+      .then((r) => r.json())
+      .then((data: string[]) => setLoraModels(data))
+      .catch(() => {})
+      .finally(() => setLoraListLoading(false));
+  }, []);
+
   useEffect(() => {
     setModelsLoading(true);
     fetch('/api/workflow/models/checkpoints')
@@ -55,6 +73,8 @@ export function Text2ImgSidebar() {
 
   // Config state — initialised from localStorage draft so tab switches don't reset values
   const [model,      setModel]      = useState(() => readDraft().model     ?? '');
+  const [loraModel,  setLoraModel]  = useState(() => readDraft().loraModel ?? '');
+  const [loraEnabled, setLoraEnabled] = useState(() => readDraft().loraEnabled ?? false);
   const [prompt,     setPrompt]     = useState(() => readDraft().prompt    ?? '');
   const [ratio,      setRatio]      = useState(() => readDraft().ratio     ?? '3:4');
   const [steps,      setSteps]      = useState(() => readDraft().steps     ?? 30);
@@ -71,15 +91,25 @@ export function Text2ImgSidebar() {
 
   // Persist config to localStorage whenever it changes
   useEffect(() => {
-    localStorage.setItem(DRAFT_KEY, JSON.stringify({ model, prompt, ratio, steps, cfg, sampler, scheduler, customName }));
-  }, [model, prompt, ratio, steps, cfg, sampler, scheduler, customName]);
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({ model, loraModel, loraEnabled, prompt, ratio, steps, cfg, sampler, scheduler, customName }));
+  }, [model, loraModel, loraEnabled, prompt, ratio, steps, cfg, sampler, scheduler, customName]);
 
-  // Default model once loaded (only if none was saved)
+  // Default model once loaded (only if none was saved or saved model not in list)
   useEffect(() => {
-    if (models.length > 0 && !model) {
-      setModel(models[0]);
+    if (models.length > 0) {
+      if (!model || !models.includes(model)) {
+        setModel(models[0]);
+      }
     }
   }, [models, model]);
+
+  useEffect(() => {
+    if (loraModels.length > 0) {
+      if (!loraModel || !loraModels.includes(loraModel)) {
+        setLoraModel(loraModels[0]);
+      }
+    }
+  }, [loraModels, loraModel]);
 
   const selectedPreset = RATIO_PRESETS.find((p) => p.label === ratio) ?? RATIO_PRESETS[1];
 
@@ -88,6 +118,8 @@ export function Text2ImgSidebar() {
 
     const config: Text2ImgConfig = {
       model: model || (models[0] ?? ''),
+      loraModel: loraModel || (loraModels[0] ?? ''),
+      loraEnabled,
       prompt,
       width:     selectedPreset.width,
       height:    selectedPreset.height,
@@ -209,32 +241,59 @@ export function Text2ImgSidebar() {
         {/* Model */}
         <div>
           <div style={label}>模型</div>
-          {modelsLoading ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-text-secondary)', fontSize: '12px' }}>
-              <Loader size={12} style={{ animation: 'pulse 1.5s ease-in-out infinite' }} />
-              加载中…
+          <ModelSelect
+            models={models}
+            value={model}
+            onChange={setModel}
+            favorites={checkpointFavorites}
+            onToggleFavorite={toggleCheckpointFavorite}
+            loading={modelsLoading}
+            placeholder="（无可用模型）"
+          />
+        </div>
+
+        {/* LoRA collapsible section */}
+        <div>
+          <button
+            onClick={() => setLoraEnabled((v: boolean) => !v)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              cursor: 'pointer',
+              color: 'var(--color-text-secondary)',
+              fontSize: '11px',
+              fontWeight: 600,
+              letterSpacing: '0.04em',
+              marginBottom: loraEnabled ? 10 : 0,
+            }}
+          >
+            {loraEnabled ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+            <input
+              type="checkbox"
+              checked={loraEnabled}
+              onChange={() => {}}
+              onClick={(e) => e.stopPropagation()}
+              style={{ margin: '0 2px', cursor: 'pointer', accentColor: 'var(--color-primary)' }}
+            />
+            启用 LoRA
+          </button>
+
+          {loraEnabled && (
+            <div>
+              <ModelSelect
+                models={loraModels}
+                value={loraModel}
+                onChange={setLoraModel}
+                favorites={loraFavorites}
+                onToggleFavorite={toggleLoraFavorite}
+                loading={loraListLoading}
+                placeholder="（无可用 LoRA）"
+              />
             </div>
-          ) : (
-            <select
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '6px 8px',
-                border: '1px solid var(--color-border)',
-                borderRadius: 6,
-                backgroundColor: 'var(--color-bg)',
-                color: 'var(--color-text)',
-                fontSize: '12px',
-                outline: 'none',
-                fontFamily: 'inherit',
-              }}
-            >
-              {models.length === 0 && <option value="">（无可用模型）</option>}
-              {models.map((m) => (
-                <option key={m} value={m}>{m.split('\\').pop()?.replace(/\.[^.]+$/, '') ?? m}</option>
-              ))}
-            </select>
           )}
         </div>
 

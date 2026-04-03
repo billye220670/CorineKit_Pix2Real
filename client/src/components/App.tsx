@@ -21,6 +21,7 @@ import { SettingsModal } from './SettingsModal.js';
 import { PromptAssistantPanel } from './PromptAssistantPanel.js';
 import { WelcomePage } from './WelcomePage.js';
 import { useSettingsStore } from '../hooks/useSettingsStore.js';
+import { StartupOverlay } from './StartupOverlay.js';
 
 function isImageOrVideo(file: File): boolean {
   return file.type.startsWith('image/') || file.type.startsWith('video/');
@@ -141,6 +142,8 @@ export function App() {
       overflow: 'hidden',
       backgroundColor: 'var(--color-bg)',
     }}>
+      <StartupOverlay />
+      
       {/* Header */}
       <header style={{
         display: 'flex',

@@ -4,6 +4,7 @@ import { usePromptAssistantStore } from '../hooks/usePromptAssistantStore.js';
 import { useWebSocket } from '../hooks/useWebSocket.js';
 import { ChevronRight, ChevronDown, Loader, BookText, Hash, AlignLeft, Wand2, Loader2 } from 'lucide-react';
 import { SYSTEM_PROMPTS } from './prompt-assistant/systemPrompts.js';
+import { ModelSelect, useModelFavorites } from './ModelSelect.js';
 
 const RATIO_PRESETS = [
   { label: '1:1',  width: 1024, height: 1024 },
@@ -57,6 +58,10 @@ export function ZITSidebar() {
   const [loraModels, setLoraModels]         = useState<string[]>([]);
   const [loraListLoading, setLoraListLoading] = useState(false);
 
+  // Model favorites
+  const { favorites: unetFavorites, toggleFavorite: toggleUnetFavorite } = useModelFavorites('unets');
+  const { favorites: loraFavorites, toggleFavorite: toggleLoraFavorite } = useModelFavorites('loras');
+
   useEffect(() => {
     setLoraListLoading(true);
     fetch('/api/workflow/models/loras')
@@ -93,13 +98,21 @@ export function ZITSidebar() {
     }));
   }, [unetModel, loraModel, loraEnabled, shiftEnabled, shift, prompt, ratio, steps, cfg, sampler, scheduler, customName]);
 
-  // Default model once loaded
+  // Default model once loaded (or fallback if saved model not in list)
   useEffect(() => {
-    if (unetModels.length > 0 && !unetModel) setUnetModel(unetModels[0]);
+    if (unetModels.length > 0) {
+      if (!unetModel || !unetModels.includes(unetModel)) {
+        setUnetModel(unetModels[0]);
+      }
+    }
   }, [unetModels, unetModel]);
 
   useEffect(() => {
-    if (loraModels.length > 0 && !loraModel) setLoraModel(loraModels[0]);
+    if (loraModels.length > 0) {
+      if (!loraModel || !loraModels.includes(loraModel)) {
+        setLoraModel(loraModels[0]);
+      }
+    }
   }, [loraModels, loraModel]);
 
   const selectedPreset = RATIO_PRESETS.find((p) => p.label === ratio) ?? RATIO_PRESETS[1];
@@ -200,18 +213,6 @@ export function ZITSidebar() {
     marginBottom: 6,
   };
 
-  const selectStyle: React.CSSProperties = {
-    width: '100%',
-    padding: '6px 8px',
-    border: '1px solid var(--color-border)',
-    borderRadius: 6,
-    backgroundColor: 'var(--color-bg)',
-    color: 'var(--color-text)',
-    fontSize: '12px',
-    outline: 'none',
-    fontFamily: 'inherit',
-  };
-
   const sliderRow = (name: string, value: number, min: number, max: number, step: number, setter: (v: number) => void) => (
     <div style={{ marginBottom: 10 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
@@ -245,25 +246,21 @@ export function ZITSidebar() {
         {/* UNet Model */}
         <div>
           <div style={label}>UNet 模型</div>
-          {unetLoading ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-text-secondary)', fontSize: '12px' }}>
-              <Loader size={12} style={{ animation: 'pulse 1.5s ease-in-out infinite' }} />
-              加载中…
-            </div>
-          ) : (
-            <select value={unetModel} onChange={(e) => setUnetModel(e.target.value)} style={selectStyle}>
-              {unetModels.length === 0 && <option value="">（无可用模型）</option>}
-              {unetModels.map((m) => (
-                <option key={m} value={m}>{m.split('\\').pop()?.replace(/\.[^.]+$/, '') ?? m}</option>
-              ))}
-            </select>
-          )}
+          <ModelSelect
+            models={unetModels}
+            value={unetModel}
+            onChange={setUnetModel}
+            favorites={unetFavorites}
+            onToggleFavorite={toggleUnetFavorite}
+            loading={unetLoading}
+            placeholder="（无可用模型）"
+          />
         </div>
 
         {/* LoRA collapsible section */}
         <div>
           <button
-            onClick={() => setLoraEnabled((v) => !v)}
+            onClick={() => setLoraEnabled((v: boolean) => !v)}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -292,19 +289,15 @@ export function ZITSidebar() {
 
           {loraEnabled && (
             <div>
-              {loraListLoading ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-text-secondary)', fontSize: '12px' }}>
-                  <Loader size={12} style={{ animation: 'pulse 1.5s ease-in-out infinite' }} />
-                  加载中…
-                </div>
-              ) : (
-                <select value={loraModel} onChange={(e) => setLoraModel(e.target.value)} style={selectStyle}>
-                  {loraModels.length === 0 && <option value="">（无可用 LoRA）</option>}
-                  {loraModels.map((m) => (
-                    <option key={m} value={m}>{m.split('\\').pop()?.replace(/\.[^.]+$/, '') ?? m}</option>
-                  ))}
-                </select>
-              )}
+              <ModelSelect
+                models={loraModels}
+                value={loraModel}
+                onChange={setLoraModel}
+                favorites={loraFavorites}
+                onToggleFavorite={toggleLoraFavorite}
+                loading={loraListLoading}
+                placeholder="（无可用 LoRA）"
+              />
             </div>
           )}
         </div>
@@ -528,7 +521,7 @@ export function ZITSidebar() {
               {/* Shift (AuraFlow) sub-section */}
               <div style={{ marginTop: 10 }}>
                 <button
-                  onClick={() => setShiftEnabled((v) => !v)}
+                  onClick={() => setShiftEnabled((v: boolean) => !v)}
                   style={{
                     display: 'flex',
                     alignItems: 'center',

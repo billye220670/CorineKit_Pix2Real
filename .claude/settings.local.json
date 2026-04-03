@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install)",
+      "Bash(npx tsc:*)",
+      "Bash(npx vite build)",
+      "Bash(gh auth:*)",
+      "Bash(gh:*)",
+      "Bash(file:*)",
+      "Bash(cd:*)",
+      "Bash(cd \"C:\\\\Users\\\\billy\\\\Documents\\\\GitRepos\\\\CorineKit_Pix2Real\\\\client\" && node_modules/.bin/tsc --noEmit 2>&1)",
+      "Skill(commit-commands:commit)",
+      "Bash(cd /c/Users/billy/Documents/GitRepos/CorineKit_Pix2Real/client && node_modules/.bin/tsc --noEmit 2>&1)",
+      "Bash(cat:*)",
+      "Bash(python3:*)",
+      "Bash(python --version 2>&1 || py --version 2>&1)",
+      "Bash(node:*)",
+      "Bash(printf %s:*)",
+      "Bash(printf %s\\\\n:*)",
+      "Bash(echo json not found yet:*)",
+      "Bash(set +H:*)",
+      "Bash(cd C:\\\\Users\\\\billy\\\\Documents\\\\GitRepos\\\\CorineKit_Pix2Real:*)",
+      "Bash(head:*)",
+      "Bash(cd /c/Users/billy/Documents/GitRepos/CorineKit_Pix2Real && npm run 2>&1)",
+      "Bash(cd /c/Users/billy/Documents/GitRepos/CorineKit_Pix2Real && server/node_modules/.bin/tsc --noEmit -p server/tsconfig.json 2>&1)",
+      "Bash(curl:*)",
+      "Skill(commit-commands:commit-push-pr)",
+      "Bash(ls:*)",
+      "Bash(client/node_modules/.bin/tsc:*)",
+      "Bash(npm run:*)",
+      "Bash(./node_modules/.bin/tsc --noEmit)"
+    ]
+  }
+}
