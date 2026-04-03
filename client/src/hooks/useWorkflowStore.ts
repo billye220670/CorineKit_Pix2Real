@@ -71,6 +71,7 @@ interface WorkflowStore {
   completeTask: (promptId: string, outputs: Array<{ filename: string; url: string }>) => void;
   failTask: (promptId: string, error: string) => void;
   resetTask: (imageId: string) => void;
+  removeImageByPromptId: (promptId: string) => void;
   removeOutput: (imageId: string, outputIndex: number) => void;
 
   // Text2Img card creation (Tab 7)
@@ -263,7 +264,8 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       const { [id]: _s, ...restSelectedOutputIndex } = prev.selectedOutputIndex;
       const { [id]: _b, ...restBackPoseToggles } = prev.backPoseToggles;
       const { [id]: _c, ...restText2ImgConfigs } = prev.text2imgConfigs;
-      const { [id]: _z, ...restFaceSwapZones } = prev.faceSwapZones;
+      const { [id]: _z, ...restZitConfigs } = prev.zitConfigs;
+      const { [id]: _fz, ...restFaceSwapZones } = prev.faceSwapZones;
       return {
         tabData: {
           ...state.tabData,
@@ -275,6 +277,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
             selectedOutputIndex: restSelectedOutputIndex,
             backPoseToggles: restBackPoseToggles,
             text2imgConfigs: restText2ImgConfigs,
+            zitConfigs: restZitConfigs,
             faceSwapZones: restFaceSwapZones,
           },
         },
@@ -511,6 +514,45 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
           [tab]: { ...prev, tasks: restTasks, imagePromptMap: restMap, selectedOutputIndex: restSelectedOutputIndex },
         },
       };
+    });
+  },
+
+  removeImageByPromptId: (promptId) => {
+    set((state) => {
+      const newTabData = { ...state.tabData };
+      for (const [tabKey, tabVal] of Object.entries(newTabData)) {
+        if (!tabVal) continue;
+        // 找到 imagePromptMap 中匹配 promptId 的 imageId
+        const imageId = Object.entries(tabVal.imagePromptMap || {}).find(
+          ([, pid]) => pid === promptId
+        )?.[0];
+        if (imageId) {
+          const img = tabVal.images.find((i) => i.id === imageId);
+          if (img) URL.revokeObjectURL(img.previewUrl);
+          const { [imageId]: _t, ...restTasks } = tabVal.tasks || {};
+          const { [imageId]: _m, ...restMap } = tabVal.imagePromptMap || {};
+          const { [imageId]: _s, ...restSelectedOutputIndex } = tabVal.selectedOutputIndex || {};
+          const { [imageId]: _b, ...restBackPoseToggles } = tabVal.backPoseToggles || {};
+          const { [imageId]: _tc, ...restText2ImgConfigs } = tabVal.text2imgConfigs || {};
+          const { [imageId]: _z, ...restZitConfigs } = tabVal.zitConfigs || {};
+          const { [imageId]: _fz, ...restFaceSwapZones } = tabVal.faceSwapZones || {};
+          const { [imageId]: _p, ...restPrompts } = tabVal.prompts || {};
+          newTabData[Number(tabKey)] = {
+            ...tabVal,
+            images: tabVal.images.filter((i) => i.id !== imageId),
+            prompts: restPrompts,
+            tasks: restTasks,
+            imagePromptMap: restMap,
+            selectedOutputIndex: restSelectedOutputIndex,
+            backPoseToggles: restBackPoseToggles,
+            text2imgConfigs: restText2ImgConfigs,
+            zitConfigs: restZitConfigs,
+            faceSwapZones: restFaceSwapZones,
+          };
+          break; // 一个 promptId 只对应一个卡片
+        }
+      }
+      return { tabData: newTabData };
     });
   },
 

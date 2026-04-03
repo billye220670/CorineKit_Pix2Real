@@ -83,7 +83,7 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
   );
 
   // Destructure for easier access
-  const { setPrompt, startTask, resetTask, setFlashingImage, setSelectedOutputIndex, toggleBackPose } = actions;
+  const { setPrompt, startTask, resetTask, removeImage, setFlashingImage, setSelectedOutputIndex, toggleBackPose } = actions;
   const { activeTab, workflows, clientId, sessionId } = globalState;
   const { promptValue, task, selectedOutputIdx, text2imgConfig, backPose } = cardData;
   const { sendMessage } = useWebSocket();
@@ -258,12 +258,12 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
     const promptId = task?.promptId;
     if (!promptId) return;
     try {
-    await fetch(`/api/workflow/cancel-queue/${promptId}`, { method: 'POST' });
+      await fetch(`/api/workflow/cancel-queue/${promptId}`, { method: 'POST' });
     } catch {
       // best-effort; reset UI regardless
     }
-    resetTask(image.id);
-  }, [task, image.id, resetTask]);
+    removeImage(image.id);
+  }, [task, image.id, removeImage]);
 
   const maskEntryToBlob = useCallback(async (entry: import('../hooks/useMaskStore.js').MaskEntry): Promise<Blob> => {
     const { data, workingWidth: w, workingHeight: h, originalWidth: ow, originalHeight: oh } = entry;

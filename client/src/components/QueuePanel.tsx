@@ -32,6 +32,7 @@ export function QueuePanel({ onClose, popupStyle, closing }: QueuePanelProps) {
   const setActiveTab = useWorkflowStore((s) => s.setActiveTab);
   const setFlashingImage = useWorkflowStore((s) => s.setFlashingImage);
   const remapTaskPromptIds = useWorkflowStore((s) => s.remapTaskPromptIds);
+  const removeImageByPromptId = useWorkflowStore((s) => s.removeImageByPromptId);
   const { sendMessage } = useWebSocket();
 
   const fetchQueue = useCallback(async () => {
@@ -117,8 +118,9 @@ export function QueuePanel({ onClose, popupStyle, closing }: QueuePanelProps) {
 
   const handleDelete = useCallback(async (promptId: string) => {
     await fetch(`/api/workflow/cancel-queue/${promptId}`, { method: 'POST' }).catch(() => {});
+    removeImageByPromptId(promptId);
     fetchQueue();
-  }, [fetchQueue]);
+  }, [fetchQueue, removeImageByPromptId]);
 
   const handleLocate = useCallback((row: QueueRow) => {
     if (row.tabId === null || row.imageId === null) return;
