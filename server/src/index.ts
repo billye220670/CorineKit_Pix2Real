@@ -10,6 +10,7 @@ import outputRouter from './routes/output.js';
 import sessionRouter from './routes/session.js';
 import { connectWebSocket, getHistory, getImageBuffer } from './services/comfyui.js';
 import { sessionsBase, saveOutputFile } from './services/sessionManager.js';
+import { ensureComfyUI, isComfyUIRunning } from './services/comfyuiLauncher.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const outputBase = path.resolve(__dirname, '../../output');
@@ -58,6 +59,16 @@ app.use('/api/session', sessionRouter);
 // Static serve output and sessions directories
 app.use('/output', express.static(outputBase));
 app.use('/api/session-files', express.static(sessionsBase));
+
+// ComfyUI 状态查询
+app.get('/api/comfyui/status', async (req, res) => {
+  try {
+    const running = await isComfyUIRunning();
+    res.json({ running });
+  } catch {
+    res.json({ running: false });
+  }
+});
 
 // WebSocket server
 const wss = new WebSocketServer({ server, path: '/ws' });
@@ -220,8 +231,21 @@ wss.on('connection', (clientWs) => {
 
 const PORT = process.env.PORT || 3000;
 
-server.listen(PORT, () => {
-  console.log(`[Server] Running on http://localhost:${PORT}`);
-  console.log(`[Server] WebSocket on ws://localhost:${PORT}/ws`);
-  console.log(`[Server] Output directory: ${outputBase}`);
-});
+// 启动服务器
+async function startServer() {
+  // 尝试自动启动 ComfyUI
+  try {
+    await ensureComfyUI();
+  } catch (err) {
+    console.error('[ComfyUI] ⚠️ 自动启动失败，请手动启动 ComfyUI 后继续使用');
+    console.error('[ComfyUI]', err instanceof Error ? err.message : err);
+  }
+
+  server.listen(PORT, () => {
+    console.log(`[Server] Running on http://localhost:${PORT}`);
+    console.log(`[Server] WebSocket on ws://localhost:${PORT}/ws`);
+    console.log(`[Server] Output directory: ${outputBase}`);
+  });
+}
+
+startServer();
