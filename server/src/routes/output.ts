@@ -17,6 +17,11 @@ const WORKFLOW_DIRS: Record<number, string> = {
   3: '3-快速生成视频',
   4: '4-视频放大',
   5: '5-解除装备',
+  6: '6-真人转二次元',
+  7: '7-快速出图',
+  8: '8-黑兽换脸',
+  9: '9-ZIT快出',
+  10: '10-区域编辑',
 };
 
 // GET /api/output/:workflowId - list output files

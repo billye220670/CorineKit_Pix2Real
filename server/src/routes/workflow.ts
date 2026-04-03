@@ -7,6 +7,7 @@ import multer from 'multer';
 import fetch from 'node-fetch';
 import { getAdapter, adapters } from '../adapters/index.js';
 import { workflow5Adapter } from '../adapters/Workflow5Adapter.js';
+import { workflow10Adapter } from '../adapters/Workflow10Adapter.js';
 import { uploadImage, uploadVideo, queuePrompt, deleteQueueItem, getSystemStats, getQueue, prioritizeQueueItem, getHistory, getImageBuffer, getCheckpointModels, getUnetModels, getLoraModels } from '../services/comfyui.js';
 import { sessionsBase } from '../services/sessionManager.js';
 
@@ -18,7 +19,7 @@ const promptAssistantTemplatePath = path.resolve(__dirname, '../../../ComfyUI_AP
 const faceSwapTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-换面.json');
 const kleinTemplatePath    = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-高清重绘.json');
 const sdUpscaleTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-SD放大.json');
-const zitTemplatePath      = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-ZIT文生图NEW.json');
+const zitTemplatePath      = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-ZIT文生图NEW2.json');
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -88,6 +89,58 @@ router.post('/5/execute', uploadFields, async (req, res) => {
     });
   } catch (err: any) {
     console.error('[Workflow 5 Execute Error]', err);
+    res.status(500).json({ error: err.message || 'Internal server error' });
+  }
+});
+
+// POST /api/workflow/10/execute — 区域编辑: requires both original image and mask
+router.post('/10/execute', uploadFields, async (req, res) => {
+  try {
+    const files = req.files as Record<string, Express.Multer.File[]> | undefined;
+    const imageFile = files?.['image']?.[0];
+    const maskFile  = files?.['mask']?.[0];
+
+    if (!imageFile) {
+      res.status(400).json({ error: 'No image file provided' });
+      return;
+    }
+    if (!maskFile) {
+      res.status(400).json({ error: 'No mask file provided' });
+      return;
+    }
+
+    const clientId = (req.query.clientId as string | undefined) || req.body.clientId;
+    if (!clientId) {
+      res.status(400).json({ error: 'clientId is required' });
+      return;
+    }
+
+    const backPose  = req.body.backPose === 'true';
+    const userPrompt: string = req.body.prompt || '';
+
+    // Upload both files to ComfyUI
+    const originalFilename = await uploadImage(imageFile.buffer, imageFile.originalname);
+    const maskFilename     = await uploadImage(maskFile.buffer,  maskFile.originalname);
+
+    // Patch template
+    const template = JSON.parse(fs.readFileSync(removeEquipTemplatePath, 'utf-8'));
+    template['313'].inputs.image   = originalFilename;
+    template['385'].inputs.image   = maskFilename;
+    template['389'].inputs.boolean = backPose;
+    template['315'].inputs.seed    = Math.floor(Math.random() * 1125899906842624);
+    // Prompt: always set, even if empty (区域编辑 specific behavior)
+    template['314'].inputs.text = userPrompt;
+
+    const result = await queuePrompt(template, clientId);
+
+    res.json({
+      promptId:     result.prompt_id,
+      clientId,
+      workflowId:   10,
+      workflowName: workflow10Adapter.name,
+    });
+  } catch (err: any) {
+    console.error('[Workflow 10 Execute Error]', err);
     res.status(500).json({ error: err.message || 'Internal server error' });
   }
 });
@@ -225,23 +278,17 @@ router.post('/9/execute', express.json(), async (req, res) => {
     if (prompt !== undefined) {
       template['5'].inputs.text = prompt;
     }
-    // Rewire model/clip based on loraEnabled + shiftEnabled
-    // Default chain: #25 → #36 → #45 → #4; clip: #36 → #5
+    // NEW2: #47(ifElse) 控制 shift 开关: true→#45(shift), false→#36(lora)
+    // KSampler #4 始终从 #47 取模型
+    template['47'].inputs.boolean = shiftEnabled;
+
     if (!loraEnabled) {
-      // Bypass LoRA: clip goes directly from #26, model skips #36
+      // 绕过 LoRA: clip 直接从 #26
       template['5'].inputs.clip = ['26', 0];
-      if (shiftEnabled) {
-        // #25 → #45 → #4 (shift active, lora skipped)
-        template['45'].inputs.model = ['25', 0];
-      } else {
-        // #25 → #4 (both lora and shift skipped)
-        template['4'].inputs.model = ['25', 0];
-      }
-    } else if (!shiftEnabled) {
-      // LoRA active, shift skipped: #25 → #36 → #4
-      template['4'].inputs.model = ['36', 0];
+      // 调整 #45 和 #47 的输入绕过 LoRA (#36)
+      template['45'].inputs.model = ['25', 0];
+      template['47'].inputs.on_false = ['25', 0];
     }
-    // (loraEnabled && shiftEnabled) = default chain, no rewiring needed
     // Node 24: output filename prefix
     if (name) {
       template['24'].inputs.filename_prefix = name;

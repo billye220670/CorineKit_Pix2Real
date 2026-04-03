@@ -1,14 +1,19 @@
-import { useState, useEffect, useRef } from 'react';
-import { ChevronDown, Star, Loader, Check } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { ChevronDown, Star, Loader, Check, ImagePlus, PencilLine } from 'lucide-react';
+import type { ModelMetadata } from '../hooks/useModelMetadata.js';
 
 interface ModelSelectProps {
-  models: string[];              // 模型列表（完整路径字符串）
-  value: string;                 // 当前选中值
+  models: string[];
+  value: string;
   onChange: (value: string) => void;
-  favorites: Set<string>;        // 收藏的模型集合
+  favorites: Set<string>;
   onToggleFavorite: (model: string) => void;
-  loading?: boolean;             // 加载中状态
+  loading?: boolean;
   placeholder?: string;
+  metadata?: Record<string, ModelMetadata>;
+  onUploadThumbnail?: (modelPath: string, file: File) => void;
+  onSetNickname?: (modelPath: string, nickname: string) => void;
+  getThumbnailUrl?: (modelPath: string) => string | null;
 }
 
 // 从完整路径提取显示名称（去路径去后缀）
@@ -24,10 +29,20 @@ export function ModelSelect({
   onToggleFavorite,
   loading = false,
   placeholder = '（无可用模型）',
+  metadata,
+  onUploadThumbnail,
+  onSetNickname,
+  getThumbnailUrl,
 }: ModelSelectProps) {
   const [open, setOpen] = useState(false);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadTargetModel, setUploadTargetModel] = useState<string | null>(null);
+  const [editingModel, setEditingModel] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const [tooltipModel, setTooltipModel] = useState<string | null>(null);
+  const [tooltipPos, setTooltipPos] = useState<{ top: number; left: number } | null>(null);
 
   // 点击外部关闭
   useEffect(() => {
@@ -35,17 +50,69 @@ export function ModelSelect({
     const handler = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setOpen(false);
+        setEditingModel(null);
       }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
+  // 关闭下拉时清理状态
+  useEffect(() => {
+    if (!open) {
+      setEditingModel(null);
+      setTooltipModel(null);
+      setTooltipPos(null);
+    }
+  }, [open]);
+
   // 分离收藏项和非收藏项
   const favoriteModels = models.filter((m) => favorites.has(m));
   const otherModels = models.filter((m) => !favorites.has(m));
 
-  const displayValue = value ? getDisplayName(value) : placeholder;
+  const getModelDisplayName = useCallback((model: string) => {
+    const nick = metadata?.[model]?.nickname;
+    return nick || getDisplayName(model);
+  }, [metadata]);
+
+  const displayValue = value ? getModelDisplayName(value) : placeholder;
+
+  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && uploadTargetModel && onUploadThumbnail) {
+      onUploadThumbnail(uploadTargetModel, file);
+    }
+    setUploadTargetModel(null);
+    // reset input so same file can be selected again
+    e.target.value = '';
+  }, [uploadTargetModel, onUploadThumbnail]);
+
+  const handleNicknameConfirm = useCallback((model: string, newName: string) => {
+    const trimmed = newName.trim();
+    if (trimmed && onSetNickname) {
+      onSetNickname(model, trimmed);
+    }
+    setEditingModel(null);
+  }, [onSetNickname]);
+
+  const handleItemMouseEnter = useCallback((model: string, e: React.MouseEvent<HTMLDivElement>, index: number) => {
+    setHoveredIndex(index);
+    const thumbUrl = getThumbnailUrl?.(model);
+    if (thumbUrl) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      setTooltipModel(model);
+      setTooltipPos({ top: rect.top, left: rect.left - 210 });
+    } else {
+      setTooltipModel(null);
+      setTooltipPos(null);
+    }
+  }, [getThumbnailUrl]);
+
+  const handleItemMouseLeave = useCallback(() => {
+    setHoveredIndex(null);
+    setTooltipModel(null);
+    setTooltipPos(null);
+  }, []);
 
   // Loading 状态
   if (loading) {
@@ -98,6 +165,7 @@ export function ModelSelect({
   const renderModelItem = (model: string, index: number, isFavorite: boolean) => {
     const isSelected = model === value;
     const isHovered = hoveredIndex === index;
+    const isEditing = editingModel === model;
 
     return (
       <div
@@ -112,12 +180,15 @@ export function ModelSelect({
           transition: 'background-color 0.1s',
         }}
         onClick={() => {
-          onChange(model);
-          setOpen(false);
+          if (!isEditing) {
+            onChange(model);
+            setOpen(false);
+          }
         }}
-        onMouseEnter={() => setHoveredIndex(index)}
-        onMouseLeave={() => setHoveredIndex(null)}
+        onMouseEnter={(e) => handleItemMouseEnter(model, e, index)}
+        onMouseLeave={handleItemMouseLeave}
       >
+        {/* Star icon */}
         <Star
           size={14}
           onClick={(e) => {
@@ -128,18 +199,92 @@ export function ModelSelect({
           fill={isFavorite ? 'var(--color-primary)' : 'none'}
           color={isFavorite ? 'var(--color-primary)' : 'var(--color-text-secondary)'}
         />
-        <span
-          style={{
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            flex: 1,
-            fontSize: '12px',
-            color: isSelected ? 'var(--color-primary)' : 'var(--color-text)',
-          }}
-        >
-          {getDisplayName(model)}
-        </span>
+
+        {/* Display name or edit input */}
+        {isEditing ? (
+          <input
+            autoFocus
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === 'Enter') {
+                handleNicknameConfirm(model, editValue);
+              } else if (e.key === 'Escape') {
+                setEditingModel(null);
+              }
+            }}
+            onBlur={() => handleNicknameConfirm(model, editValue)}
+            style={{
+              flex: 1,
+              fontSize: '12px',
+              color: 'var(--color-text)',
+              background: 'var(--color-bg)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 4,
+              padding: '2px 6px',
+              outline: 'none',
+              fontFamily: 'inherit',
+              minWidth: 0,
+            }}
+          />
+        ) : (
+          <span
+            title={model}
+            style={{
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              flex: 1,
+              fontSize: '12px',
+              color: isSelected ? 'var(--color-primary)' : 'var(--color-text)',
+            }}
+          >
+            {getModelDisplayName(model)}
+          </span>
+        )}
+
+        {/* Action icons — visible on hover */}
+        {onUploadThumbnail && (
+          <ImagePlus
+            size={14}
+            onClick={(e) => {
+              e.stopPropagation();
+              setUploadTargetModel(model);
+              fileInputRef.current?.click();
+            }}
+            style={{
+              flexShrink: 0,
+              cursor: 'pointer',
+              color: 'var(--color-text-secondary)',
+              opacity: isHovered ? 0.7 : 0,
+              transition: 'opacity 0.15s',
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as SVGElement).style.opacity = '1'; }}
+            onMouseLeave={(e) => { (e.currentTarget as SVGElement).style.opacity = isHovered ? '0.7' : '0'; }}
+          />
+        )}
+        {onSetNickname && (
+          <PencilLine
+            size={14}
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditingModel(model);
+              setEditValue(metadata?.[model]?.nickname || getDisplayName(model));
+            }}
+            style={{
+              flexShrink: 0,
+              cursor: 'pointer',
+              color: 'var(--color-text-secondary)',
+              opacity: isHovered ? 0.7 : 0,
+              transition: 'opacity 0.15s',
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as SVGElement).style.opacity = '1'; }}
+            onMouseLeave={(e) => { (e.currentTarget as SVGElement).style.opacity = isHovered ? '0.7' : '0'; }}
+          />
+        )}
+
         {isSelected && (
           <Check size={14} color="var(--color-primary)" style={{ flexShrink: 0 }} />
         )}
@@ -150,8 +295,20 @@ export function ModelSelect({
   // 为每个模型分配唯一 index（用于 hover 状态管理）
   let itemIndex = 0;
 
+  // Thumbnail tooltip
+  const tooltipUrl = tooltipModel ? getThumbnailUrl?.(tooltipModel) : null;
+
   return (
     <div ref={containerRef} style={{ position: 'relative' }}>
+      {/* Hidden file input for thumbnail upload */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        style={{ display: 'none' }}
+        onChange={handleFileChange}
+      />
+
       {/* 触发器按钮 */}
       <div
         style={triggerStyle}
@@ -207,6 +364,36 @@ export function ModelSelect({
             const idx = itemIndex++;
             return renderModelItem(m, idx, false);
           })}
+        </div>
+      )}
+
+      {/* Thumbnail tooltip */}
+      {tooltipUrl && tooltipPos && (
+        <div
+          style={{
+            position: 'fixed',
+            top: tooltipPos.top,
+            left: tooltipPos.left,
+            width: 200,
+            zIndex: 10000,
+            pointerEvents: 'none',
+            borderRadius: 8,
+            overflow: 'hidden',
+            boxShadow: '0 4px 16px rgba(0, 0, 0, 0.25)',
+            backgroundColor: 'var(--color-bg-secondary)',
+            border: '1px solid var(--color-border)',
+          }}
+        >
+          <img
+            src={tooltipUrl}
+            alt="model thumbnail"
+            style={{
+              display: 'block',
+              width: '100%',
+              height: 'auto',
+              borderRadius: 8,
+            }}
+          />
         </div>
       )}
     </div>

@@ -14,6 +14,10 @@ export default defineConfig({
         target: 'ws://localhost:3000',
         ws: true,
       },
+      '/model_meta': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
     },
   },
 })

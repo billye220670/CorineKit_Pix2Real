@@ -14,6 +14,7 @@ import {
   type SerializedTabData,
 } from '../services/sessionService.js';
 import type { ImageItem } from '../types/index.js';
+import { TAB_MASK_MODE } from '../config/maskConfig.js';
 
 const SESSION_ID_KEY = 'pix2real_session_id';
 
@@ -96,7 +97,7 @@ const NAMES_KEY = 'pix2real_session_names';
 // A session is "empty" if it has no images and no task outputs in any tab.
 function isSessionEmpty(): boolean {
   const state = useWorkflowStore.getState();
-  for (let tab = 0; tab <= 9; tab++) {
+  for (let tab = 0; tab <= 10; tab++) {
     const td = state.tabData[tab];
     if (!td) continue;
     if (td.images.length > 0) return false;
@@ -138,7 +139,7 @@ export function useSession(): UseSessionReturn {
   const serializeState = useCallback((): { activeTab: number; tabData: Record<number, SerializedTabData> } => {
     const state = useWorkflowStore.getState();
     const serializedTabData: Record<number, SerializedTabData> = {};
-    for (let tab = 0; tab <= 9; tab++) {
+    for (let tab = 0; tab <= 10; tab++) {
       const td = state.tabData[tab];
       if (!td) continue;
       serializedTabData[tab] = {
@@ -186,7 +187,7 @@ export function useSession(): UseSessionReturn {
       if (isRestoring.current) return;
 
       // Detect new images and upload them
-      for (let tab = 0; tab <= 9; tab++) {
+      for (let tab = 0; tab <= 10; tab++) {
         const prevImages = prevState.tabData[tab]?.images ?? [];
         const currImages = state.tabData[tab]?.images ?? [];
         const prevIds = new Set(prevImages.map((i) => i.id));
@@ -244,7 +245,7 @@ export function useSession(): UseSessionReturn {
           const imageId = key.split(':')[0];
           const storeState = useWorkflowStore.getState();
           let tabId = 0;
-          for (let tab = 0; tab <= 9; tab++) {
+          for (let tab = 0; tab <= 10; tab++) {
             if (storeState.tabData[tab]?.images.some((i) => i.id === imageId)) {
               tabId = tab;
               break;
@@ -317,7 +318,7 @@ export function useSession(): UseSessionReturn {
           const restoredImages: Record<number, ImageItem[]> = {};
           const restoredMasks: Record<string, MaskEntry> = {};
 
-          for (let tab = 0; tab <= 9; tab++) {
+          for (let tab = 0; tab <= 10; tab++) {
             const td = session.tabData[tab];
             if (!td) continue;
 
@@ -343,6 +344,7 @@ export function useSession(): UseSessionReturn {
             restoredImages[tab] = images;
 
             // Restore masks by probing known paths
+            if (TAB_MASK_MODE[tab] === 'none') continue;
             for (const img of td.images) {
               for (const suffix of ['-1', '0', '1', '2', '3', '4']) {
                 const maskKey = `${img.id}:${suffix}`;

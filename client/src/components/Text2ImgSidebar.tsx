@@ -5,6 +5,7 @@ import { useWebSocket } from '../hooks/useWebSocket.js';
 import { ChevronRight, ChevronDown, Loader, BookText, Hash, AlignLeft, Wand2, Loader2 } from 'lucide-react';
 import { SYSTEM_PROMPTS } from './prompt-assistant/systemPrompts.js';
 import { ModelSelect, useModelFavorites } from './ModelSelect.js';
+import { useModelMetadata } from '../hooks/useModelMetadata.js';
 
 const RATIO_PRESETS = [
   { label: '1:1',  width: 1024, height: 1024 },
@@ -48,6 +49,7 @@ export function Text2ImgSidebar() {
   // Model favorites
   const { favorites: checkpointFavorites, toggleFavorite: toggleCheckpointFavorite } = useModelFavorites('checkpoints');
   const { favorites: loraFavorites, toggleFavorite: toggleLoraFavorite } = useModelFavorites('loras');
+  const { metadata, uploadThumbnail, setNickname, getThumbnailUrl } = useModelMetadata();
 
   // LoRA model list
   const [loraModels, setLoraModels] = useState<string[]>([]);
@@ -249,6 +251,10 @@ export function Text2ImgSidebar() {
             onToggleFavorite={toggleCheckpointFavorite}
             loading={modelsLoading}
             placeholder="（无可用模型）"
+            metadata={metadata}
+            onUploadThumbnail={uploadThumbnail}
+            onSetNickname={setNickname}
+            getThumbnailUrl={getThumbnailUrl}
           />
         </div>
 
@@ -292,6 +298,10 @@ export function Text2ImgSidebar() {
                 onToggleFavorite={toggleLoraFavorite}
                 loading={loraListLoading}
                 placeholder="（无可用 LoRA）"
+                metadata={metadata}
+                onUploadThumbnail={uploadThumbnail}
+                onSetNickname={setNickname}
+                getThumbnailUrl={getThumbnailUrl}
               />
             </div>
           )}

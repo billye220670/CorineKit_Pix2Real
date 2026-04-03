@@ -13,6 +13,7 @@ export const TAB_MASK_MODE: Record<number, TabMaskMode> = {
   7: 'none', // 快速出图 — text2img, no mask
   8: 'none', // 黑兽换脸 — dedicated UI, no mask
   9: 'none', // ZIT快出 — text2img, no mask
+  10: 'A',   // 区域编辑 — Mode A overlay
 };
 
 export const maskKey = (imageId: string, outputIndex: number): string =>

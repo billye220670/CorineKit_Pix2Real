@@ -318,6 +318,35 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
       return;
     }
 
+    // ── Workflow 10: 区域编辑 ─────────────────────────────────────────
+    if (activeTab === 10) {
+      if (!maskEntryForMode) {
+        showToast('请先在蒙版编辑器中绘制蒙版');
+        return;
+      }
+      const maskBlob = await maskEntryToBlob(maskEntryForMode);
+      const formData = new FormData();
+      formData.append('image',    image.file);
+      formData.append('mask',     maskBlob, 'mask.png');
+      formData.append('clientId', clientId);
+      formData.append('prompt',   promptValue);
+      formData.append('backPose', String(backPose));
+
+      try {
+        const res = await fetch(`/api/workflow/10/execute?clientId=${clientId}`, {
+          method: 'POST',
+          body: formData,
+        });
+        if (!res.ok) { console.error('Execute failed:', await res.text()); return; }
+        const data = await res.json();
+        startTask(image.id, data.promptId);
+        sendMessage({ type: 'register', promptId: data.promptId, workflowId: 10, sessionId, tabId: 10 });
+      } catch (err) {
+        console.error('Execute error:', err);
+      }
+      return;
+    }
+
     // ── Generic workflows ─────────────────────────────────────────────
     const formData = new FormData();
     formData.append('image',    image.file);

@@ -5,14 +5,14 @@ import { useDragStore } from '../hooks/useDragStore.js';
 import { showToast } from '../hooks/useToast.js';
 import { QueuePanel } from './QueuePanel.js';
 import {
-  Wand2, Sparkles, ZoomIn, Scissors, Video, Maximize2, ListOrdered, Palette, ImagePlus, UserRound, Zap,
+  Wand2, Sparkles, ZoomIn, Scissors, Video, Maximize2, ListOrdered, Palette, ImagePlus, UserRound, Zap, PenSquare,
 } from 'lucide-react';
 
 const GROUPS: { label: string; ids: number[] }[] = [
   { label: '图像生成', ids: [7, 9] },
   { label: '图像处理', ids: [2] },
   { label: '风格转换', ids: [0, 6] },
-  { label: '区域重绘', ids: [1, 5, 8] },
+  { label: '区域重绘', ids: [1, 5, 8, 10] },
   // { label: '视频处理', ids: [3, 4] },  // 暂时屏蔽
 ];
 
@@ -27,6 +27,7 @@ const WORKFLOW_ICONS: Record<number, LucideIcon> = {
   7: ImagePlus,
   8: UserRound,
   9: Zap,
+  10: PenSquare,
 };
 
 export function Sidebar() {

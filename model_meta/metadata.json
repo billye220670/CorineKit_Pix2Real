@@ -1,0 +1,78 @@
+{
+  "IL-lunarcherrymix_v20.safetensors": {
+    "nickname": "光辉-CherryMix",
+    "thumbnail": "a7b00d45-c1d8-434e-b416-1bda8f5eb2c2.png"
+  },
+  "XL-漫画2.5D\\IL-Gembyte_20Emerald.safetensors": {
+    "nickname": "光辉-Emerald",
+    "thumbnail": "4e0478b1-f186-47ea-9c3b-6a9f3df1c206.png"
+  },
+  "XL-漫画2.5D\\aMixIllustrious_aMix.safetensors": {
+    "nickname": "光辉-AMix",
+    "thumbnail": "102a3b9a-f1b0-4869-a5e9-60f98c281b54.png"
+  },
+  "XL-漫画2.5D\\illustrijEVO_lvl3.safetensors": {
+    "thumbnail": "7d3f940f-0641-4815-a68f-491ecce680e1.png",
+    "nickname": "光辉-EVO"
+  },
+  "hassakuXLIllustrious_v34.safetensors": {
+    "thumbnail": "fb727b8d-3fce-4d79-9821-4abcdd54f9f4.png",
+    "nickname": "光辉-Hassaku"
+  },
+  "perfectdeliberate_v70.safetensors": {
+    "thumbnail": "f9506ee3-07d9-4084-92cb-2e0e16e6fa9c.png",
+    "nickname": "光辉-PerfectDeliberate"
+  },
+  "waiIllustriousSDXL_v160.safetensors": {
+    "thumbnail": "d0b127bf-5ef4-4c0b-af7f-bd5e2884a060.png",
+    "nickname": "光辉-WAI"
+  },
+  "XL-漫画2.5D\\illustrijQuill_v1.safetensors": {
+    "thumbnail": "3f3345ab-fefe-487a-a3c3-840b5a182f23.png",
+    "nickname": "光辉-Quill"
+  },
+  "XL-漫画2.5D\\JANKUTrainedNoobaiRouwei_v69.safetensors": {
+    "nickname": "光辉-Noob",
+    "thumbnail": "ca8472c5-90ba-479f-bdfd-cff85687627f.png"
+  },
+  "IL-illustriousSemi_v30.safetensors": {
+    "thumbnail": "b7ba9611-847f-4436-b242-55d6e59f115b.png",
+    "nickname": "光辉-Semi"
+  },
+  "hyphoriaIlluNAI_v001.safetensors": {
+    "nickname": "光辉-Hyphoria",
+    "thumbnail": "97d084c7-b8f9-4d9c-9798-8cc6e7ffc296.png"
+  },
+  "IL-novaOrangeXL_v100.safetensors": {
+    "nickname": "光辉-NovaOrange",
+    "thumbnail": "9408dd17-b9bf-4fb1-b8f0-dbf38e0d33cb.png"
+  },
+  "IllustriousLora\\face_grab_illustrious.safetensors": {
+    "nickname": "表情-捏脸",
+    "thumbnail": "6bb9e990-0fd3-4312-b044-e0939bd79393.png"
+  },
+  "IllustriousLora\\PD_Better_Boyshort_Panties-000013.safetensors": {
+    "nickname": "服饰-平角裤",
+    "thumbnail": "f2e2c567-6c3f-4e51-98d4-c2532fc369a1.png"
+  },
+  "IllustriousLora\\PD_Female_Boxer_Briefs-000013.safetensors": {
+    "nickname": "服饰-男士短裤",
+    "thumbnail": "65cb2d8d-fed1-4e7a-83dd-d17b85527327.png"
+  },
+  "IllustriousLora\\PD_High_Cut_Panties-000012.safetensors": {
+    "nickname": "服饰-高腰短裤",
+    "thumbnail": "edaf0fc4-305b-4976-847d-1289cf048ab2.png"
+  },
+  "IllustriousLora\\betterahegao.safetensors": {
+    "thumbnail": "8d1a336a-9591-456b-849d-9992c8b391d5.png",
+    "nickname": "表情-阿黑颜"
+  },
+  "IllustriousLora\\disgusted_face_ilxl_goofy.safetensors": {
+    "nickname": "表情-嫌弃脸",
+    "thumbnail": "892b1fb1-acf1-48f7-8962-85a67eec6f3a.png"
+  },
+  "IllustriousLora\\cameltoe_illustrious_V2.0.safetensors": {
+    "nickname": "身材-一字缝",
+    "thumbnail": "e56f19ed-93a0-4053-bb00-e6c2049d4c04.png"
+  }
+}

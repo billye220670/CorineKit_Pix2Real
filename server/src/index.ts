@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import workflowRouter from './routes/workflow.js';
 import outputRouter from './routes/output.js';
 import sessionRouter from './routes/session.js';
+import modelMetaRouter from './routes/modelMeta.js';
 import { connectWebSocket, getHistory, getImageBuffer } from './services/comfyui.js';
 import { sessionsBase, saveOutputFile } from './services/sessionManager.js';
 import { ensureComfyUI, isComfyUIRunning } from './services/comfyuiLauncher.js';
@@ -40,6 +41,13 @@ if (!fs.existsSync(sessionsBase)) {
   fs.mkdirSync(sessionsBase, { recursive: true });
 }
 
+// Ensure model_meta directories exist
+const modelMetaBase = path.resolve(__dirname, '../../model_meta');
+const modelMetaThumbnails = path.join(modelMetaBase, 'thumbnails');
+if (!fs.existsSync(modelMetaThumbnails)) {
+  fs.mkdirSync(modelMetaThumbnails, { recursive: true });
+}
+
 const app = express();
 const server = createServer(app);
 
@@ -59,6 +67,8 @@ app.use('/api/session', sessionRouter);
 // Static serve output and sessions directories
 app.use('/output', express.static(outputBase));
 app.use('/api/session-files', express.static(sessionsBase));
+app.use('/model_meta', express.static(modelMetaBase));
+app.use('/api/models', modelMetaRouter);
 
 // ComfyUI 状态查询
 app.get('/api/comfyui/status', async (req, res) => {

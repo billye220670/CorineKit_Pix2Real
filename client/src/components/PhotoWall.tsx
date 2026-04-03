@@ -174,7 +174,7 @@ export function PhotoWall({ viewSize }: PhotoWallProps) {
     if (!selectedImageIds.includes(img.id)) return false;
     const task = tasks[img.id];
     if (task && task.status !== 'idle') return false;
-    if (activeTab === 5 && !masks[maskKey(img.id, -1)]) return false;
+    if ((activeTab === 5 || activeTab === 10) && !masks[maskKey(img.id, -1)]) return false;
     return true;
   });
 
@@ -212,6 +212,36 @@ export function PhotoWall({ viewSize }: PhotoWallProps) {
           const data = await res.json();
           startTask(img.id, data.promptId);
           sendMessage({ type: 'register', promptId: data.promptId, workflowId: 5, sessionId, tabId: 5 });
+        } catch (err) {
+          console.error('Execute error:', err);
+        }
+        continue;
+      }
+
+      // ── Workflow 10: 区域编辑 ─────────────────────────────────────
+      if (activeTab === 10) {
+        const maskEntry = masks[maskKey(img.id, -1)];
+        if (!maskEntry) continue; // skip: no mask painted for this image
+
+        const maskBlob = await maskEntryToBlob(maskEntry);
+        const backPose = backPoseToggles[img.id] ?? false;
+
+        const formData = new FormData();
+        formData.append('image',    img.file);
+        formData.append('mask',     maskBlob, 'mask.png');
+        formData.append('clientId', clientId);
+        formData.append('prompt',   prompts[img.id] || '');
+        formData.append('backPose', String(backPose));
+
+        try {
+          const res = await fetch(`/api/workflow/10/execute?clientId=${clientId}`, {
+            method: 'POST',
+            body: formData,
+          });
+          if (!res.ok) { console.error('Execute failed:', await res.text()); continue; }
+          const data = await res.json();
+          startTask(img.id, data.promptId);
+          sendMessage({ type: 'register', promptId: data.promptId, workflowId: 10, sessionId, tabId: 10 });
         } catch (err) {
           console.error('Execute error:', err);
         }

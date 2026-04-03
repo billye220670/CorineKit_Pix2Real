@@ -7,9 +7,17 @@
 - [FaceSwapPhotoWall.tsx](file://client/src/components/FaceSwapPhotoWall.tsx)
 - [ProgressOverlay.tsx](file://client/src/components/ProgressOverlay.tsx)
 - [useWorkflowStore.ts](file://client/src/hooks/useWorkflowStore.ts)
+- [QueuePanel.tsx](file://client/src/components/QueuePanel.tsx)
 - [index.ts](file://client/src/types/index.ts)
 - [global.css](file://client/src/styles/global.css)
 </cite>
+
+## 更新摘要
+**变更内容**
+- 更新了队列任务取消机制的实现细节，从 resetTask 改为 removeImage
+- 新增了 removeImageByPromptId 方法的使用场景说明
+- 补充了任务取消后的卡片完全移除机制
+- 更新了任务状态管理相关的状态指示器说明
 
 ## 目录
 1. [简介](#简介)
@@ -26,6 +34,8 @@
 
 ImageCard 是 CorineKit Pix2Real 项目中的核心图片展示组件，负责处理图片卡片的渲染、状态管理和用户交互。该组件支持多种工作流模式，包括图片生成、视频处理、蒙版编辑、批量操作等功能。组件采用高性能的 React.memo 优化，结合 Zustand 状态管理，实现了流畅的用户体验。
 
+**更新** 组件现已支持更完善的队列任务取消机制，通过 removeImage 方法确保取消任务时完全移除对应的图片卡片，防止出现空白卡片。
+
 ## 项目结构
 
 ImageCard 组件位于客户端前端代码中，与多个相关组件协同工作：
@@ -37,6 +47,7 @@ IC[ImageCard.tsx]
 PW[PhotoWall.tsx]
 FSPW[FaceSwapPhotoWall.tsx]
 PO[ProgressOverlay.tsx]
+QP[QueuePanel.tsx]
 end
 subgraph "状态管理层"
 UWS[useWorkflowStore.ts]
@@ -50,18 +61,15 @@ FSPW --> IC
 IC --> UWS
 IC --> PO
 IC --> GC
+QP --> UWS
 UWS --> TS
 ```
 
 **图表来源**
-- [ImageCard.tsx:1-1055](file://client/src/components/ImageCard.tsx#L1-L1055)
+- [ImageCard.tsx:1-1109](file://client/src/components/ImageCard.tsx#L1-L1109)
 - [PhotoWall.tsx:1-578](file://client/src/components/PhotoWall.tsx#L1-L578)
 - [FaceSwapPhotoWall.tsx:1-861](file://client/src/components/FaceSwapPhotoWall.tsx#L1-L861)
-
-**章节来源**
-- [ImageCard.tsx:1-1055](file://client/src/components/ImageCard.tsx#L1-L1055)
-- [PhotoWall.tsx:1-578](file://client/src/components/PhotoWall.tsx#L1-L578)
-- [FaceSwapPhotoWall.tsx:1-861](file://client/src/components/FaceSwapPhotoWall.tsx#L1-L861)
+- [QueuePanel.tsx:1-308](file://client/src/components/QueuePanel.tsx#L1-L308)
 
 ## 核心组件
 
@@ -91,9 +99,7 @@ ImageCard 组件具有以下核心特性：
    - 选中状态指示
    - 进度条显示
 
-**章节来源**
-- [ImageCard.tsx:17-40](file://client/src/components/ImageCard.tsx#L17-L40)
-- [ImageCard.tsx:42-88](file://client/src/components/ImageCard.tsx#L42-L88)
+**更新** 队列任务取消机制现已通过 removeImage 方法实现，确保任务取消时卡片被完全移除，避免空白卡片残留。
 
 ## 架构概览
 
@@ -118,11 +124,16 @@ IC->>Server : 发送执行请求
 Server-->>WS : 推送进度更新
 WS-->>UWS : 更新任务状态
 UWS-->>IC : 状态变更通知
+User->>IC : 取消队列任务
+IC->>Server : POST /api/workflow/cancel-queue/{promptId}
+Server-->>IC : 取消成功
+IC->>UWS : removeImage(image.id)
+UWS-->>IC : 移除卡片完成
 ```
 
 **图表来源**
-- [ImageCard.tsx:164-241](file://client/src/components/ImageCard.tsx#L164-L241)
-- [useWorkflowStore.ts:96-200](file://client/src/hooks/useWorkflowStore.ts#L96-L200)
+- [ImageCard.tsx:257-266](file://client/src/components/ImageCard.tsx#L257-L266)
+- [useWorkflowStore.ts:257-288](file://client/src/hooks/useWorkflowStore.ts#L257-L288)
 
 ## 详细组件分析
 
@@ -156,14 +167,16 @@ class ImageCard {
 +handleExecute() void
 +handleReversePrompt() void
 +handleQuickAction() void
++handleCancelQueue() void
 }
 class WorkflowActions {
 +setPrompt() void
 +startTask() void
 +resetTask() void
++removeImage() void
++removeImageByPromptId() void
 +setFlashingImage() void
 +toggleBackPose() void
-+removeImage() void
 }
 class GlobalState {
 +activeTab : number
@@ -185,7 +198,7 @@ ImageCard --> CardSpecificData
 
 **图表来源**
 - [ImageCard.tsx:46-88](file://client/src/components/ImageCard.tsx#L46-L88)
-- [useWorkflowStore.ts:35-88](file://client/src/hooks/useWorkflowStore.ts#L35-L88)
+- [useWorkflowStore.ts:36-90](file://client/src/hooks/useWorkflowStore.ts#L36-L90)
 
 ### 交互行为详解
 
@@ -216,6 +229,34 @@ Ignore --> End
 - **防误触**: 避免在输入框内触发长按
 - **状态同步**: 通过 `enterMultiSelect` 函数进入多选模式
 
+#### 任务取消机制
+
+**更新** 任务取消机制现已重构，提供两种不同的移除策略：
+
+1. **按卡片 ID 移除** (`removeImage`):
+   - 直接通过图片 ID 完全移除卡片
+   - 适用于用户主动取消当前卡片的任务
+   - 确保卡片从界面和状态管理中完全消失
+
+2. **按任务 ID 移除** (`removeImageByPromptId`):
+   - 通过任务的 promptId 查找并移除对应卡片
+   - 适用于队列面板中的批量取消操作
+   - 自动处理任务映射关系
+
+```mermaid
+flowchart LR
+Queued[排队中] --> Cancel[用户点击取消]
+Cancel --> RemoveImage[removeImage]
+RemoveImage --> Complete[移除完成]
+Queued -.-> CancelByPrompt[按任务ID取消]
+CancelByPrompt --> RemoveImageByPrompt[removeImageByPromptId]
+RemoveImageByPrompt --> Complete
+```
+
+**图表来源**
+- [ImageCard.tsx:257-266](file://client/src/components/ImageCard.tsx#L257-L266)
+- [QueuePanel.tsx:119-123](file://client/src/components/QueuePanel.tsx#L119-L123)
+
 #### 闪烁效果实现
 
 闪烁动画用于突出显示特定图片：
@@ -234,6 +275,8 @@ Ignore --> End
 2. **错误徽章**: 红色错误图标标识异常状态
 3. **蒙版指示**: 绿色图层图标显示蒙版存在
 4. **选中状态**: 右上角对勾标记当前选中项
+
+**更新** 队列状态指示器现在支持更精确的任务取消反馈，确保用户能够清楚地看到任务取消的结果。
 
 #### 进度条系统
 
@@ -263,9 +306,7 @@ Processing -.-> Progress[进度更新]
 | done | 完成 | 结果预览 | 可重新生成 |
 | error | 错误状态 | 红色徽章 | 查看错误详情 |
 
-**章节来源**
-- [ImageCard.tsx:101-107](file://client/src/components/ImageCard.tsx#L101-L107)
-- [index.ts:17-25](file://client/src/types/index.ts#L17-L25)
+**更新** 任务取消后，卡片会立即从界面中移除，确保不会出现空白卡片的情况。
 
 ## 依赖关系分析
 
@@ -285,11 +326,13 @@ IC --> TS[useToast]
 PW --> IC
 FSPW --> IC
 UWS --> TS
+QP[QueuePanel] --> UWS
 ```
 
 **图表来源**
 - [ImageCard.tsx:1-15](file://client/src/components/ImageCard.tsx#L1-L15)
 - [PhotoWall.tsx:1-9](file://client/src/components/PhotoWall.tsx#L1-L9)
+- [QueuePanel.tsx:1-36](file://client/src/components/QueuePanel.tsx#L1-L36)
 
 ### 状态管理依赖
 
@@ -299,12 +342,17 @@ UWS --> TS
 2. **全局状态层**: 影响所有卡片的共享状态
 3. **卡片数据层**: 仅影响当前卡片的数据
 
+**更新** 状态管理现在包含两种移除方法：
+- `removeImage`: 直接移除指定 ID 的卡片
+- `removeImageByPromptId`: 通过任务 ID 查找并移除卡片
+
 这种设计确保了：
 - 最小化重渲染次数
 - 高效的状态更新
 - 清晰的职责分离
+- 完整的卡片移除机制
 
-**章节来源**
+**图表来源**
 - [ImageCard.tsx:43-83](file://client/src/components/ImageCard.tsx#L43-L83)
 - [useWorkflowStore.ts:96-200](file://client/src/hooks/useWorkflowStore.ts#L96-L200)
 
@@ -321,12 +369,15 @@ UWS --> TS
 1. **定时器清理**: 长按检测使用 `setTimeout` 和清理逻辑
 2. **事件监听**: 组件卸载时自动清理事件处理器
 3. **资源释放**: 视频元素在离开悬停状态时暂停播放
+4. **URL 对象释放**: 通过 `URL.revokeObjectURL` 释放预览 URL
 
 ### 动画性能
 
 1. **GPU 加速**: 使用 `transform` 和 `opacity` 属性
 2. **CSS 动画**: 优先使用 CSS 动画而非 JavaScript
 3. **动画节流**: 控制动画频率避免过度重绘
+
+**更新** 任务取消机制的优化减少了不必要的状态更新，提高了整体性能。
 
 ## 故障排除指南
 
@@ -371,22 +422,40 @@ UWS --> TS
 2. 刷新页面同步状态
 3. 关闭其他标签页实例
 
+**更新** 任务取消后卡片完全移除的问题已解决，不再出现空白卡片残留。
+
+#### 任务取消后卡片仍然显示
+
+**症状**: 点击取消按钮后卡片仍显示在界面上
+**可能原因**:
+- 旧版本的 resetTask 方法未完全移除卡片
+- 状态更新延迟
+
+**解决方法**:
+1. 确认使用的是最新版本的 removeImage 方法
+2. 检查网络请求是否成功
+3. 刷新页面确认状态同步
+
 **章节来源**
 - [ImageCard.tsx:164-241](file://client/src/components/ImageCard.tsx#L164-L241)
 - [useWorkflowStore.ts:67-75](file://client/src/hooks/useWorkflowStore.ts#L67-L75)
 
 ## 结论
 
-ImageCard 组件是一个功能完整、性能优化的图片展示组件。它通过精心设计的状态管理、高效的渲染策略和丰富的交互功能，为用户提供流畅的图片处理体验。组件的模块化设计和清晰的职责分离，使其易于维护和扩展。
+ImageCard 组件是一个功能完整、性能优化的图片展示组件。它通过精心设计的状态管理、高效的渲染策略和丰富的交互功能，为用户提供流畅的图片处理体验。
+
+**更新** 组件现已具备完善的队列任务取消机制，通过 removeImage 方法确保取消任务时完全移除对应的图片卡片，防止出现空白卡片。这一改进显著提升了用户体验，避免了界面混乱。
 
 主要优势包括：
 - **高性能**: 通过 React.memo 和 Zustand 优化渲染
 - **丰富功能**: 支持多种工作流和交互模式
 - **良好体验**: 流畅的动画和即时的视觉反馈
 - **易于使用**: 直观的 API 设计和灵活的配置选项
+- **可靠的任务管理**: 完善的任务取消和移除机制
 
 未来可以考虑的功能增强：
 - 更多的快捷操作选项
 - 自定义主题支持
 - 更详细的错误处理和恢复机制
 - 支持更多媒体格式
+- 增强任务取消的确认机制
