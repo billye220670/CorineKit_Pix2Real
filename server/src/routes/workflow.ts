@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { exec } from 'child_process';
 import multer from 'multer';
+import fetch from 'node-fetch';
 import { getAdapter, adapters } from '../adapters/index.js';
 import { workflow5Adapter } from '../adapters/Workflow5Adapter.js';
 import { uploadImage, uploadVideo, queuePrompt, deleteQueueItem, getSystemStats, getQueue, prioritizeQueueItem, getHistory, getImageBuffer, getCheckpointModels, getUnetModels, getLoraModels } from '../services/comfyui.js';
@@ -681,6 +682,74 @@ router.post('/reverse-prompt', upload.single('image'), async (req, res) => {
     }
 
     const model = (req.query.model as string) || 'Qwen3VL';
+
+    // Grok 模型直接调用云 API，不走 ComfyUI 工作流
+    if (model === 'Grok') {
+      try {
+        const mimeType = req.file.mimetype;
+        const base64Data = req.file.buffer.toString('base64');
+        const imageDataUrl = `data:${mimeType};base64,${base64Data}`;
+
+        const grokResponse = await fetch('https://api.jiekou.ai/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer sk_4kPU46GrW4F-GLsGzOygbmDVA8hoinn4b1PmgiQFB6s',
+          },
+          body: JSON.stringify({
+            model: 'grok-4-fast-non-reasoning',
+            messages: [
+              {
+                role: 'system',
+                content: '根据图片反推提示词。如果图片是二次元卡通图片，则返回tag风格英文标签提示词。如果是真实图片或照片则返回中文自然语言提示词。',
+              },
+              {
+                role: 'user',
+                content: [
+                  {
+                    type: 'image_url',
+                    image_url: {
+                      url: imageDataUrl,
+                    },
+                  },
+                  {
+                    type: 'text',
+                    text: '请根据这张图片反推提示词。',
+                  },
+                ],
+              },
+            ],
+            max_tokens: 4096,
+            temperature: 1,
+          }),
+        });
+
+        if (!grokResponse.ok) {
+          const errorText = await grokResponse.text();
+          console.error('[Grok API Error]', grokResponse.status, errorText);
+          res.status(502).json({ error: `Grok API 错误: ${grokResponse.status}` });
+          return;
+        }
+
+        const grokData = await grokResponse.json() as {
+          choices?: { message?: { content?: string } }[];
+        };
+        const text = grokData.choices?.[0]?.message?.content?.trim();
+
+        if (!text) {
+          res.status(500).json({ error: 'Grok API 未返回提示词文本' });
+          return;
+        }
+
+        res.json({ text });
+        return;
+      } catch (grokErr: any) {
+        console.error('[Grok Reverse Prompt Error]', grokErr);
+        res.status(500).json({ error: grokErr.message || 'Grok API 调用失败' });
+        return;
+      }
+    }
+
     const cfg = reversePromptConfigs[model];
     if (!cfg) {
       res.status(400).json({ error: `Unknown model: ${model}` });

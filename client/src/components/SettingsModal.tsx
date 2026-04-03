@@ -7,6 +7,7 @@ const REVERSE_PROMPT_MODELS: { value: ReversePromptModel; label: string }[] = [
   { value: 'Qwen3VL', label: 'Qwen3VL' },
   { value: 'Florence', label: 'Florence' },
   { value: 'WD-14', label: 'WD-14' },
+  { value: 'Grok', label: 'Grok' },
 ];
 
 const STARTUP_BEHAVIOR_OPTIONS: { value: StartupBehavior; label: string }[] = [
