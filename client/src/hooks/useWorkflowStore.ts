@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { ImageItem, TaskInfo, TaskStatus } from '../types/index.js';
 import type { SerializedTabData, Text2ImgConfig, ZitConfig } from '../services/sessionService.js';
+import { DEFAULT_TAB } from '../data/sidebarGroups.js';
 export type { Text2ImgConfig, ZitConfig };
 
 const WORKFLOWS = [
@@ -96,7 +97,7 @@ function getTab(state: { activeTab: number; tabData: Record<number, TabData> }):
 }
 
 export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
-  activeTab: 0,
+  activeTab: DEFAULT_TAB,
   workflows: WORKFLOWS,
   tabData: {
     0: emptyTabData(),

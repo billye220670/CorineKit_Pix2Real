@@ -15,6 +15,7 @@ import {
 } from '../services/sessionService.js';
 import type { ImageItem } from '../types/index.js';
 import { TAB_MASK_MODE } from '../config/maskConfig.js';
+import { DEFAULT_TAB } from '../data/sidebarGroups.js';
 
 const SESSION_ID_KEY = 'pix2real_session_id';
 
@@ -284,7 +285,7 @@ export function useSession(): UseSessionReturn {
     savedMasks.current.clear();
     setLastSavedAt(null);
     // Reset store to empty state
-    useWorkflowStore.getState().restoreSession(0, {}, {});
+    useWorkflowStore.getState().restoreSession(DEFAULT_TAB, {}, {});
     useMaskStore.getState().restoreAllMasks({});
   }, []);
 

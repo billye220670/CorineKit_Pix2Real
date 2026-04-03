@@ -75,7 +75,6 @@ const LazyCard = memo(function LazyCard({ children, estimatedHeight }: { childre
         ref={ref}
         style={{
           minHeight: estimatedHeight,
-          breakInside: 'avoid',
           borderRadius: 'var(--radius-lg, 12px)',
           background: 'rgba(128, 128, 128, 0.05)',
           overflowAnchor: 'none', // Don't use placeholder as scroll anchor
@@ -87,9 +86,7 @@ const LazyCard = memo(function LazyCard({ children, estimatedHeight }: { childre
   return (
     <div
       ref={ref}
-      style={{
-        breakInside: 'avoid',
-      }}
+      style={{}}
     >
       {children}
     </div>
@@ -495,7 +492,9 @@ export function PhotoWall({ viewSize }: PhotoWallProps) {
           style={{
             position: 'absolute',
             inset: 0,
-            overflow: 'auto',
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            scrollbarGutter: 'stable',
             padding: 'var(--spacing-lg)',
             overflowAnchor: 'auto', // Enable CSS scroll anchoring
           }}
@@ -518,14 +517,16 @@ export function PhotoWall({ viewSize }: PhotoWallProps) {
         )}
         <div
           style={{
-            columns: `${VIEW_CONFIG[viewSize].columnWidth} auto`,
-            columnGap: 'var(--spacing-md)',
+            display: 'grid',
+            gridTemplateColumns: `repeat(auto-fill, minmax(${VIEW_CONFIG[viewSize].columnWidth}, 1fr))`,
+            gap: 'var(--spacing-md)',
+            alignItems: 'start',
           }}
           onClick={(e) => { if (isMultiSelectMode && e.target === e.currentTarget) clearSelection(); }}
         >
           {images.map((img) => (
             <LazyCard key={img.id} estimatedHeight={VIEW_CONFIG[viewSize].estimatedCardHeight}>
-              <div id={`card-${img.id}`} style={{ breakInside: 'avoid', marginBottom: 'var(--spacing-md)' }}>
+              <div id={`card-${img.id}`}>
                 <ImageCard
                   image={img}
                   isMultiSelectMode={isMultiSelectMode}
