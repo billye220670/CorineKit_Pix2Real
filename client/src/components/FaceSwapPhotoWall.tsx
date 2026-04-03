@@ -1,7 +1,8 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { X, Check, Trash2, Ban } from 'lucide-react';
 import { useWorkflowStore } from '../hooks/useWorkflowStore.js';
 import { useWebSocket } from '../hooks/useWebSocket.js';
+import { useDragStore } from '../hooks/useDragStore.js';
 import { ImageCard } from './ImageCard.js';
 import { showToast } from '../hooks/useToast.js';
 import type { ViewSize } from './PhotoWall.js';
@@ -31,9 +32,10 @@ interface FaceZoneCardProps {
   onToggleSelect: () => void;
   onDelete: () => void;
   onDragStart: (e: React.DragEvent) => void;
+  setDragging: (drag: { type: 'card'; imageId: string } | null) => void;
 }
 
-function FaceZoneCard({ image, isMultiSelectMode, isSelected, onLongPress, onToggleSelect, onDelete, onDragStart }: FaceZoneCardProps) {
+function FaceZoneCard({ image, isMultiSelectMode, isSelected, onLongPress, onToggleSelect, onDelete, onDragStart, setDragging }: FaceZoneCardProps) {
   const [isCardHovered, setIsCardHovered] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -72,11 +74,15 @@ function FaceZoneCard({ image, isMultiSelectMode, isSelected, onLongPress, onTog
     }
     onDragStart(e);
     setIsDragging(true);
-  }, [onDragStart]);
+    document.body.classList.add('is-dragging-card');
+    setDragging({ type: 'card', imageId: image.id });
+  }, [onDragStart, setDragging, image.id]);
 
   const handleDragEnd = useCallback(() => {
     setIsDragging(false);
-  }, []);
+    document.body.classList.remove('is-dragging-card');
+    setDragging(null);
+  }, [setDragging]);
 
   return (
     <div
@@ -227,6 +233,19 @@ export function FaceSwapPhotoWall({ viewSize }: FaceSwapPhotoWallProps) {
   const toggleImageSelection = useWorkflowStore((s) => s.toggleImageSelection);
   const clearSelection = useWorkflowStore((s) => s.clearSelection);
   const { sendMessage } = useWebSocket();
+  const { dragging, setDragging } = useDragStore();
+
+  // Delete zone state
+  const [isOverDeleteZone, setIsOverDeleteZone] = useState(false);
+  const deleteZoneDragCount = useRef(0);
+
+  // Reset hover state when drag ends
+  useEffect(() => {
+    if (!dragging) {
+      deleteZoneDragCount.current = 0;
+      setIsOverDeleteZone(false);
+    }
+  }, [dragging]);
 
   // Track which zone multi-select originated from
   const [multiSelectZone, setMultiSelectZone] = useState<'face' | 'target' | null>(null);
@@ -639,6 +658,7 @@ export function FaceSwapPhotoWall({ viewSize }: FaceSwapPhotoWallProps) {
                     }}
                     onDelete={() => removeImages([img.id])}
                     onDragStart={(e) => handleFaceDragStart(e, img.id)}
+                    setDragging={setDragging}
                   />
 
                   {/* Drop overlay when a target card hovers over this face card */}
@@ -873,6 +893,97 @@ export function FaceSwapPhotoWall({ viewSize }: FaceSwapPhotoWallProps) {
           </div>
         </div>
       </div>
+
+      {/* Drag-to-delete zone — shown at bottom center while any card is being dragged */}
+      {dragging && (
+        <>
+          {/* Bottom gradient for readability behind the delete zone */}
+          <div
+            style={{
+              position: 'fixed',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: 180,
+              background: 'linear-gradient(to top, rgba(0,0,0,0.65) 0%, transparent 100%)',
+              pointerEvents: 'none',
+              zIndex: 499,
+              animation: 'fade-in 0.22s ease both',
+            }}
+          />
+          <div
+            onDragOver={(e) => e.preventDefault()}
+            onDragEnter={() => {
+              deleteZoneDragCount.current++;
+              setIsOverDeleteZone(true);
+            }}
+            onDragLeave={() => {
+              deleteZoneDragCount.current--;
+              if (deleteZoneDragCount.current <= 0) {
+                deleteZoneDragCount.current = 0;
+                setIsOverDeleteZone(false);
+              }
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const drag = dragging;
+              setDragging(null);
+
+              // Clean up dragging cursor state
+              document.body.classList.remove('is-dragging-card');
+
+              // Fallback: read imageId from dataTransfer
+              const fallbackFaceId = e.dataTransfer.getData('application/x-face-swap-face');
+              const fallbackTargetId = e.dataTransfer.getData('application/x-face-swap-target');
+              const fallbackCardId = fallbackFaceId || fallbackTargetId;
+
+              if (drag?.type === 'card' || (!drag && fallbackCardId)) {
+                // Find the image by id
+                const draggedId = drag?.imageId;
+                const imageId = draggedId ?? fallbackCardId;
+
+                if (imageId) {
+                  const toDelete = selectedImageIds.includes(imageId)
+                    ? selectedImageIds
+                    : [imageId];
+                  removeImages(toDelete);
+                  clearSelection();
+                  setMultiSelectZone(null);
+                }
+              }
+            }}
+            style={{
+              position: 'fixed',
+              bottom: 40,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              zIndex: 500,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              padding: '18px 56px',
+              minWidth: 340,
+              justifyContent: 'center',
+              backgroundColor: isOverDeleteZone ? 'rgba(239,68,68,0.28)' : 'rgba(239,68,68,0.1)',
+              border: `2px dashed ${isOverDeleteZone ? 'rgba(239,68,68,1)' : 'rgba(239,68,68,0.5)'}`,
+              borderRadius: 12,
+              color: isOverDeleteZone ? '#ff6b6b' : 'rgba(239,68,68,0.85)',
+              fontSize: '14px',
+              fontWeight: 600,
+              pointerEvents: 'all',
+              backdropFilter: 'blur(6px)',
+              transition: 'background-color 0.15s, border-color 0.15s, color 0.15s',
+              animation: 'delete-zone-in 0.22s cubic-bezier(0.22,1,0.36,1) both',
+            }}
+          >
+            <Trash2 size={18} />
+            {selectedImageIds.length > 1 && dragging?.type === 'card' && selectedImageIds.includes(dragging.imageId)
+              ? `松开删除 ${selectedImageIds.length} 张图片`
+              : '松开删除此图片'}
+          </div>
+        </>
+      )}
     </div>
   );
 }
