@@ -74,5 +74,10 @@
   "IllustriousLora\\cameltoe_illustrious_V2.0.safetensors": {
     "nickname": "身材-一字缝",
     "thumbnail": "e56f19ed-93a0-4053-bb00-e6c2049d4c04.png"
+  },
+  "多视图\\【光辉】【多视图】POV多视图.safetensors": {
+    "nickname": "POV多视图",
+    "triggerWords": "multiple views, pov",
+    "thumbnail": "0ba6525f-9ec5-44f8-a2a9-206c0596b50e.png"
   }
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ChevronDown, Star, Loader, Check, ImagePlus, PencilLine } from 'lucide-react';
+import { ChevronDown, Star, Loader, Check, ImagePlus, PencilLine, Tag } from 'lucide-react';
 import type { ModelMetadata } from '../hooks/useModelMetadata.js';
 
 interface ModelSelectProps {
@@ -13,6 +13,7 @@ interface ModelSelectProps {
   metadata?: Record<string, ModelMetadata>;
   onUploadThumbnail?: (modelPath: string, file: File) => void;
   onSetNickname?: (modelPath: string, nickname: string) => void;
+  onSetTriggerWords?: (modelPath: string, triggerWords: string) => void;
   getThumbnailUrl?: (modelPath: string) => string | null;
 }
 
@@ -32,6 +33,7 @@ export function ModelSelect({
   metadata,
   onUploadThumbnail,
   onSetNickname,
+  onSetTriggerWords,
   getThumbnailUrl,
 }: ModelSelectProps) {
   const [open, setOpen] = useState(false);
@@ -41,6 +43,8 @@ export function ModelSelect({
   const [uploadTargetModel, setUploadTargetModel] = useState<string | null>(null);
   const [editingModel, setEditingModel] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [editingTriggerModel, setEditingTriggerModel] = useState<string | null>(null);
+  const [triggerEditValue, setTriggerEditValue] = useState('');
   const [tooltipModel, setTooltipModel] = useState<string | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ top: number; left: number } | null>(null);
 
@@ -51,6 +55,7 @@ export function ModelSelect({
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setOpen(false);
         setEditingModel(null);
+        setEditingTriggerModel(null);
       }
     };
     document.addEventListener('mousedown', handler);
@@ -61,6 +66,7 @@ export function ModelSelect({
   useEffect(() => {
     if (!open) {
       setEditingModel(null);
+      setEditingTriggerModel(null);
       setTooltipModel(null);
       setTooltipPos(null);
     }
@@ -94,6 +100,13 @@ export function ModelSelect({
     }
     setEditingModel(null);
   }, [onSetNickname]);
+
+  const handleTriggerWordsConfirm = useCallback((model: string, words: string) => {
+    if (onSetTriggerWords) {
+      onSetTriggerWords(model, words.trim());
+    }
+    setEditingTriggerModel(null);
+  }, [onSetTriggerWords]);
 
   const handleItemMouseEnter = useCallback((model: string, e: React.MouseEvent<HTMLDivElement>, index: number) => {
     setHoveredIndex(index);
@@ -166,13 +179,15 @@ export function ModelSelect({
     const isSelected = model === value;
     const isHovered = hoveredIndex === index;
     const isEditing = editingModel === model;
+    const isEditingTrigger = editingTriggerModel === model;
+    const triggerWords = metadata?.[model]?.triggerWords;
 
     return (
       <div
         key={model}
         style={{
           display: 'flex',
-          alignItems: 'center',
+          alignItems: 'flex-start',
           padding: '6px 10px',
           cursor: 'pointer',
           gap: 8,
@@ -180,7 +195,7 @@ export function ModelSelect({
           transition: 'background-color 0.1s',
         }}
         onClick={() => {
-          if (!isEditing) {
+          if (!isEditing && !isEditingTrigger) {
             onChange(model);
             setOpen(false);
           }
@@ -200,50 +215,96 @@ export function ModelSelect({
           color={isFavorite ? 'var(--color-primary)' : 'var(--color-text-secondary)'}
         />
 
-        {/* Display name or edit input */}
-        {isEditing ? (
-          <input
-            autoFocus
-            value={editValue}
-            onChange={(e) => setEditValue(e.target.value)}
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => {
-              e.stopPropagation();
-              if (e.key === 'Enter') {
-                handleNicknameConfirm(model, editValue);
-              } else if (e.key === 'Escape') {
-                setEditingModel(null);
-              }
-            }}
-            onBlur={() => handleNicknameConfirm(model, editValue)}
-            style={{
-              flex: 1,
-              fontSize: '12px',
-              color: 'var(--color-text)',
-              background: 'var(--color-bg)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 4,
-              padding: '2px 6px',
-              outline: 'none',
-              fontFamily: 'inherit',
-              minWidth: 0,
-            }}
-          />
-        ) : (
-          <span
-            title={model}
-            style={{
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              flex: 1,
-              fontSize: '12px',
-              color: isSelected ? 'var(--color-primary)' : 'var(--color-text)',
-            }}
-          >
-            {getModelDisplayName(model)}
-          </span>
-        )}
+        {/* Display name / edit inputs */}
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {isEditing ? (
+            <input
+              autoFocus
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === 'Enter') {
+                  handleNicknameConfirm(model, editValue);
+                } else if (e.key === 'Escape') {
+                  setEditingModel(null);
+                }
+              }}
+              onBlur={() => handleNicknameConfirm(model, editValue)}
+              style={{
+                width: '100%',
+                fontSize: '12px',
+                color: 'var(--color-text)',
+                background: 'var(--color-bg)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 4,
+                padding: '2px 6px',
+                outline: 'none',
+                fontFamily: 'inherit',
+                minWidth: 0,
+                boxSizing: 'border-box',
+              }}
+            />
+          ) : (
+            <span
+              title={model}
+              style={{
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                fontSize: '12px',
+                color: isSelected ? 'var(--color-primary)' : 'var(--color-text)',
+              }}
+            >
+              {getModelDisplayName(model)}
+            </span>
+          )}
+          {isEditingTrigger ? (
+            <input
+              autoFocus
+              placeholder="输入触发词…"
+              value={triggerEditValue}
+              onChange={(e) => setTriggerEditValue(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === 'Enter') {
+                  handleTriggerWordsConfirm(model, triggerEditValue);
+                } else if (e.key === 'Escape') {
+                  setEditingTriggerModel(null);
+                }
+              }}
+              onBlur={() => handleTriggerWordsConfirm(model, triggerEditValue)}
+              style={{
+                width: '100%',
+                fontSize: '11px',
+                color: 'var(--color-text)',
+                background: 'var(--color-bg)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 4,
+                padding: '2px 6px',
+                outline: 'none',
+                fontFamily: 'inherit',
+                minWidth: 0,
+                boxSizing: 'border-box',
+              }}
+            />
+          ) : (
+            triggerWords && !isEditing && (
+              <span style={{
+                fontSize: '10px',
+                color: 'var(--color-text-secondary)',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                opacity: 0.7,
+              }}>
+                {triggerWords}
+              </span>
+            )
+          )}
+        </div>
 
         {/* Action icons — visible on hover */}
         {onUploadThumbnail && (
@@ -270,6 +331,7 @@ export function ModelSelect({
             size={14}
             onClick={(e) => {
               e.stopPropagation();
+              setEditingTriggerModel(null);
               setEditingModel(model);
               setEditValue(metadata?.[model]?.nickname || getDisplayName(model));
             }}
@@ -279,6 +341,28 @@ export function ModelSelect({
               color: 'var(--color-text-secondary)',
               opacity: isHovered ? 0.7 : 0,
               transition: 'opacity 0.15s',
+              marginTop: 2,
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as SVGElement).style.opacity = '1'; }}
+            onMouseLeave={(e) => { (e.currentTarget as SVGElement).style.opacity = isHovered ? '0.7' : '0'; }}
+          />
+        )}
+        {onSetTriggerWords && (
+          <Tag
+            size={14}
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditingModel(null);
+              setEditingTriggerModel(model);
+              setTriggerEditValue(metadata?.[model]?.triggerWords || '');
+            }}
+            style={{
+              flexShrink: 0,
+              cursor: 'pointer',
+              color: triggerWords ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+              opacity: isHovered ? 0.7 : 0,
+              transition: 'opacity 0.15s',
+              marginTop: 2,
             }}
             onMouseEnter={(e) => { (e.currentTarget as SVGElement).style.opacity = '1'; }}
             onMouseLeave={(e) => { (e.currentTarget as SVGElement).style.opacity = isHovered ? '0.7' : '0'; }}
@@ -286,7 +370,7 @@ export function ModelSelect({
         )}
 
         {isSelected && (
-          <Check size={14} color="var(--color-primary)" style={{ flexShrink: 0 }} />
+          <Check size={14} color="var(--color-primary)" style={{ flexShrink: 0, marginTop: 2 }} />
         )}
       </div>
     );

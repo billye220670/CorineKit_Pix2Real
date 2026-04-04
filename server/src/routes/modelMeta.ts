@@ -25,7 +25,7 @@ const upload = multer({
   },
 });
 
-function readMetadata(): Record<string, { thumbnail?: string; nickname?: string }> {
+function readMetadata(): Record<string, { thumbnail?: string; nickname?: string; triggerWords?: string }> {
   try {
     const raw = fs.readFileSync(metadataFile, 'utf-8');
     return JSON.parse(raw);
@@ -34,7 +34,7 @@ function readMetadata(): Record<string, { thumbnail?: string; nickname?: string 
   }
 }
 
-function writeMetadata(data: Record<string, { thumbnail?: string; nickname?: string }>): void {
+function writeMetadata(data: Record<string, { thumbnail?: string; nickname?: string; triggerWords?: string }>): void {
   fs.writeFileSync(metadataFile, JSON.stringify(data, null, 2), 'utf-8');
 }
 
@@ -116,7 +116,7 @@ router.delete('/metadata/thumbnail', (req: Request, res: Response) => {
     }
     delete metadata[modelPath].thumbnail;
     // 如果该模型没有任何元数据了，清理掉整个条目
-    if (!metadata[modelPath].nickname) {
+    if (!metadata[modelPath].nickname && !metadata[modelPath].triggerWords) {
       delete metadata[modelPath];
     }
     writeMetadata(metadata);
@@ -137,7 +137,46 @@ router.delete('/metadata/nickname', (req: Request, res: Response) => {
   if (metadata[modelPath]) {
     delete metadata[modelPath].nickname;
     // 如果该模型没有任何元数据了，清理掉整个条目
-    if (!metadata[modelPath].thumbnail) {
+    if (!metadata[modelPath].thumbnail && !metadata[modelPath].triggerWords) {
+      delete metadata[modelPath];
+    }
+    writeMetadata(metadata);
+  }
+
+  res.json({ ok: true });
+});
+
+// POST /metadata/trigger-words — 设置触发词
+router.post('/metadata/trigger-words', (req: Request, res: Response) => {
+  const { modelPath, triggerWords } = req.body as { modelPath?: string; triggerWords?: string };
+  if (!modelPath || triggerWords === undefined) {
+    res.status(400).json({ error: 'modelPath and triggerWords are required' });
+    return;
+  }
+
+  const metadata = readMetadata();
+  if (!metadata[modelPath]) {
+    metadata[modelPath] = {};
+  }
+  metadata[modelPath].triggerWords = triggerWords;
+  writeMetadata(metadata);
+
+  res.json({ ok: true });
+});
+
+// DELETE /metadata/trigger-words — 删除触发词
+router.delete('/metadata/trigger-words', (req: Request, res: Response) => {
+  const { modelPath } = req.body as { modelPath?: string };
+  if (!modelPath) {
+    res.status(400).json({ error: 'modelPath is required' });
+    return;
+  }
+
+  const metadata = readMetadata();
+  if (metadata[modelPath]) {
+    delete metadata[modelPath].triggerWords;
+    // 如果该模型没有任何元数据了，清理掉整个条目
+    if (!metadata[modelPath].thumbnail && !metadata[modelPath].nickname) {
       delete metadata[modelPath];
     }
     writeMetadata(metadata);

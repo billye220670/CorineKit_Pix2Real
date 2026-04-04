@@ -33,7 +33,7 @@
     "inputs": {
       "text": "19岁韩国美女，韩式网红风格，精致妆容，修长美腿，性感脚趾，，极致冷白皮，浅粉色唇釉带着光泽，通体雪白如瓷器凝脂，细腻毛孔与真实绒毛清晰可见.\n\n\n",
       "clip": [
-        "36",
+        "51",
         1
       ]
     },
@@ -131,6 +131,44 @@
       "title": "加载LoRA"
     }
   },
+  "50": {
+    "inputs": {
+      "lora_name": "placeholder.safetensors",
+      "strength_model": 1,
+      "strength_clip": 1,
+      "model": [
+        "36",
+        0
+      ],
+      "clip": [
+        "36",
+        1
+      ]
+    },
+    "class_type": "LoraLoader",
+    "_meta": {
+      "title": "加载LoRA 2"
+    }
+  },
+  "51": {
+    "inputs": {
+      "lora_name": "placeholder.safetensors",
+      "strength_model": 1,
+      "strength_clip": 1,
+      "model": [
+        "50",
+        0
+      ],
+      "clip": [
+        "50",
+        1
+      ]
+    },
+    "class_type": "LoraLoader",
+    "_meta": {
+      "title": "加载LoRA 3"
+    }
+  },
   "38": {
     "inputs": {
       "conditioning": [
@@ -160,7 +198,7 @@
     "inputs": {
       "shift": 3,
       "model": [
-        "36",
+        "51",
         0
       ]
     },
@@ -177,7 +215,7 @@
         0
       ],
       "on_false": [
-        "36",
+        "51",
         0
       ]
     },

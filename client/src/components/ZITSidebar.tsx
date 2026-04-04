@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useWorkflowStore, type ZitConfig } from '../hooks/useWorkflowStore.js';
+import { type LoraSlot } from '../services/sessionService.js';
 import { usePromptAssistantStore } from '../hooks/usePromptAssistantStore.js';
 import { useWebSocket } from '../hooks/useWebSocket.js';
-import { ChevronRight, ChevronDown, Loader, BookText, Hash, AlignLeft, Wand2, Loader2 } from 'lucide-react';
+import { ChevronRight, ChevronDown, Loader, BookText, Hash, AlignLeft, Wand2, Loader2, Copy, Check as CheckIcon } from 'lucide-react';
 import { SYSTEM_PROMPTS } from './prompt-assistant/systemPrompts.js';
 import { ModelSelect, useModelFavorites } from './ModelSelect.js';
 import { useModelMetadata } from '../hooks/useModelMetadata.js';
@@ -31,8 +32,26 @@ const SCHEDULERS = [
 ];
 
 const DRAFT_KEY = 'zit_draft';
+const DEFAULT_LORAS: LoraSlot[] = [
+  { model: '', enabled: false, strength: 1 },
+  { model: '', enabled: false, strength: 1 },
+  { model: '', enabled: false, strength: 1 },
+];
 function readDraft() {
-  try { return JSON.parse(localStorage.getItem(DRAFT_KEY) ?? 'null') ?? {}; } catch { return {}; }
+  try {
+    const raw = JSON.parse(localStorage.getItem(DRAFT_KEY) ?? 'null') ?? {};
+    // Backward compat: migrate old loraModel/loraEnabled to loras array
+    if (!raw.loras && (raw.loraModel || raw.loraEnabled !== undefined)) {
+      raw.loras = [
+        { model: raw.loraModel ?? '', enabled: raw.loraEnabled ?? false, strength: 1 },
+        { model: '', enabled: false, strength: 1 },
+        { model: '', enabled: false, strength: 1 },
+      ];
+      delete raw.loraModel;
+      delete raw.loraEnabled;
+    }
+    return raw;
+  } catch { return {}; }
 }
 
 export function ZITSidebar() {
@@ -62,7 +81,8 @@ export function ZITSidebar() {
   // Model favorites
   const { favorites: unetFavorites, toggleFavorite: toggleUnetFavorite } = useModelFavorites('unets');
   const { favorites: loraFavorites, toggleFavorite: toggleLoraFavorite } = useModelFavorites('loras');
-  const { metadata, uploadThumbnail, setNickname, getThumbnailUrl } = useModelMetadata();
+  const { metadata, uploadThumbnail, setNickname, setTriggerWords, getThumbnailUrl, getTriggerWords } = useModelMetadata();
+  const [copiedLoraIndex, setCopiedLoraIndex] = useState<number | null>(null);
 
   useEffect(() => {
     setLoraListLoading(true);
@@ -75,8 +95,10 @@ export function ZITSidebar() {
 
   // Config state — initialised from localStorage draft
   const [unetModel,   setUnetModel]   = useState(() => readDraft().unetModel   ?? '');
-  const [loraModel,   setLoraModel]   = useState(() => readDraft().loraModel   ?? '');
-  const [loraEnabled,   setLoraEnabled]   = useState(() => readDraft().loraEnabled   ?? false);
+  const [loras, setLoras] = useState<LoraSlot[]>(() => readDraft().loras ?? DEFAULT_LORAS);
+  const updateLora = (index: number, patch: Partial<LoraSlot>) => {
+    setLoras(prev => prev.map((l, i) => i === index ? { ...l, ...patch } : l));
+  };
   const [shiftEnabled,  setShiftEnabled]  = useState(() => readDraft().shiftEnabled  ?? false);
   const [shift,         setShift]         = useState(() => readDraft().shift         ?? 3);
   const [prompt,        setPrompt]        = useState(() => readDraft().prompt        ?? '');
@@ -96,9 +118,9 @@ export function ZITSidebar() {
   // Persist to localStorage
   useEffect(() => {
     localStorage.setItem(DRAFT_KEY, JSON.stringify({
-      unetModel, loraModel, loraEnabled, shiftEnabled, shift, prompt, ratio, steps, cfg, sampler, scheduler, customName,
+      unetModel, loras, shiftEnabled, shift, prompt, ratio, steps, cfg, sampler, scheduler, customName,
     }));
-  }, [unetModel, loraModel, loraEnabled, shiftEnabled, shift, prompt, ratio, steps, cfg, sampler, scheduler, customName]);
+  }, [unetModel, loras, shiftEnabled, shift, prompt, ratio, steps, cfg, sampler, scheduler, customName]);
 
   // Default model once loaded (or fallback if saved model not in list)
   useEffect(() => {
@@ -111,11 +133,11 @@ export function ZITSidebar() {
 
   useEffect(() => {
     if (loraModels.length > 0) {
-      if (!loraModel || !loraModels.includes(loraModel)) {
-        setLoraModel(loraModels[0]);
-      }
+      setLoras(prev => prev.map(l =>
+        (!l.model || !loraModels.includes(l.model)) ? { ...l, model: loraModels[0] } : l
+      ));
     }
-  }, [loraModels, loraModel]);
+  }, [loraModels]);
 
   const selectedPreset = RATIO_PRESETS.find((p) => p.label === ratio) ?? RATIO_PRESETS[1];
 
@@ -124,8 +146,7 @@ export function ZITSidebar() {
 
     const config: ZitConfig = {
       unetModel: unetModel || (unetModels[0] ?? ''),
-      loraModel: loraModel || (loraModels[0] ?? ''),
-      loraEnabled,
+      loras,
       shiftEnabled,
       shift,
       prompt,
@@ -168,7 +189,7 @@ export function ZITSidebar() {
     } finally {
       setIsGenerating(false);
     }
-  }, [clientId, isGenerating, unetModel, unetModels, loraModel, loraModels, loraEnabled, shiftEnabled, shift, prompt, selectedPreset, steps, cfg, sampler, scheduler, customName, batchCount, addZitCard, startTask, sendMessage, sessionId]);
+  }, [clientId, isGenerating, unetModel, unetModels, loras, loraModels, shiftEnabled, shift, prompt, selectedPreset, steps, cfg, sampler, scheduler, customName, batchCount, addZitCard, startTask, sendMessage, sessionId]);
 
   const handleQuickAction = useCallback(async (mode: 'naturalToTags' | 'tagsToNatural' | 'detailer') => {
     if (!prompt.trim()) return;
@@ -263,54 +284,111 @@ export function ZITSidebar() {
           />
         </div>
 
-        {/* LoRA collapsible section */}
-        <div>
-          <button
-            onClick={() => setLoraEnabled((v: boolean) => !v)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-              background: 'none',
-              border: 'none',
-              padding: 0,
-              cursor: 'pointer',
-              color: 'var(--color-text-secondary)',
-              fontSize: '11px',
-              fontWeight: 600,
-              letterSpacing: '0.04em',
-              marginBottom: loraEnabled ? 10 : 0,
-            }}
-          >
-            {loraEnabled ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-            <input
-              type="checkbox"
-              checked={loraEnabled}
-              onChange={() => {}}
-              onClick={(e) => e.stopPropagation()}
-              style={{ margin: '0 2px', cursor: 'pointer', accentColor: 'var(--color-primary)' }}
-            />
-            启用 LoRA
-          </button>
-
-          {loraEnabled && (
-            <div>
-              <ModelSelect
-                models={loraModels}
-                value={loraModel}
-                onChange={setLoraModel}
-                favorites={loraFavorites}
-                onToggleFavorite={toggleLoraFavorite}
-                loading={loraListLoading}
-                placeholder="（无可用 LoRA）"
-                metadata={metadata}
-                onUploadThumbnail={uploadThumbnail}
-                onSetNickname={setNickname}
-                getThumbnailUrl={getThumbnailUrl}
+        {/* LoRA collapsible sections */}
+        {loras.map((lora, i) => (
+          <div key={i}>
+            <button
+              onClick={() => updateLora(i, { enabled: !lora.enabled })}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                background: 'none',
+                border: 'none',
+                padding: 0,
+                cursor: 'pointer',
+                color: 'var(--color-text-secondary)',
+                fontSize: '11px',
+                fontWeight: 600,
+                letterSpacing: '0.04em',
+                marginBottom: lora.enabled ? 10 : 0,
+              }}
+            >
+              {lora.enabled ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+              <input
+                type="checkbox"
+                checked={lora.enabled}
+                onChange={(e) => { e.stopPropagation(); updateLora(i, { enabled: e.target.checked }); }}
+                onClick={(e) => e.stopPropagation()}
+                style={{ margin: '0 2px', cursor: 'pointer', accentColor: 'var(--color-primary)' }}
               />
-            </div>
-          )}
-        </div>
+              启用 LoRA {i + 1}
+            </button>
+
+            {lora.enabled && (
+              <div>
+                <ModelSelect
+                  models={loraModels}
+                  value={lora.model}
+                  onChange={(v) => updateLora(i, { model: v })}
+                  favorites={loraFavorites}
+                  onToggleFavorite={toggleLoraFavorite}
+                  loading={loraListLoading}
+                  placeholder="（无可用 LoRA）"
+                  metadata={metadata}
+                  onUploadThumbnail={uploadThumbnail}
+                  onSetNickname={setNickname}
+                  onSetTriggerWords={setTriggerWords}
+                  getThumbnailUrl={getThumbnailUrl}
+                />
+                {/* Trigger words display */}
+                {lora.model && getTriggerWords(lora.model) && (
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const tw = getTriggerWords(lora.model);
+                      if (tw) {
+                        navigator.clipboard.writeText(tw).then(() => {
+                          setCopiedLoraIndex(i);
+                          setTimeout(() => setCopiedLoraIndex(null), 2000);
+                        });
+                      }
+                    }}
+                    title="点击复制触发词"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      marginTop: 4,
+                      padding: '3px 6px',
+                      borderRadius: 4,
+                      backgroundColor: 'var(--color-bg)',
+                      cursor: 'pointer',
+                      transition: 'background-color 0.15s',
+                    }}
+                  >
+                    <span style={{
+                      flex: 1,
+                      fontSize: '11px',
+                      color: 'var(--color-text-secondary)',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}>
+                      {getTriggerWords(lora.model)}
+                    </span>
+                    {copiedLoraIndex === i
+                      ? <CheckIcon size={11} color="var(--color-primary)" style={{ flexShrink: 0 }} />
+                      : <Copy size={11} color="var(--color-text-secondary)" style={{ flexShrink: 0, opacity: 0.6 }} />}
+                  </div>
+                )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                  <span style={{ fontSize: 11, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>权重</span>
+                  <input
+                    type="range"
+                    min={0} max={2} step={0.05}
+                    value={lora.strength}
+                    onChange={(e) => updateLora(i, { strength: parseFloat(e.target.value) })}
+                    style={{ flex: 1, accentColor: 'var(--color-primary)' }}
+                  />
+                  <span style={{ fontSize: 11, color: 'var(--text-secondary)', minWidth: 28, textAlign: 'right' }}>
+                    {lora.strength.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
 
         {/* Prompt */}
         <div>

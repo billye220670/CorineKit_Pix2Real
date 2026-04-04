@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 export interface ModelMetadata {
   thumbnail?: string;
   nickname?: string;
+  triggerWords?: string;
 }
 
 export function useModelMetadata() {
@@ -109,6 +110,48 @@ export function useModelMetadata() {
     return metadata[modelPath]?.nickname ?? null;
   }, [metadata]);
 
+  const setTriggerWords = useCallback(async (modelPath: string, triggerWords: string) => {
+    try {
+      const res = await fetch('/api/models/metadata/trigger-words', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ modelPath, triggerWords }),
+      });
+      if (!res.ok) return;
+      setMetadata((prev) => ({
+        ...prev,
+        [modelPath]: { ...prev[modelPath], triggerWords },
+      }));
+    } catch {
+      // silent
+    }
+  }, []);
+
+  const deleteTriggerWords = useCallback(async (modelPath: string) => {
+    try {
+      const res = await fetch('/api/models/metadata/trigger-words', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ modelPath }),
+      });
+      if (!res.ok) return;
+      setMetadata((prev) => {
+        const next = { ...prev };
+        if (next[modelPath]) {
+          next[modelPath] = { ...next[modelPath] };
+          delete next[modelPath].triggerWords;
+        }
+        return next;
+      });
+    } catch {
+      // silent
+    }
+  }, []);
+
+  const getTriggerWords = useCallback((modelPath: string): string | null => {
+    return metadata[modelPath]?.triggerWords ?? null;
+  }, [metadata]);
+
   return {
     metadata,
     loadMetadata,
@@ -118,5 +161,8 @@ export function useModelMetadata() {
     removeNickname,
     getThumbnailUrl,
     getNickname,
+    setTriggerWords,
+    deleteTriggerWords,
+    getTriggerWords,
   };
 }

@@ -148,9 +148,10 @@ router.post('/10/execute', uploadFields, async (req, res) => {
 // POST /api/workflow/7/execute — 快速出图: text-to-image, JSON body (no file upload)
 router.post('/7/execute', express.json(), async (req, res) => {
   try {
-    const { clientId, model, prompt, width, height, steps, cfg, sampler, scheduler, name } = req.body as {
+    const { clientId, model, loras, prompt, width, height, steps, cfg, sampler, scheduler, name } = req.body as {
       clientId: string;
       model: string;
+      loras?: Array<{ model: string; enabled: boolean; strength: number }>;
       prompt: string;
       width: number;
       height: number;
@@ -186,6 +187,50 @@ router.post('/7/execute', express.json(), async (req, res) => {
     // Node 45: output filename prefix
     if (name) {
       template['45'].inputs.filename_prefix = name;
+    }
+
+    // LoRA handling: nodes 50, 51, 52 chained from Checkpoint #4
+    const tab7LoraNodeIds = ['50', '51', '52'];
+    const tab7Loras = loras && loras.length > 0 ? loras : [];
+
+    // Set lora_name and strength for each LoRA node
+    tab7Loras.forEach((lora, i) => {
+      if (i < tab7LoraNodeIds.length) {
+        template[tab7LoraNodeIds[i]].inputs.lora_name = lora.model;
+        template[tab7LoraNodeIds[i]].inputs.strength_model = lora.strength;
+        template[tab7LoraNodeIds[i]].inputs.strength_clip = lora.strength;
+      }
+    });
+
+    // Dynamic reconnection: bypass disabled LoRAs
+    const tab7ModelSource: [string, number] = ['4', 0];
+    const tab7ClipSource: [string, number] = ['4', 1];
+    const tab7EnabledIndices = tab7Loras.map((l, i) => l.enabled ? i : -1).filter(i => i >= 0 && i < tab7LoraNodeIds.length);
+
+    if (tab7EnabledIndices.length === 0) {
+      // All disabled: KSampler and CLIPTextEncode nodes connect directly to Checkpoint
+      template['3'].inputs.model = tab7ModelSource;
+      template['6'].inputs.clip = tab7ClipSource;
+      template['7'].inputs.clip = tab7ClipSource;
+    } else {
+      // First enabled LoRA connects to source
+      const firstIdx = tab7EnabledIndices[0];
+      template[tab7LoraNodeIds[firstIdx]].inputs.model = tab7ModelSource;
+      template[tab7LoraNodeIds[firstIdx]].inputs.clip = tab7ClipSource;
+
+      // Chain enabled LoRAs together
+      for (let k = 1; k < tab7EnabledIndices.length; k++) {
+        const curr = tab7EnabledIndices[k];
+        const prev = tab7EnabledIndices[k - 1];
+        template[tab7LoraNodeIds[curr]].inputs.model = [tab7LoraNodeIds[prev], 0];
+        template[tab7LoraNodeIds[curr]].inputs.clip = [tab7LoraNodeIds[prev], 1];
+      }
+
+      // Last enabled LoRA outputs to KSampler and CLIPTextEncode nodes
+      const lastIdx = tab7EnabledIndices[tab7EnabledIndices.length - 1];
+      template['3'].inputs.model = [tab7LoraNodeIds[lastIdx], 0];
+      template['6'].inputs.clip = [tab7LoraNodeIds[lastIdx], 1];
+      template['7'].inputs.clip = [tab7LoraNodeIds[lastIdx], 1];
     }
 
     const result = await queuePrompt(template, clientId);
@@ -235,11 +280,10 @@ router.get('/models/loras', async (_req, res) => {
 // POST /api/workflow/9/execute — ZIT快出: text-to-image with UNet + LoRA, JSON body (no file upload)
 router.post('/9/execute', express.json(), async (req, res) => {
   try {
-    const { clientId, unetModel, loraModel, loraEnabled, shiftEnabled, shift, prompt, width, height, steps, cfg, sampler, scheduler, name } = req.body as {
+    const { clientId, unetModel, loras, shiftEnabled, shift, prompt, width, height, steps, cfg, sampler, scheduler, name } = req.body as {
       clientId: string;
       unetModel: string;
-      loraModel: string;
-      loraEnabled: boolean;
+      loras?: Array<{ model: string; enabled: boolean; strength: number }>;
       shiftEnabled: boolean;
       shift: number;
       prompt: string;
@@ -261,8 +305,6 @@ router.post('/9/execute', express.json(), async (req, res) => {
 
     // Node 25: UNET model
     template['25'].inputs.unet_name = unetModel;
-    // Node 36: LoRA model
-    template['36'].inputs.lora_name = loraModel;
     // Node 45: AuraFlow shift value
     template['45'].inputs.shift = shift ?? 3;
     // Node 7: image dimensions
@@ -278,17 +320,54 @@ router.post('/9/execute', express.json(), async (req, res) => {
     if (prompt !== undefined) {
       template['5'].inputs.text = prompt;
     }
-    // NEW2: #47(ifElse) 控制 shift 开关: true→#45(shift), false→#36(lora)
+    // NEW2: #47(ifElse) 控制 shift 开关: true→#45(shift), false→最后启用的LoRA
     // KSampler #4 始终从 #47 取模型
     template['47'].inputs.boolean = shiftEnabled;
 
-    if (!loraEnabled) {
-      // 绕过 LoRA: clip 直接从 #26
-      template['5'].inputs.clip = ['26', 0];
-      // 调整 #45 和 #47 的输入绕过 LoRA (#36)
-      template['45'].inputs.model = ['25', 0];
-      template['47'].inputs.on_false = ['25', 0];
+    // LoRA handling: nodes 36, 50, 51 chained from UNet #25 (model) and CLIP #26 (clip)
+    const tab9LoraNodeIds = ['36', '50', '51'];
+    const tab9Loras = loras && loras.length > 0 ? loras : [];
+
+    // Set lora_name and strength for each LoRA node
+    tab9Loras.forEach((lora, i) => {
+      if (i < tab9LoraNodeIds.length) {
+        template[tab9LoraNodeIds[i]].inputs.lora_name = lora.model;
+        template[tab9LoraNodeIds[i]].inputs.strength_model = lora.strength;
+        template[tab9LoraNodeIds[i]].inputs.strength_clip = lora.strength;
+      }
+    });
+
+    // Dynamic reconnection: bypass disabled LoRAs
+    const tab9ModelSource: [string, number] = ['25', 0];
+    const tab9ClipSource: [string, number] = ['26', 0];
+    const tab9EnabledIndices = tab9Loras.map((l, i) => l.enabled ? i : -1).filter(i => i >= 0 && i < tab9LoraNodeIds.length);
+
+    if (tab9EnabledIndices.length === 0) {
+      // All disabled: downstream nodes connect directly to UNet/CLIP sources
+      template['45'].inputs.model = tab9ModelSource;
+      template['5'].inputs.clip = tab9ClipSource;
+      template['47'].inputs.on_false = tab9ModelSource;
+    } else {
+      // First enabled LoRA connects to source
+      const firstIdx = tab9EnabledIndices[0];
+      template[tab9LoraNodeIds[firstIdx]].inputs.model = tab9ModelSource;
+      template[tab9LoraNodeIds[firstIdx]].inputs.clip = tab9ClipSource;
+
+      // Chain enabled LoRAs together
+      for (let k = 1; k < tab9EnabledIndices.length; k++) {
+        const curr = tab9EnabledIndices[k];
+        const prev = tab9EnabledIndices[k - 1];
+        template[tab9LoraNodeIds[curr]].inputs.model = [tab9LoraNodeIds[prev], 0];
+        template[tab9LoraNodeIds[curr]].inputs.clip = [tab9LoraNodeIds[prev], 1];
+      }
+
+      // Last enabled LoRA outputs to ModelSampling, CLIPTextEncode, and ifElse
+      const lastIdx = tab9EnabledIndices[tab9EnabledIndices.length - 1];
+      template['45'].inputs.model = [tab9LoraNodeIds[lastIdx], 0];
+      template['5'].inputs.clip = [tab9LoraNodeIds[lastIdx], 1];
+      template['47'].inputs.on_false = [tab9LoraNodeIds[lastIdx], 0];
     }
+
     // Node 24: output filename prefix
     if (name) {
       template['24'].inputs.filename_prefix = name;
@@ -431,6 +510,12 @@ router.post('/2/execute', upload.single('image'), async (req, res) => {
       const template = JSON.parse(fs.readFileSync(sdUpscaleTemplatePath, 'utf-8'));
       template['483'].inputs.image = comfyFilename;
       template['170'].inputs.seed = Math.floor(Math.random() * 1125899906842624);
+      promptJson = template;
+    } else if (model === 'remacri') {
+      const template = JSON.parse(fs.readFileSync(sdUpscaleTemplatePath, 'utf-8'));
+      template['483'].inputs.image = comfyFilename;
+      template['170'].inputs.seed = Math.floor(Math.random() * 1125899906842624);
+      template['171'].inputs.model_name = 'Remacri_original.safetensor';
       promptJson = template;
     } else {
       // seedvr2 (default)

@@ -1,10 +1,15 @@
 // client/src/services/sessionService.ts
 // Typed API wrappers for the session persistence backend.
 
+export interface LoraSlot {
+  model: string;
+  enabled: boolean;
+  strength: number;  // 权重，默认1，范围0~2，步长0.05
+}
+
 export interface Text2ImgConfig {
   model: string;
-  loraModel: string;
-  loraEnabled: boolean;
+  loras: LoraSlot[];
   prompt: string;
   width: number;
   height: number;
@@ -16,8 +21,7 @@ export interface Text2ImgConfig {
 
 export interface ZitConfig {
   unetModel: string;
-  loraModel: string;
-  loraEnabled: boolean;
+  loras: LoraSlot[];
   shiftEnabled: boolean;
   shift: number;
   prompt: string;
