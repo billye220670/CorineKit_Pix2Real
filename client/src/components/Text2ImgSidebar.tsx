@@ -216,28 +216,33 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
   const pillBtn = (active: boolean): React.CSSProperties => ({
     padding: '4px 8px',
     fontSize: '12px',
-    border: active ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
+    border: 'none',
     borderRadius: 6,
-    backgroundColor: active ? 'rgba(33,150,243,0.12)' : 'transparent',
+    backgroundColor: active ? 'rgba(33,150,243,0.12)' : 'var(--color-surface-hover)',
     color: active ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+    fontWeight: active ? 500 : 400,
     cursor: 'pointer',
     flexShrink: 0,
     transition: 'background-color 0.12s, border-color 0.12s, color 0.12s',
   });
 
-  const label: React.CSSProperties = {
-    fontSize: '11px',
-    fontWeight: 600,
-    color: 'var(--color-text-secondary)',
-    letterSpacing: '0.04em',
-    marginBottom: 6,
+  const cardStyle: React.CSSProperties = {
+    padding: '0',
   };
 
-  const cardStyle: React.CSSProperties = {
-    backgroundColor: 'var(--card-bg)',
-    border: '1px solid var(--color-border)',
-    borderRadius: 8,
-    padding: '12px 14px',
+  const dividerStyle: React.CSSProperties = {
+    height: 1,
+    backgroundColor: 'var(--color-border)',
+    margin: '0',
+    opacity: 0.5,
+  };
+
+  const sectionLabelStyle: React.CSSProperties = {
+    fontSize: 12,
+    fontWeight: 600,
+    color: 'var(--color-text-secondary)',
+    marginBottom: 8,
+    letterSpacing: '0.02em',
   };
 
   const sliderRow = (name: string, value: number, min: number, max: number, step: number, setter: (v: number) => void) => (
@@ -268,11 +273,11 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
       flexDirection: 'column',
       overflow: 'hidden',
     }}>
-      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 0 }}>
 
         {/* Model */}
-        <div style={cardStyle}>
-          <div style={label}>模型</div>
+        <div style={{ ...cardStyle, paddingTop: 0, paddingBottom: 16 }}>
+          <div style={sectionLabelStyle}>模型</div>
           <ModelSelect
             models={models}
             value={model}
@@ -290,9 +295,13 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
           />
         </div>
 
+        <div style={dividerStyle} />
+
         {/* LoRA collapsible sections */}
+        <div style={{ ...cardStyle, paddingTop: 16, paddingBottom: 16 }}>
+          <div style={sectionLabelStyle}>LoRA</div>
         {loras.map((lora, i) => (
-          <div key={i} style={cardStyle}>
+          <div key={i} style={{ marginBottom: i < loras.length - 1 ? 12 : 0 }}>
             <div
               style={{
                 display: 'flex',
@@ -382,9 +391,7 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
                       marginTop: 4,
                       padding: '3px 6px',
                       borderRadius: 4,
-                      backgroundColor: 'var(--color-bg)',
                       cursor: 'pointer',
-                      transition: 'background-color 0.15s',
                     }}
                   >
                     <span style={{
@@ -419,10 +426,13 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
             )}
           </div>
         ))}
+        </div>
+
+        <div style={dividerStyle} />
 
         {/* Prompt */}
-        <div style={cardStyle}>
-          <div style={label}>提示词</div>
+        <div style={{ ...cardStyle, paddingTop: 16, paddingBottom: 16 }}>
+          <div style={sectionLabelStyle}>提示词</div>
           <div
             style={{ position: 'relative' }}
             className={quickActionLoading ? 'textarea-ai-active' : undefined}
@@ -576,9 +586,11 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
           </div>
         </div>
 
+        <div style={dividerStyle} />
+
         {/* Aspect ratio */}
-        <div style={cardStyle}>
-          <div style={label}>比例</div>
+        <div style={{ ...cardStyle, paddingTop: 16, paddingBottom: 16 }}>
+          <div style={sectionLabelStyle}>比例</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {RATIO_PRESETS.map((p) => (
               <button key={p.label} style={pillBtn(ratio === p.label)} onClick={() => setRatio(p.label)}>
@@ -588,8 +600,10 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
           </div>
         </div>
 
+        <div style={dividerStyle} />
+
         {/* Collapsible sampler settings */}
-        <div style={cardStyle}>
+        <div style={{ ...cardStyle, paddingTop: 16, paddingBottom: 0 }}>
           <button
             onClick={() => setSamplerOpen((v) => !v)}
             style={{
@@ -601,9 +615,9 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
               padding: 0,
               cursor: 'pointer',
               color: 'var(--color-text-secondary)',
-              fontSize: '11px',
+              fontSize: '12px',
               fontWeight: 600,
-              letterSpacing: '0.04em',
+              letterSpacing: '0.02em',
               marginBottom: samplerOpen ? 10 : 0,
             }}
           >
