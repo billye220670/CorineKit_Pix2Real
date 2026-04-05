@@ -68,7 +68,7 @@ export function Text2ImgSidebar() {
   // Model favorites
   const { favorites: checkpointFavorites, toggleFavorite: toggleCheckpointFavorite } = useModelFavorites('checkpoints');
   const { favorites: loraFavorites, toggleFavorite: toggleLoraFavorite } = useModelFavorites('loras');
-  const { metadata, uploadThumbnail, setNickname, setTriggerWords, getThumbnailUrl, getTriggerWords } = useModelMetadata();
+  const { metadata, uploadThumbnail, setNickname, setTriggerWords, getThumbnailUrl, getTriggerWords, setCategory, deleteCategory } = useModelMetadata();
   const [copiedLoraIndex, setCopiedLoraIndex] = useState<number | null>(null);
 
   // LoRA model list
@@ -275,6 +275,8 @@ export function Text2ImgSidebar() {
             metadata={metadata}
             onUploadThumbnail={uploadThumbnail}
             onSetNickname={setNickname}
+            onSetCategory={setCategory}
+            onDeleteCategory={deleteCategory}
             getThumbnailUrl={getThumbnailUrl}
           />
         </div>
@@ -324,6 +326,8 @@ export function Text2ImgSidebar() {
                   onUploadThumbnail={uploadThumbnail}
                   onSetNickname={setNickname}
                   onSetTriggerWords={setTriggerWords}
+                  onSetCategory={setCategory}
+                  onDeleteCategory={deleteCategory}
                   getThumbnailUrl={getThumbnailUrl}
                 />
                 {/* Trigger words display */}

@@ -81,7 +81,7 @@ export function ZITSidebar() {
   // Model favorites
   const { favorites: unetFavorites, toggleFavorite: toggleUnetFavorite } = useModelFavorites('unets');
   const { favorites: loraFavorites, toggleFavorite: toggleLoraFavorite } = useModelFavorites('loras');
-  const { metadata, uploadThumbnail, setNickname, setTriggerWords, getThumbnailUrl, getTriggerWords } = useModelMetadata();
+  const { metadata, uploadThumbnail, setNickname, setTriggerWords, getThumbnailUrl, getTriggerWords, setCategory, deleteCategory } = useModelMetadata();
   const [copiedLoraIndex, setCopiedLoraIndex] = useState<number | null>(null);
 
   useEffect(() => {
@@ -280,6 +280,8 @@ export function ZITSidebar() {
             metadata={metadata}
             onUploadThumbnail={uploadThumbnail}
             onSetNickname={setNickname}
+            onSetCategory={setCategory}
+            onDeleteCategory={deleteCategory}
             getThumbnailUrl={getThumbnailUrl}
           />
         </div>
@@ -329,6 +331,8 @@ export function ZITSidebar() {
                   onUploadThumbnail={uploadThumbnail}
                   onSetNickname={setNickname}
                   onSetTriggerWords={setTriggerWords}
+                  onSetCategory={setCategory}
+                  onDeleteCategory={deleteCategory}
                   getThumbnailUrl={getThumbnailUrl}
                 />
                 {/* Trigger words display */}

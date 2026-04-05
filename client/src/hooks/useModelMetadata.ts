@@ -4,6 +4,7 @@ export interface ModelMetadata {
   thumbnail?: string;
   nickname?: string;
   triggerWords?: string;
+  category?: string;
 }
 
 export function useModelMetadata() {
@@ -152,6 +153,48 @@ export function useModelMetadata() {
     return metadata[modelPath]?.triggerWords ?? null;
   }, [metadata]);
 
+  const setCategory = useCallback(async (modelPath: string, category: string) => {
+    try {
+      const res = await fetch('/api/models/metadata/category', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ modelPath, category }),
+      });
+      if (!res.ok) return;
+      setMetadata((prev) => ({
+        ...prev,
+        [modelPath]: { ...prev[modelPath], category },
+      }));
+    } catch {
+      // silent
+    }
+  }, []);
+
+  const deleteCategory = useCallback(async (modelPath: string) => {
+    try {
+      const res = await fetch('/api/models/metadata/category', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ modelPath }),
+      });
+      if (!res.ok) return;
+      setMetadata((prev) => {
+        const next = { ...prev };
+        if (next[modelPath]) {
+          next[modelPath] = { ...next[modelPath] };
+          delete next[modelPath].category;
+        }
+        return next;
+      });
+    } catch {
+      // silent
+    }
+  }, []);
+
+  const getCategory = useCallback((modelPath: string): string | null => {
+    return metadata[modelPath]?.category ?? null;
+  }, [metadata]);
+
   return {
     metadata,
     loadMetadata,
@@ -164,5 +207,8 @@ export function useModelMetadata() {
     setTriggerWords,
     deleteTriggerWords,
     getTriggerWords,
+    setCategory,
+    deleteCategory,
+    getCategory,
   };
 }

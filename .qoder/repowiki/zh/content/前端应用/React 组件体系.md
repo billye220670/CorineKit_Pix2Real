@@ -11,9 +11,14 @@
 - [FaceSwapPhotoWall.tsx](file://client/src/components/FaceSwapPhotoWall.tsx)
 - [ThumbnailStrip.tsx](file://client/src/components/ThumbnailStrip.tsx)
 - [MaskEditor.tsx](file://client/src/components/MaskEditor.tsx)
+- [ModelSelect.tsx](file://client/src/components/ModelSelect.tsx)
+- [Text2ImgSidebar.tsx](file://client/src/components/Text2ImgSidebar.tsx)
+- [ZITSidebar.tsx](file://client/src/components/ZITSidebar.tsx)
 - [useWorkflowStore.ts](file://client/src/hooks/useWorkflowStore.ts)
 - [useDragStore.ts](file://client/src/hooks/useDragStore.ts)
 - [useMaskStore.ts](file://client/src/hooks/useMaskStore.ts)
+- [useModelMetadata.ts](file://client/src/hooks/useModelMetadata.ts)
+- [sessionService.ts](file://client/src/services/sessionService.ts)
 - [maskConfig.ts](file://client/src/config/maskConfig.ts)
 - [index.ts](file://client/src/types/index.ts)
 - [package.json](file://client/package.json)
@@ -34,6 +39,8 @@
 ## 简介
 本项目是一个基于 React 的图像处理与生成工作流前端应用，围绕 App 主组件构建了完整的组件体系。系统通过多 Tab 工作流、拖拽交互、蒙版编辑、实时进度反馈等能力，支撑从图像导入、处理到结果输出的完整流程。本文档将深入解析 App 主组件的设计架构、组件层次结构、状态传递机制与事件处理模式，并详细说明 Sidebar、PhotoWall、DropZone、ImageCard 等核心组件的职责与协作方式。
 
+**更新** 本版本新增了 ModelSelect 组件的触发词编辑功能、多槽位 LoRA 支持、复制粘贴触发词功能，以及 Text2ImgSidebar 和 ZITSidebar 的增强功能。
+
 ## 项目结构
 客户端采用按功能模块组织的目录结构，核心入口位于 main.tsx，应用根组件为 App.tsx，其余组件分布在 components 目录下，状态管理通过 hooks 中的 Zustand stores 实现，类型定义集中在 types 目录。
 
@@ -53,6 +60,11 @@ B --> L["useMaskStore.ts<br/>蒙版状态"]
 M["maskConfig.ts<br/>蒙版配置"] --> I
 N["index.ts<br/>类型定义"] --> G
 O["package.json<br/>依赖声明"] --> A
+P["ModelSelect.tsx<br/>模型选择器"] --> Q["useModelMetadata.ts<br/>模型元数据"]
+R["Text2ImgSidebar.tsx<br/>文生图侧边栏"] --> P
+S["ZITSidebar.tsx<br/>ZIT侧边栏"] --> P
+T["sessionService.ts<br/>会话服务"] --> R
+U["sessionService.ts<br/>会话服务"] --> S
 ```
 
 **图表来源**
@@ -65,9 +77,14 @@ O["package.json<br/>依赖声明"] --> A
 - [ImageCard.tsx:42-800](file://client/src/components/ImageCard.tsx#L42-L800)
 - [ThumbnailStrip.tsx:34-231](file://client/src/components/ThumbnailStrip.tsx#L34-L231)
 - [MaskEditor.tsx:141-375](file://client/src/components/MaskEditor.tsx#L141-L375)
+- [ModelSelect.tsx:1-531](file://client/src/components/ModelSelect.tsx#L1-L531)
+- [Text2ImgSidebar.tsx:1-683](file://client/src/components/Text2ImgSidebar.tsx#L1-L683)
+- [ZITSidebar.tsx:1-716](file://client/src/components/ZITSidebar.tsx#L1-L716)
 - [useWorkflowStore.ts:96-645](file://client/src/hooks/useWorkflowStore.ts#L96-L645)
 - [useDragStore.ts:1-17](file://client/src/hooks/useDragStore.ts#L1-L17)
 - [useMaskStore.ts:1-51](file://client/src/hooks/useMaskStore.ts#L1-L51)
+- [useModelMetadata.ts:1-169](file://client/src/hooks/useModelMetadata.ts#L1-L169)
+- [sessionService.ts:1-140](file://client/src/services/sessionService.ts#L1-L140)
 - [maskConfig.ts:1-20](file://client/src/config/maskConfig.ts#L1-L20)
 - [index.ts:1-58](file://client/src/types/index.ts#L1-L58)
 - [package.json:1-25](file://client/package.json#L1-L25)
@@ -86,6 +103,11 @@ O["package.json<br/>依赖声明"] --> A
 - FaceSwapPhotoWall：换脸专用图片墙，支持左右分区拖拽与批量换脸。
 - ThumbnailStrip：输出缩略条，支持原图与结果间切换与拖拽。
 - MaskEditor：蒙版编辑器，支持多种模式、笔刷参数、自动识别与导出。
+- ModelSelect：增强的模型选择器，支持触发词编辑、收藏管理、缩略图上传、昵称设置。
+- Text2ImgSidebar：文生图工作流侧边栏，支持多槽位 LoRA、触发词复制、提示词助手。
+- ZITSidebar：ZIT工作流侧边栏，支持 UNet 模型选择、多槽位 LoRA、触发词复制、采样算法偏移。
+
+**更新** 新增了 ModelSelect、Text2ImgSidebar 和 ZITSidebar 的核心功能描述。
 
 **章节来源**
 - [App.tsx:54-335](file://client/src/components/App.tsx#L54-L335)
@@ -96,12 +118,16 @@ O["package.json<br/>依赖声明"] --> A
 - [FaceSwapPhotoWall.tsx:213-800](file://client/src/components/FaceSwapPhotoWall.tsx#L213-L800)
 - [ThumbnailStrip.tsx:34-231](file://client/src/components/ThumbnailStrip.tsx#L34-L231)
 - [MaskEditor.tsx:141-375](file://client/src/components/MaskEditor.tsx#L141-L375)
+- [ModelSelect.tsx:25-485](file://client/src/components/ModelSelect.tsx#L25-L485)
+- [Text2ImgSidebar.tsx:57-683](file://client/src/components/Text2ImgSidebar.tsx#L57-L683)
+- [ZITSidebar.tsx:57-716](file://client/src/components/ZITSidebar.tsx#L57-L716)
 
 ## 架构总览
-应用采用“容器-展示”分层与“状态集中管理”的架构模式：
+应用采用"容器-展示"分层与"状态集中管理"的架构模式：
 - 容器组件（App、Sidebar、PhotoWall、FaceSwapPhotoWall）负责业务逻辑与用户交互。
-- 展示组件（ImageCard、DropZone、ThumbnailStrip、MaskEditor）专注渲染与最小化重渲染。
+- 展示组件（ImageCard、DropZone、ThumbnailStrip、MaskEditor、ModelSelect）专注渲染与最小化重渲染。
 - 状态管理通过多个 Zustand stores 实现，避免深层 props 传递与样板代码。
+- 模型元数据通过 useModelMetadata hook 管理，支持触发词、缩略图、昵称等信息的持久化。
 
 ```mermaid
 graph TB
@@ -110,17 +136,24 @@ APP["App"]
 SIDEBAR["Sidebar"]
 PW["PhotoWall"]
 FSPW["FaceSwapPhotoWall"]
+T2IS["Text2ImgSidebar"]
+ZITS["ZITSidebar"]
 end
 subgraph "展示组件"
 IC["ImageCard"]
 DZ["DropZone"]
 TS["ThumbnailStrip"]
 ME["MaskEditor"]
+MS["ModelSelect"]
 end
 subgraph "状态管理"
 WFS["useWorkflowStore"]
 DRAG["useDragStore"]
 MASK["useMaskStore"]
+MM["useModelMetadata"]
+end
+subgraph "服务层"
+SS["sessionService"]
 end
 APP --> SIDEBAR
 APP --> PW
@@ -139,6 +172,15 @@ PW --> WFS
 PW --> DRAG
 FSPW --> WFS
 FSPW --> DRAG
+T2IS --> MS
+T2IS --> MM
+T2IS --> WFS
+ZITS --> MS
+ZITS --> MM
+ZITS --> WFS
+MS --> MM
+SS --> T2IS
+SS --> ZITS
 ```
 
 **图表来源**
@@ -150,9 +192,14 @@ FSPW --> DRAG
 - [DropZone.tsx:39-171](file://client/src/components/DropZone.tsx#L39-L171)
 - [ThumbnailStrip.tsx:34-231](file://client/src/components/ThumbnailStrip.tsx#L34-L231)
 - [MaskEditor.tsx:141-375](file://client/src/components/MaskEditor.tsx#L141-L375)
+- [ModelSelect.tsx:25-485](file://client/src/components/ModelSelect.tsx#L25-L485)
+- [Text2ImgSidebar.tsx:57-683](file://client/src/components/Text2ImgSidebar.tsx#L57-L683)
+- [ZITSidebar.tsx:57-716](file://client/src/components/ZITSidebar.tsx#L57-L716)
 - [useWorkflowStore.ts:96-645](file://client/src/hooks/useWorkflowStore.ts#L96-L645)
 - [useDragStore.ts:1-17](file://client/src/hooks/useDragStore.ts#L1-L17)
 - [useMaskStore.ts:1-51](file://client/src/hooks/useMaskStore.ts#L1-L51)
+- [useModelMetadata.ts:9-169](file://client/src/hooks/useModelMetadata.ts#L9-L169)
+- [sessionService.ts:1-140](file://client/src/services/sessionService.ts#L1-L140)
 
 ## 详细组件分析
 
@@ -299,8 +346,8 @@ IC->>WFS : updateProgress / completeTask / failTask
 - [ImageCard.tsx:42-800](file://client/src/components/ImageCard.tsx#L42-L800)
 
 ### FaceSwapPhotoWall 换脸图片墙
-专为“黑兽换脸”工作流设计的双分区布局：
-- 左侧“脸部参考区”，右侧“目标图区”，支持拖拽互换与跨区导入。
+专为"黑兽换脸"工作流设计的双分区布局：
+- 左侧"脸部参考区"，右侧"目标图区"，支持拖拽互换与跨区导入。
 - 支持多选模式：从目标区选择多个图片，对选中的脸部图进行批量换脸。
 - 区域高亮与拖拽提示：通过 dragenter/dragleave 计数器精确控制高亮状态。
 - 执行流程：校验目标图状态，构造 multipart/form-data，提交到后端并注册 WebSocket。
@@ -340,10 +387,92 @@ F --> G["更新任务状态"]
 **章节来源**
 - [MaskEditor.tsx:141-375](file://client/src/components/MaskEditor.tsx#L141-L375)
 
+### ModelSelect 模型选择器
+ModelSelect 是一个增强的模型选择组件，提供以下核心功能：
+- 模型列表管理：支持加载、显示、过滤模型列表。
+- 收藏功能：支持将常用模型加入收藏，使用 localStorage 持久化。
+- 缩略图上传：支持为模型上传缩略图，提供视觉预览。
+- 昵称设置：支持为模型设置自定义昵称，提升可读性。
+- 触发词编辑：支持为 LoRA 模型设置触发词，便于快速引用。
+- 悬停预览：鼠标悬停时显示模型缩略图预览。
+- 多槽位支持：支持多个 LoRA 模型槽位的管理。
+
+```mermaid
+classDiagram
+class ModelSelect {
++models : string[]
++value : string
++favorites : Set<string>
++metadata : Record<string, ModelMetadata>
++onChange : Function
++onToggleFavorite : Function
++onUploadThumbnail : Function
++onSetNickname : Function
++onSetTriggerWords : Function
++getThumbnailUrl : Function
++renderModelItem()
++handleNicknameConfirm()
++handleTriggerWordsConfirm()
+}
+class ModelMetadata {
++thumbnail : string
++nickname : string
++triggerWords : string
+}
+ModelSelect --> ModelMetadata : "管理"
+```
+
+**图表来源**
+- [ModelSelect.tsx:25-485](file://client/src/components/ModelSelect.tsx#L25-L485)
+- [useModelMetadata.ts:3-7](file://client/src/hooks/useModelMetadata.ts#L3-L7)
+
+**章节来源**
+- [ModelSelect.tsx:25-485](file://client/src/components/ModelSelect.tsx#L25-L485)
+
+### Text2ImgSidebar 文生图侧边栏
+Text2ImgSidebar 是文生图工作流的增强侧边栏，具有以下特性：
+- 模型选择：集成 ModelSelect 组件，支持 Checkpoint 模型选择。
+- 多槽位 LoRA：支持最多 3 个 LoRA 模型槽位，每个槽位可独立启用、调整权重。
+- 触发词管理：显示并支持复制 LoRA 模型的触发词。
+- 提示词助手：集成提示词助理功能，支持自然语言与标签之间的相互转换。
+- 采样设置：支持步数、CFG、采样器、调度器等高级参数调节。
+- 批量生成：支持批量生成多张图片，支持自定义命名。
+
+```mermaid
+flowchart TD
+A["用户配置参数"] --> B["ModelSelect 选择模型"]
+B --> C["LoRA 槽位配置"]
+C --> D["触发词复制"]
+D --> E["提示词编辑"]
+E --> F["采样参数设置"]
+F --> G["批量生成"]
+G --> H["发送到后端执行"]
+```
+
+**图表来源**
+- [Text2ImgSidebar.tsx:57-683](file://client/src/components/Text2ImgSidebar.tsx#L57-L683)
+- [ModelSelect.tsx:25-485](file://client/src/components/ModelSelect.tsx#L25-L485)
+
+**章节来源**
+- [Text2ImgSidebar.tsx:57-683](file://client/src/components/Text2ImgSidebar.tsx#L57-L683)
+
+### ZITSidebar ZIT 工作流侧边栏
+ZITSidebar 是 ZIT 工作流的增强侧边栏，具有以下特性：
+- UNet 模型选择：专门的 UNet 模型选择器，支持模型收藏管理。
+- 多槽位 LoRA：与文生图侧边栏相同的多槽位 LoRA 管理功能。
+- 触发词管理：支持 LoRA 模型触发词的显示与复制。
+- 采样算法偏移：新增 AuraFlow 算法的采样偏移功能，支持启用/禁用和偏移量调节。
+- 提示词助手：集成提示词助理功能，支持自然语言与标签之间的相互转换。
+- 采样设置：支持步数、CFG、采样器、调度器等高级参数调节。
+- 批量生成：支持批量生成多张图片，支持自定义命名。
+
+**章节来源**
+- [ZITSidebar.tsx:57-716](file://client/src/components/ZITSidebar.tsx#L57-L716)
+
 ## 依赖关系分析
 - 组件耦合：容器组件之间低耦合，通过 props 与 stores 通信；展示组件尽量无副作用，提升可测试性。
-- 状态依赖：useWorkflowStore 管理全局工作流状态；useDragStore 管理拖拽上下文；useMaskStore 管理蒙版数据。
-- 类型约束：index.ts 定义了 ImageItem、TaskInfo、WSMessage 等核心类型，确保跨组件数据一致性。
+- 状态依赖：useWorkflowStore 管理全局工作流状态；useDragStore 管理拖拽上下文；useMaskStore 管理蒙版数据；useModelMetadata 管理模型元数据。
+- 类型约束：sessionService.ts 定义了 LoraSlot、Text2ImgConfig、ZitConfig 等核心类型，支持多槽位 LoRA 的配置管理。
 - 外部依赖：lucide-react 提供图标；zustand 提供轻量状态管理；React 19 提供并发与性能优化。
 
 ```mermaid
@@ -360,7 +489,15 @@ FSPW["FaceSwapPhotoWall"] --> WFS
 FSPW --> DRAG
 TS["ThumbnailStrip"] --> WFS
 ME["MaskEditor"] --> MASK
-WFS --> TYPES["types/index.ts"]
+T2IS["Text2ImgSidebar"] --> WFS
+T2IS --> MM["useModelMetadata"]
+T2IS --> MS["ModelSelect"]
+ZITS["ZITSidebar"] --> WFS
+ZITS --> MM
+ZITS --> MS
+MS --> MM
+MM --> TYPES["types/index.ts"]
+MM --> SS["sessionService.ts"]
 DRAG --> TYPES
 MASK --> TYPES
 CONFIG["maskConfig.ts"] --> IC
@@ -370,7 +507,9 @@ CONFIG --> ME
 **图表来源**
 - [useWorkflowStore.ts:96-645](file://client/src/hooks/useWorkflowStore.ts#L96-L645)
 - [useDragStore.ts:1-17](file://client/src/hooks/useDragStore.ts#L1-17)
-- [useMaskStore.ts:1-51](file://client/src/hooks/useMaskStore.ts#L1-L51)
+- [useMaskStore.ts:1-51](file://client/src/hooks/useMaskStore.ts#L1-51)
+- [useModelMetadata.ts:9-169](file://client/src/hooks/useModelMetadata.ts#L9-L169)
+- [sessionService.ts:1-140](file://client/src/services/sessionService.ts#L1-L140)
 - [index.ts:1-58](file://client/src/types/index.ts#L1-L58)
 - [maskConfig.ts:1-20](file://client/src/config/maskConfig.ts#L1-L20)
 
@@ -385,8 +524,8 @@ CONFIG --> ME
 - 拖拽性能：Sidebar 对原生 dragover 事件绑定，避免 React 合成事件丢失导致的性能问题。
 - 蒙版处理：MaskEditor 在导出前将大图转换为离屏画布，避免主线程阻塞。
 - WebSocket：统一注册任务，按 promptId 分发进度，避免全局广播带来的性能损耗。
-
-[本节为通用性能建议，无需特定文件引用]
+- 模型元数据缓存：useModelMetadata 使用本地缓存机制，避免重复的 API 调用。
+- 多槽位 LoRA 优化：Text2ImgSidebar 和 ZITSidebar 通过 localStorage 持久化配置，避免页面切换时的配置丢失。
 
 ## 故障排除指南
 - 拖拽无效：检查 App 主区域的 dragover/leave 事件处理与标签页类型限制。
@@ -394,28 +533,36 @@ CONFIG --> ME
 - 执行失败：查看 ImageCard 的错误状态与 useWorkflowStore 的 failTask 更新。
 - 蒙版编辑异常：确认蒙版键值生成规则与 useMaskStore 的存储结构一致。
 - 队列计数不更新：检查 /api/workflow/queue 接口可用性与轮询定时器。
+- 模型选择器无响应：检查 useModelMetadata 的 API 调用状态与网络连接。
+- 触发词复制失败：确认浏览器支持 Clipboard API 且用户已授权剪贴板访问权限。
+- 多槽位 LoRA 配置丢失：检查 localStorage 是否正常工作，确认配置序列化/反序列化逻辑。
 
 **章节来源**
 - [App.tsx:84-134](file://client/src/components/App.tsx#L84-L134)
 - [ImageCard.tsx:478-580](file://client/src/components/ImageCard.tsx#L478-L580)
 - [useMaskStore.ts:32-50](file://client/src/hooks/useMaskStore.ts#L32-L50)
+- [useModelMetadata.ts:12-21](file://client/src/hooks/useModelMetadata.ts#L12-L21)
 
 ## 结论
-该 React 组件体系通过清晰的容器-展示分离、集中式状态管理与完善的拖拽/蒙版/进度反馈机制，实现了复杂图像处理工作流的高效交互。App 主组件作为中枢，协调 Sidebar、PhotoWall、DropZone、ImageCard、FaceSwapPhotoWall 等组件，形成高内聚、低耦合的架构。建议在后续迭代中进一步完善类型安全、错误边界与性能监控，以提升可维护性与用户体验。
+该 React 组件体系通过清晰的容器-展示分离、集中式状态管理与完善的拖拽/蒙版/进度反馈机制，实现了复杂图像处理工作流的高效交互。App 主组件作为中枢，协调 Sidebar、PhotoWall、DropZone、ImageCard、FaceSwapPhotoWall 等组件，形成高内聚、低耦合的架构。
 
-[本节为总结性内容，无需特定文件引用]
+**更新** 本次更新显著增强了模型管理功能，ModelSelect 组件提供了完整的模型元数据管理能力，包括触发词编辑、收藏管理、缩略图上传等功能。Text2ImgSidebar 和 ZITSidebar 集成了多槽位 LoRA 支持和触发词复制功能，大大提升了用户的模型使用体验。
+
+建议在后续迭代中进一步完善类型安全、错误边界与性能监控，以提升可维护性与用户体验。
 
 ## 附录
 - 组件复用最佳实践
-  - 将通用 UI 行为抽象为独立展示组件（如 DropZone、ThumbnailStrip），通过 props 传入行为回调。
+  - 将通用 UI 行为抽象为独立展示组件（如 DropZone、ThumbnailStrip、ModelSelect），通过 props 传入行为回调。
   - 使用 memo 与 useShallow 减少重渲染，保持稳定引用以避免副作用。
   - 将跨组件共享的状态收敛到 Zustand stores，避免 props 钻取。
+  - 利用 useModelMetadata hook 管理模型元数据，提供统一的数据访问接口。
 - 组件组合模式
   - PhotoWall 通过 LazyCard 与 ImageCard 组合实现高性能图片墙。
-  - ImageCard 内嵌 ThumbnailStrip 与 MaskEditor，形成“卡片内生态”。
+  - ImageCard 内嵌 ThumbnailStrip 与 MaskEditor，形成"卡片内生态"。
+  - Text2ImgSidebar 和 ZITSidebar 通过 ModelSelect 组合实现增强的模型管理功能。
 - 渲染优化技巧
   - 使用 IntersectionObserver 与占位符高度补偿，减少滚动抖动。
   - 合理拆分状态订阅，避免不必要的组件重渲染。
   - 在导出/蒙版处理等重计算场景使用离屏画布与异步处理。
-
-[本节为通用指导，无需特定文件引用]
+  - 利用 localStorage 进行配置持久化，提升用户体验。
+  - 通过 useModelMetadata 的本地缓存机制减少 API 调用频率。

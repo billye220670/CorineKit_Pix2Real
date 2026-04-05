@@ -1,6 +1,75 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { ChevronDown, Star, Loader, Check, ImagePlus, PencilLine, Tag } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
+import { ChevronDown, Star, Loader, Check, ImagePlus, PencilLine, Tag, ChevronRight, Plus, Trash2 } from 'lucide-react';
 import type { ModelMetadata } from '../hooks/useModelMetadata.js';
+
+// ─── 分类颜色系统 ──────────────────────────────────────────────────────────────
+
+// HSL 色相均分：12 个分类，每隔 30° 一个色相，饱和度 55%，亮度 65%
+const CATEGORY_COLORS = Array.from({ length: 12 }, (_, i) =>
+  `hsl(${i * 30}, 55%, 65%)`
+);
+
+const CATEGORY_COLORS_KEY = 'model_category_colors';
+
+function loadCategoryColorMap(): Record<string, string> {
+  try {
+    const stored = JSON.parse(localStorage.getItem(CATEGORY_COLORS_KEY) ?? '{}');
+    // Invalidate old hex-based cache — HSL scheme uses "hsl(" prefix
+    const values = Object.values(stored) as string[];
+    if (values.length > 0 && !values[0].startsWith('hsl(')) {
+      localStorage.removeItem(CATEGORY_COLORS_KEY);
+      return {};
+    }
+    return stored;
+  } catch {
+    return {};
+  }
+}
+
+function saveCategoryColorMap(map: Record<string, string>) {
+  localStorage.setItem(CATEGORY_COLORS_KEY, JSON.stringify(map));
+}
+
+function useCategoryColors(categories: string[]) {
+  const [colorMap, setColorMap] = useState<Record<string, string>>(loadCategoryColorMap);
+
+  const getCategoryColor = useCallback((category: string): string => {
+    // Already assigned
+    if (colorMap[category]) return colorMap[category];
+
+    // Assign next color by index (sequential, cyclic)
+    const usedCount = Object.keys(colorMap).length;
+    const color = CATEGORY_COLORS[usedCount % CATEGORY_COLORS.length];
+
+    const newMap = { ...colorMap, [category]: color };
+    setColorMap(newMap);
+    saveCategoryColorMap(newMap);
+    return color;
+  }, [colorMap]);
+
+  // Ensure all current categories have colors assigned (lazy)
+  useEffect(() => {
+    let changed = false;
+    const map = { ...colorMap };
+    let idx = Object.keys(map).length;
+    for (const cat of categories) {
+      if (!map[cat]) {
+        map[cat] = CATEGORY_COLORS[idx % CATEGORY_COLORS.length];
+        idx++;
+        changed = true;
+      }
+    }
+    if (changed) {
+      setColorMap(map);
+      saveCategoryColorMap(map);
+    }
+  }, [categories]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return { getCategoryColor, colorMap };
+}
+
+// ─── ModelSelect ────────────────────────────────────────────────────────────────
 
 interface ModelSelectProps {
   models: string[];
@@ -15,6 +84,8 @@ interface ModelSelectProps {
   onSetNickname?: (modelPath: string, nickname: string) => void;
   onSetTriggerWords?: (modelPath: string, triggerWords: string) => void;
   getThumbnailUrl?: (modelPath: string) => string | null;
+  onSetCategory?: (modelPath: string, category: string) => void;
+  onDeleteCategory?: (modelPath: string) => void;
 }
 
 // 从完整路径提取显示名称（去路径去后缀）
@@ -35,11 +106,14 @@ export function ModelSelect({
   onSetNickname,
   onSetTriggerWords,
   getThumbnailUrl,
+  onSetCategory,
+  onDeleteCategory,
 }: ModelSelectProps) {
   const [open, setOpen] = useState(false);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const selectedItemRef = useRef<HTMLDivElement>(null);
   const [uploadTargetModel, setUploadTargetModel] = useState<string | null>(null);
   const [editingModel, setEditingModel] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -47,6 +121,17 @@ export function ModelSelect({
   const [triggerEditValue, setTriggerEditValue] = useState('');
   const [tooltipModel, setTooltipModel] = useState<string | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ top: number; left: number } | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    modelPath: string;
+    showSubmenu: boolean;
+    isCreatingNew: boolean;
+    newCategoryName: string;
+  } | null>(null);
+  const submenuRef = useRef<HTMLDivElement>(null);
+  const newCategoryInputRef = useRef<HTMLInputElement>(null);
 
   // 点击外部关闭
   useEffect(() => {
@@ -69,12 +154,78 @@ export function ModelSelect({
       setEditingTriggerModel(null);
       setTooltipModel(null);
       setTooltipPos(null);
+      setContextMenu(null);
     }
   }, [open]);
 
+  // 打开下拉时自动滚动到选中项
+  useEffect(() => {
+    if (open && selectedItemRef.current) {
+      requestAnimationFrame(() => {
+        selectedItemRef.current?.scrollIntoView({ block: 'nearest' });
+      });
+    }
+  }, [open]);
+
+  // 关闭右键菜单：点击外部 / Escape
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handleClick = (e: MouseEvent) => {
+      setContextMenu(null);
+    };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setContextMenu(null);
+    };
+    document.addEventListener('mousedown', handleClick);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [contextMenu]);
+
+  // Focus new category input when entering create mode
+  useEffect(() => {
+    if (contextMenu?.isCreatingNew) {
+      setTimeout(() => newCategoryInputRef.current?.focus(), 0);
+    }
+  }, [contextMenu?.isCreatingNew]);
+
+  // 从 metadata 推导所有分类
+  const allCategories = useMemo(() => {
+    if (!metadata) return [];
+    const cats = new Set<string>();
+    for (const m of models) {
+      const cat = metadata[m]?.category;
+      if (cat) cats.add(cat);
+    }
+    return [...cats].sort();
+  }, [metadata, models]);
+
+  // 分类颜色
+  const { getCategoryColor, colorMap: categoryColorMap } = useCategoryColors(allCategories);
+
+  // 是否存在未分类模型
+  const hasUncategorized = useMemo(() => {
+    if (!metadata || allCategories.length === 0) return false;
+    return models.some((m) => !metadata[m]?.category);
+  }, [metadata, models, allCategories]);
+
+  // 显示筛选条的条件：至少有一个已分类模型
+  const showCategoryBar = allCategories.length > 0;
+
+  // 按选中分类过滤模型
+  const filteredModels = useMemo(() => {
+    if (selectedCategory === null) return models;
+    if (selectedCategory === '__uncategorized__') {
+      return models.filter((m) => !metadata?.[m]?.category);
+    }
+    return models.filter((m) => metadata?.[m]?.category === selectedCategory);
+  }, [models, metadata, selectedCategory]);
+
   // 分离收藏项和非收藏项
-  const favoriteModels = models.filter((m) => favorites.has(m));
-  const otherModels = models.filter((m) => !favorites.has(m));
+  const favoriteModels = filteredModels.filter((m) => favorites.has(m));
+  const otherModels = filteredModels.filter((m) => !favorites.has(m));
 
   const getModelDisplayName = useCallback((model: string) => {
     const nick = metadata?.[model]?.nickname;
@@ -114,7 +265,7 @@ export function ModelSelect({
     if (thumbUrl) {
       const rect = e.currentTarget.getBoundingClientRect();
       setTooltipModel(model);
-      setTooltipPos({ top: rect.top, left: rect.left - 210 });
+      setTooltipPos({ top: rect.top, left: rect.left - 280 - 8 });
     } else {
       setTooltipModel(null);
       setTooltipPos(null);
@@ -168,11 +319,13 @@ export function ModelSelect({
     marginTop: 4,
     zIndex: 1000,
     maxHeight: 300,
-    overflowY: 'auto',
     backgroundColor: 'var(--color-surface)',
     border: '1px solid var(--color-border)',
     borderRadius: 6,
     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+    display: 'flex',
+    flexDirection: 'column',
+    userSelect: 'none',
   };
 
   const renderModelItem = (model: string, index: number, isFavorite: boolean) => {
@@ -181,17 +334,22 @@ export function ModelSelect({
     const isEditing = editingModel === model;
     const isEditingTrigger = editingTriggerModel === model;
     const triggerWords = metadata?.[model]?.triggerWords;
+    const modelCategory = metadata?.[model]?.category;
+    const modelColor = modelCategory ? getCategoryColor(modelCategory) : undefined;
 
     return (
       <div
         key={model}
+        ref={isSelected ? selectedItemRef : undefined}
         style={{
           display: 'flex',
           alignItems: 'flex-start',
           padding: '6px 10px',
           cursor: 'pointer',
           gap: 8,
-          backgroundColor: isHovered ? 'var(--color-surface-hover)' : 'transparent',
+          backgroundColor: isSelected
+            ? (isHovered ? 'rgba(128, 128, 128, 0.2)' : 'rgba(128, 128, 128, 0.12)')
+            : (isHovered ? 'var(--color-surface-hover)' : 'transparent'),
           transition: 'background-color 0.1s',
         }}
         onClick={() => {
@@ -199,6 +357,19 @@ export function ModelSelect({
             onChange(model);
             setOpen(false);
           }
+        }}
+        onContextMenu={(e) => {
+          if (!onSetCategory) return;
+          e.preventDefault();
+          e.stopPropagation();
+          setContextMenu({
+            x: e.clientX,
+            y: e.clientY,
+            modelPath: model,
+            showSubmenu: false,
+            isCreatingNew: false,
+            newCategoryName: '',
+          });
         }}
         onMouseEnter={(e) => handleItemMouseEnter(model, e, index)}
         onMouseLeave={handleItemMouseLeave}
@@ -254,7 +425,7 @@ export function ModelSelect({
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
                 fontSize: '12px',
-                color: isSelected ? 'var(--color-primary)' : 'var(--color-text)',
+                color: modelColor || 'var(--color-text)',
               }}
             >
               {getModelDisplayName(model)}
@@ -290,20 +461,7 @@ export function ModelSelect({
                 boxSizing: 'border-box',
               }}
             />
-          ) : (
-            triggerWords && !isEditing && (
-              <span style={{
-                fontSize: '10px',
-                color: 'var(--color-text-secondary)',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                opacity: 0.7,
-              }}>
-                {triggerWords}
-              </span>
-            )
-          )}
+          ) : null}
         </div>
 
         {/* Action icons — visible on hover */}
@@ -424,30 +582,67 @@ export function ModelSelect({
       {/* 下拉面板 */}
       {open && models.length > 0 && (
         <div style={dropdownStyle}>
-          {/* 收藏区 */}
-          {favoriteModels.length > 0 && (
-            <>
-              {favoriteModels.map((m) => {
-                const idx = itemIndex++;
-                return renderModelItem(m, idx, true);
-              })}
-              {/* 分割线 */}
-              {otherModels.length > 0 && (
-                <div
-                  style={{
-                    height: 1,
-                    backgroundColor: 'var(--color-border)',
-                    margin: '4px 0',
-                  }}
+          {/* 分类筛选条 */}
+          {showCategoryBar && (
+            <div style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 4,
+              padding: '6px 10px',
+              flexShrink: 0,
+              borderBottom: '1px solid var(--color-border)',
+            }}>
+              {/* 全部 pill */}
+              <CategoryPill
+                label="全部"
+                active={selectedCategory === null}
+                onClick={() => setSelectedCategory(null)}
+              />
+              {allCategories.map((cat) => (
+                <CategoryPill
+                  key={cat}
+                  label={cat}
+                  active={selectedCategory === cat}
+                  onClick={() => setSelectedCategory(cat)}
+                  color={getCategoryColor(cat)}
+                />
+              ))}
+              {hasUncategorized && (
+                <CategoryPill
+                  label="未分类"
+                  active={selectedCategory === '__uncategorized__'}
+                  onClick={() => setSelectedCategory('__uncategorized__')}
                 />
               )}
-            </>
+            </div>
           )}
-          {/* 全部剩余区 */}
-          {otherModels.map((m) => {
-            const idx = itemIndex++;
-            return renderModelItem(m, idx, false);
-          })}
+          {/* 模型列表（可滚动） */}
+          <div style={{ overflowY: 'auto', flex: 1 }}>
+            {/* 收藏区 */}
+            {favoriteModels.length > 0 && (
+              <>
+                {favoriteModels.map((m) => {
+                  const idx = itemIndex++;
+                  return renderModelItem(m, idx, true);
+                })}
+                {/* 分割线 */}
+                {otherModels.length > 0 && (
+                  <div
+                    style={{
+                      height: 1,
+                      backgroundColor: 'var(--color-border)',
+                      margin: '4px 0',
+                    }}
+                  />
+                )}
+              </>
+            )}
+            {/* 全部剩余区 */}
+            {otherModels.map((m) => {
+              const idx = itemIndex++;
+              return renderModelItem(m, idx, false);
+            })}
+          </div>
         </div>
       )}
 
@@ -458,7 +653,7 @@ export function ModelSelect({
             position: 'fixed',
             top: tooltipPos.top,
             left: tooltipPos.left,
-            width: 200,
+            width: 280,
             zIndex: 10000,
             pointerEvents: 'none',
             borderRadius: 8,
@@ -466,6 +661,7 @@ export function ModelSelect({
             boxShadow: '0 4px 16px rgba(0, 0, 0, 0.25)',
             backgroundColor: 'var(--color-bg-secondary)',
             border: '1px solid var(--color-border)',
+            userSelect: 'none',
           }}
         >
           <img
@@ -480,6 +676,284 @@ export function ModelSelect({
           />
         </div>
       )}
+
+      {/* 右键上下文菜单 (Portal) */}
+      {contextMenu && onSetCategory && createPortal(
+        <ContextMenuPortal
+          contextMenu={contextMenu}
+          setContextMenu={setContextMenu}
+          allCategories={allCategories}
+          metadata={metadata}
+          onSetCategory={onSetCategory}
+          onDeleteCategory={onDeleteCategory}
+          submenuRef={submenuRef}
+          newCategoryInputRef={newCategoryInputRef}
+          getCategoryColor={getCategoryColor}
+        />,
+        document.body,
+      )}
+    </div>
+  );
+}
+
+// ─── CategoryPill 筛选条按钮 ──────────────────────────────────────────────────
+
+function CategoryPill({ label, active, onClick, color }: { label: string; active: boolean; onClick: () => void; color?: string }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <button
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => { e.stopPropagation(); onClick(); }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        padding: '2px 10px',
+        fontSize: '11px',
+        borderRadius: 12,
+        border: color
+          ? `1px solid ${color}`
+          : active ? '1px solid transparent' : '1px solid var(--color-border)',
+        backgroundColor: active
+          ? (color || 'var(--color-primary)')
+          : hovered ? (color ? `${color}18` : 'var(--color-surface-hover)') : 'transparent',
+        color: active ? '#fff' : (color || 'var(--color-text-secondary)'),
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+        flexShrink: 0,
+        lineHeight: '18px',
+        transition: 'background-color 0.15s, color 0.15s',
+        fontFamily: 'inherit',
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+// ─── 右键上下文菜单 Portal 组件 ──────────────────────────────────────────────────
+
+interface ContextMenuPortalProps {
+  contextMenu: {
+    x: number;
+    y: number;
+    modelPath: string;
+    showSubmenu: boolean;
+    isCreatingNew: boolean;
+    newCategoryName: string;
+  };
+  setContextMenu: React.Dispatch<React.SetStateAction<ContextMenuPortalProps['contextMenu'] | null>>;
+  allCategories: string[];
+  metadata?: Record<string, ModelMetadata>;
+  onSetCategory: (modelPath: string, category: string) => void;
+  onDeleteCategory?: (modelPath: string) => void;
+  submenuRef: React.RefObject<HTMLDivElement | null>;
+  newCategoryInputRef: React.RefObject<HTMLInputElement | null>;
+  getCategoryColor: (category: string) => string;
+}
+
+function ContextMenuPortal({
+  contextMenu,
+  setContextMenu,
+  allCategories,
+  metadata,
+  onSetCategory,
+  onDeleteCategory,
+  submenuRef,
+  newCategoryInputRef,
+  getCategoryColor,
+}: ContextMenuPortalProps) {
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [submenuSide, setSubmenuSide] = useState<'right' | 'left'>('right');
+  const currentCategory = metadata?.[contextMenu.modelPath]?.category;
+
+  // Determine submenu side based on available space
+  useEffect(() => {
+    if (contextMenu.showSubmenu && menuRef.current) {
+      const rect = menuRef.current.getBoundingClientRect();
+      const spaceRight = window.innerWidth - rect.right;
+      setSubmenuSide(spaceRight < 180 ? 'left' : 'right');
+    }
+  }, [contextMenu.showSubmenu]);
+
+  const menuItemStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    padding: '0 12px',
+    height: 32,
+    fontSize: '12px',
+    color: 'var(--color-text)',
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+    transition: 'background-color 0.1s',
+  };
+
+  return (
+    <div
+      ref={menuRef}
+      onMouseDown={(e) => e.stopPropagation()}
+      style={{
+        position: 'fixed',
+        top: contextMenu.y,
+        left: contextMenu.x,
+        zIndex: 10001,
+        minWidth: 160,
+        backgroundColor: 'var(--color-surface)',
+        border: '1px solid var(--color-border)',
+        borderRadius: 8,
+        boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+        padding: '4px 0',
+        userSelect: 'none',
+      }}
+    >
+      {/* 移入分类 */}
+      <div
+        style={{ ...menuItemStyle, justifyContent: 'space-between', position: 'relative' }}
+        onMouseEnter={() => setContextMenu((prev) => prev ? { ...prev, showSubmenu: true } : prev)}
+        onClick={() => setContextMenu((prev) => prev ? { ...prev, showSubmenu: !prev.showSubmenu } : prev)}
+      >
+        <span>移入分类</span>
+        <ChevronRight size={14} color="var(--color-text-secondary)" />
+
+        {/* 子菜单 */}
+        {contextMenu.showSubmenu && (
+          <div
+            ref={submenuRef}
+            onMouseDown={(e) => e.stopPropagation()}
+            style={{
+              position: 'absolute',
+              top: -4,
+              ...(submenuSide === 'right' ? { left: '100%', marginLeft: 2 } : { right: '100%', marginRight: 2 }),
+              minWidth: 140,
+              backgroundColor: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 8,
+              boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+              padding: '4px 0',
+              zIndex: 10002,
+            }}
+          >
+            {allCategories.map((cat) => (
+              <ContextMenuItem
+                key={cat}
+                label={cat}
+                checked={currentCategory === cat}
+                colorDot={getCategoryColor(cat)}
+                onClick={() => {
+                  onSetCategory(contextMenu.modelPath, cat);
+                  setContextMenu(null);
+                }}
+              />
+            ))}
+            {allCategories.length > 0 && (
+              <div style={{ height: 1, backgroundColor: 'var(--color-border)', margin: '4px 0' }} />
+            )}
+            {contextMenu.isCreatingNew ? (
+              <div style={{ padding: '4px 12px' }}>
+                <input
+                  ref={newCategoryInputRef}
+                  value={contextMenu.newCategoryName}
+                  onChange={(e) => setContextMenu((prev) => prev ? { ...prev, newCategoryName: e.target.value } : prev)}
+                  onKeyDown={(e) => {
+                    e.stopPropagation();
+                    if (e.key === 'Enter') {
+                      const name = contextMenu.newCategoryName.trim();
+                      if (name) {
+                        onSetCategory(contextMenu.modelPath, name);
+                        setContextMenu(null);
+                      }
+                    } else if (e.key === 'Escape') {
+                      setContextMenu((prev) => prev ? { ...prev, isCreatingNew: false, newCategoryName: '' } : prev);
+                    }
+                  }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
+                  placeholder="分类名称…"
+                  style={{
+                    width: '100%',
+                    fontSize: '12px',
+                    padding: '4px 8px',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 4,
+                    backgroundColor: 'var(--color-bg)',
+                    color: 'var(--color-text)',
+                    outline: 'none',
+                    fontFamily: 'inherit',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+            ) : (
+              <ContextMenuItem
+                label="+ 新建分类..."
+                icon={<Plus size={12} />}
+                onClick={() => setContextMenu((prev) => prev ? { ...prev, isCreatingNew: true, newCategoryName: '' } : prev)}
+              />
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* 移除分类 */}
+      {currentCategory && onDeleteCategory && (
+        <ContextMenuItem
+          label="移除分类"
+          icon={<Trash2 size={12} />}
+          onClick={() => {
+            onDeleteCategory(contextMenu.modelPath);
+            setContextMenu(null);
+          }}
+          style={menuItemStyle}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── 右键菜单项 ──────────────────────────────────────────────────────────────
+
+function ContextMenuItem({ label, checked, icon, onClick, style: customStyle, colorDot }: {
+  label: string;
+  checked?: boolean;
+  icon?: React.ReactNode;
+  onClick: () => void;
+  style?: React.CSSProperties;
+  colorDot?: string;
+}) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <div
+      onClick={(e) => { e.stopPropagation(); onClick(); }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        padding: '0 12px',
+        height: 32,
+        fontSize: '12px',
+        color: 'var(--color-text)',
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+        transition: 'background-color 0.1s',
+        backgroundColor: hovered ? 'var(--color-surface-hover)' : 'transparent',
+        ...customStyle,
+      }}
+    >
+      {checked && <Check size={12} color="var(--color-primary)" />}
+      {!checked && colorDot && (
+        <span style={{
+          display: 'inline-block',
+          width: 8,
+          height: 8,
+          borderRadius: '50%',
+          backgroundColor: colorDot,
+          flexShrink: 0,
+        }} />
+      )}
+      {!checked && !colorDot && icon}
+      <span style={{ flex: 1 }}>{label}</span>
     </div>
   );
 }

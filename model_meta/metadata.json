@@ -1,51 +1,63 @@
 {
   "IL-lunarcherrymix_v20.safetensors": {
     "nickname": "光辉-CherryMix",
-    "thumbnail": "a7b00d45-c1d8-434e-b416-1bda8f5eb2c2.png"
+    "thumbnail": "a7b00d45-c1d8-434e-b416-1bda8f5eb2c2.png",
+    "category": "光辉"
   },
   "XL-漫画2.5D\\IL-Gembyte_20Emerald.safetensors": {
     "nickname": "光辉-Emerald",
-    "thumbnail": "4e0478b1-f186-47ea-9c3b-6a9f3df1c206.png"
+    "thumbnail": "4e0478b1-f186-47ea-9c3b-6a9f3df1c206.png",
+    "category": "光辉"
   },
   "XL-漫画2.5D\\aMixIllustrious_aMix.safetensors": {
     "nickname": "光辉-AMix",
-    "thumbnail": "102a3b9a-f1b0-4869-a5e9-60f98c281b54.png"
+    "thumbnail": "102a3b9a-f1b0-4869-a5e9-60f98c281b54.png",
+    "category": "光辉"
   },
   "XL-漫画2.5D\\illustrijEVO_lvl3.safetensors": {
     "thumbnail": "7d3f940f-0641-4815-a68f-491ecce680e1.png",
-    "nickname": "光辉-EVO"
+    "nickname": "光辉-EVO",
+    "category": "光辉"
   },
   "hassakuXLIllustrious_v34.safetensors": {
     "thumbnail": "fb727b8d-3fce-4d79-9821-4abcdd54f9f4.png",
-    "nickname": "光辉-Hassaku"
+    "nickname": "光辉-Hassaku",
+    "category": "光辉"
   },
   "perfectdeliberate_v70.safetensors": {
     "thumbnail": "f9506ee3-07d9-4084-92cb-2e0e16e6fa9c.png",
-    "nickname": "光辉-PerfectDeliberate"
+    "nickname": "光辉-PerfectDeliberate",
+    "category": "光辉"
   },
   "waiIllustriousSDXL_v160.safetensors": {
     "thumbnail": "d0b127bf-5ef4-4c0b-af7f-bd5e2884a060.png",
-    "nickname": "光辉-WAI"
+    "nickname": "光辉-WAI",
+    "category": "光辉"
   },
   "XL-漫画2.5D\\illustrijQuill_v1.safetensors": {
     "thumbnail": "3f3345ab-fefe-487a-a3c3-840b5a182f23.png",
-    "nickname": "光辉-Quill"
+    "nickname": "光辉-Quill",
+    "category": "光辉"
   },
   "XL-漫画2.5D\\JANKUTrainedNoobaiRouwei_v69.safetensors": {
     "nickname": "光辉-Noob",
-    "thumbnail": "ca8472c5-90ba-479f-bdfd-cff85687627f.png"
+    "thumbnail": "ca8472c5-90ba-479f-bdfd-cff85687627f.png",
+    "category": "光辉"
   },
   "IL-illustriousSemi_v30.safetensors": {
     "thumbnail": "b7ba9611-847f-4436-b242-55d6e59f115b.png",
-    "nickname": "光辉-Semi"
+    "nickname": "光辉-Semi",
+    "category": "光辉"
   },
   "hyphoriaIlluNAI_v001.safetensors": {
     "nickname": "光辉-Hyphoria",
-    "thumbnail": "97d084c7-b8f9-4d9c-9798-8cc6e7ffc296.png"
+    "thumbnail": "97d084c7-b8f9-4d9c-9798-8cc6e7ffc296.png",
+    "category": "光辉"
   },
   "IL-novaOrangeXL_v100.safetensors": {
     "nickname": "光辉-NovaOrange",
-    "thumbnail": "9408dd17-b9bf-4fb1-b8f0-dbf38e0d33cb.png"
+    "thumbnail": "9408dd17-b9bf-4fb1-b8f0-dbf38e0d33cb.png",
+    "category": "光辉"
   },
   "IllustriousLora\\face_grab_illustrious.safetensors": {
     "nickname": "表情-捏脸",
@@ -78,6 +90,222 @@
   "多视图\\【光辉】【多视图】POV多视图.safetensors": {
     "nickname": "POV多视图",
     "triggerWords": "multiple views, pov",
-    "thumbnail": "0ba6525f-9ec5-44f8-a2a9-206c0596b50e.png"
+    "thumbnail": "0ba6525f-9ec5-44f8-a2a9-206c0596b50e.png",
+    "category": "多视角"
+  },
+  "性别\\【光辉】【性别】男娘.safetensors": {
+    "triggerWords": "1boy, otoko no ko, crossdressing, trap, yaoi, penis, testicles, androgynous",
+    "nickname": "男娘",
+    "thumbnail": "1853fe9d-013a-4704-9db5-1183954bee03.png",
+    "category": "性别"
+  },
+  "性别\\【光辉】【性别】娘化胸部.safetensors": {
+    "nickname": "娘化胸",
+    "triggerWords": "femboy, round breasts, perky tiny nipples, erect female nipples, erotic female breasts",
+    "thumbnail": "260151fd-f2b7-45c9-a8b9-ce6e9f7879f9.png",
+    "category": "性别"
+  },
+  "性别\\【光辉】【性别】一字缝.safetensors": {
+    "nickname": "一字缝",
+    "triggerWords": "cameltoe",
+    "thumbnail": "f2ab7d8c-7208-45f6-9031-bfa4278b00ac.png",
+    "category": "性别"
+  },
+  "性别\\【光辉】【性别】贞操锁.safetensors": {
+    "nickname": "贞操锁",
+    "triggerWords": "chastity cage",
+    "thumbnail": "23129ad0-a6f2-4289-9a89-266b83127269.png",
+    "category": "性别"
+  },
+  "多视图\\【光辉】【多视图】角色设计A.safetensors": {
+    "nickname": "角色概念设计",
+    "triggerWords": "Character_DesignV1",
+    "thumbnail": "5f6c7dd7-14c5-4616-81b9-c84dc5728dc1.png",
+    "category": "多视角"
+  },
+  "prefectPonyXL_v6.safetensors": {
+    "nickname": "PONY-PrefectPony",
+    "thumbnail": "ca5e0afa-2adb-447f-bbfd-44218de75985.png",
+    "category": "PONY"
+  },
+  "yumeillustrious_v10.safetensors": {
+    "nickname": "光辉-Yumi",
+    "thumbnail": "5289a06f-f195-467a-9853-266abbb326e1.png",
+    "category": "光辉"
+  },
+  "XL-漫画2.5D\\illustrij_v20.safetensors": {
+    "thumbnail": "cfc8c798-e320-4296-9b84-f0d3b02a9068.png",
+    "nickname": "光辉-illustrij",
+    "category": "光辉"
+  },
+  "XL-漫画2.5D\\oneObsession_v19Atypical.safetensors": {
+    "nickname": "光辉-OneObsession",
+    "thumbnail": "a323b046-c04d-4317-85cd-26610ef23da1.png",
+    "category": "光辉"
+  },
+  "多视图\\【光辉】【多视图】多视角A.safetensors": {
+    "nickname": "多视角A"
+  },
+  "多视图\\【光辉】【多视图】多视角B.safetensors": {
+    "nickname": "多视角",
+    "thumbnail": "fe6c7d67-950c-4d58-9546-df3af9edb483.png",
+    "triggerWords": "multiple views",
+    "category": "多视角"
+  },
+  "多视图\\【光辉】【多视图】角色设计B.safetensors": {
+    "nickname": "角色拆解设计",
+    "triggerWords": "character_design, chrctrdsgn, concept art, reference sheet, Hutao, genshin impact, underwear, worn panties, worn bra, used socks, dirty socks, multiple views, character profile, multiple expressions, 1girl, full body",
+    "thumbnail": "6ab7131e-5fcf-4607-bfea-3791b0e5b50f.png",
+    "category": "多视角"
+  },
+  "多人物\\【光辉】【多人物】女孩数量滑块.safetensors": {
+    "nickname": "女孩数量滑块",
+    "thumbnail": "9c322377-57f7-470a-882b-df2ef9442189.png",
+    "category": "滑块"
+  },
+  "优化\\【光辉】【优化】细节增强.safetensors": {
+    "nickname": "细节增强",
+    "triggerWords": "Jeddtl02",
+    "thumbnail": "3c93e21d-a141-4e39-9f29-951f28fc658b.png",
+    "category": "风格"
+  },
+  "姿势\\【光辉】【姿势】口交多P滑块.safetensors": {
+    "nickname": "口交多P滑块",
+    "triggerWords": "tripple oral"
+  },
+  "姿势\\【光辉】【姿势】壁乳.safetensors": {
+    "nickname": "壁乳",
+    "triggerWords": "glorytits,through wall, photo_(object)"
+  },
+  "姿势\\【光辉】【姿势】胶水.safetensors": {
+    "triggerWords": "glue trap",
+    "nickname": "胶水",
+    "thumbnail": "97773ffb-b11b-4e9d-bc29-ad0557d03314.png",
+    "category": "姿势"
+  },
+  "姿势\\【光辉】【姿势】穿袜.safetensors": {
+    "nickname": "穿袜",
+    "triggerWords": "dressing socks, adjusting legwear",
+    "thumbnail": "04fda580-d5f3-48cb-a20d-fad3adc225ce.png",
+    "category": "姿势"
+  },
+  "姿势\\【光辉】【姿势】娃娃机.safetensors": {
+    "nickname": "娃娃机",
+    "triggerWords": "in crane game, sole focus",
+    "thumbnail": "b5f5c6c4-b7c6-47f3-89b7-69511b9d93f0.png",
+    "category": "姿势"
+  },
+  "姿势\\【光辉】【姿势】锁喉.safetensors": {
+    "triggerWords": "choke hold",
+    "nickname": "锁喉",
+    "thumbnail": "1a986c22-8206-4ec5-836d-4de68ee3ab72.png",
+    "category": "姿势"
+  },
+  "姿势\\【光辉】【姿势】壁尻A.safetensors": {
+    "nickname": "壁尻A",
+    "thumbnail": "3042b68c-dd5f-4a25-a761-056ef9e9e994.png",
+    "triggerWords": "glorywall, through wall, stuck",
+    "category": "姿势"
+  },
+  "姿势\\【光辉】【姿势】壁尻B.safetensors": {
+    "nickname": "壁尻B",
+    "triggerWords": "glory wall, stuck in wall, pussy, anus, ass, through wall, stuck, body less, no body, picture in a frame",
+    "thumbnail": "046831b4-4eb0-4576-8aab-c4bae3d76e5e.png",
+    "category": "姿势"
+  },
+  "姿势\\【光辉】【姿势】顶墙深喉.safetensors": {
+    "nickname": "顶墙深喉",
+    "triggerWords": "Oral sex. But against a wall",
+    "thumbnail": "d0b474eb-9881-43d5-bbc9-987887aa3cbf.png",
+    "category": "姿势"
+  },
+  "姿势\\【光辉】【姿势】颜面壁尻.safetensors": {
+    "nickname": "壁尻C",
+    "thumbnail": "6209af0b-f34e-4801-ace8-9180746da621.png",
+    "triggerWords": "glory wall, stuck, through wall",
+    "category": "姿势"
+  },
+  "姿势\\【光辉】【姿势】悬空后入.safetensors": {
+    "triggerWords": "dangling legs, full body, barefoot, size difference",
+    "nickname": "悬空后入",
+    "thumbnail": "19a4afb1-a68c-4907-9e21-51844e70335e.png",
+    "category": "姿势"
+  },
+  "表情\\【光辉】【表情】Smug.safetensors": {
+    "nickname": "Smug",
+    "triggerWords": "smug, open mouth",
+    "thumbnail": "e1788706-dbac-43c4-a90d-da6f06e82b70.png",
+    "category": "表情"
+  },
+  "表情\\【光辉】【表情】厌恶脸.safetensors": {
+    "nickname": "厌恶脸",
+    "triggerWords": "looking disgusted, very angry, disappointed",
+    "thumbnail": "ba5faf86-f6d1-4035-a35c-cbe5940e487e.png",
+    "category": "表情"
+  },
+  "表情\\【光辉】【表情】嫌弃脸.safetensors": {
+    "nickname": "嫌弃脸",
+    "triggerWords": "disgust",
+    "thumbnail": "5073eb37-05bc-40c7-a524-fb5d4b2e4f9d.png",
+    "category": "表情"
+  },
+  "表情\\【光辉】【表情】小雌鬼.safetensors": {
+    "nickname": "小雌鬼",
+    "triggerWords": "mesgsmile",
+    "thumbnail": "ca113b8c-7d6b-442b-a354-4a46cddffe08.png",
+    "category": "表情"
+  },
+  "表情\\【光辉】【表情】惊恐.safetensors": {
+    "nickname": "惊恐",
+    "triggerWords": "scared expression, shaded face",
+    "thumbnail": "3751d4b4-ec87-412e-b525-5deff0c5b15e.png",
+    "category": "表情"
+  },
+  "表情\\【光辉】【表情】捏脸.safetensors": {
+    "nickname": "捏脸",
+    "triggerWords": "face_grab",
+    "thumbnail": "7f0e076a-7cd4-4d33-81d4-eb19c3b84ce1.png",
+    "category": "表情"
+  },
+  "表情\\【光辉】【表情】涩涩.safetensors": {
+    "nickname": "涩涩表情包",
+    "triggerWords": "plexpressions, hands covering face, crazy laugh, very embarrassed, :o, wavy mouth, pouting lips, clenching teeth, screaming in pleasure, drooling, wavy mouth, drooling, full face blush, crazy in pleasure, ahegao",
+    "thumbnail": "401fc087-c374-45f4-9ec6-b4805d614e5e.png",
+    "category": "表情"
+  },
+  "表情\\【光辉】【表情】阿嘿颜.safetensors": {
+    "nickname": "阿嘿颜",
+    "triggerWords": "ahegao",
+    "thumbnail": "bed19309-aa7a-4cac-989f-44e5d39ec397.png",
+    "category": "表情"
+  },
+  "表情\\【PONY】【表情】掌掴.safetensors": {
+    "nickname": "掌掴",
+    "triggerWords": "slapping, pov hands",
+    "thumbnail": "12a1cc5f-fbab-4d79-a58e-26f9fa65a6a5.png",
+    "category": "表情"
+  },
+  "角色\\【光辉】【角色】菲谢尔.safetensors": {
+    "nickname": "菲谢尔",
+    "triggerWords": "gcs_fischl, green eyes, white eyepatch, eyepatch, blonde hair, two side up, black hair ribbon, x hair ornament, black nails, black jacket, open jacket, white shirt, purple skirt, purple necktie, detached collar, black thighhighs, asymmetrical legwear, thigh strap, collar, black loafers",
+    "thumbnail": "1d14d33c-5ace-4c9e-87ab-58a42b55ff5b.png",
+    "category": "角色"
+  },
+  "风格\\【光辉】【风格】PowerPuffMix.safetensors": {
+    "nickname": "PowerPuffMix"
+  },
+  "风格\\【光辉】【风格】明暗滑块.safetensors": {
+    "nickname": "明暗滑块",
+    "triggerWords": "dark, late night, blue hour"
+  },
+  "风格\\【光辉】【风格】鬼刀.safetensors": {
+    "nickname": "鬼刀",
+    "triggerWords": "wlop"
+  },
+  "姿势\\【PONY】【姿势】抬腿壁尻.safetensors": {
+    "triggerWords": "glorylegup, bound legs, through wall,legs up,photo_(object),bdsm",
+    "nickname": "抬腿壁尻",
+    "thumbnail": "dff22e6a-32df-4f1d-ade1-777153def2a1.png",
+    "category": "姿势"
   }
 }
