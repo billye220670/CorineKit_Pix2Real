@@ -54,11 +54,12 @@ function readDraft() {
   } catch { return {}; }
 }
 
-export function ZITSidebar() {
+export function ZITSidebar({ width }: { width?: number }) {
   const clientId    = useWorkflowStore((s) => s.clientId);
   const sessionId   = useWorkflowStore((s) => s.sessionId);
   const startTask   = useWorkflowStore((s) => s.startTask);
   const addZitCard  = useWorkflowStore((s) => s.addZitCard);
+  const setFlashingImage = useWorkflowStore((s) => s.setFlashingImage);
   const { sendMessage } = useWebSocket();
 
   // UNet model list
@@ -168,6 +169,7 @@ export function ZITSidebar() {
       for (let i = 0; i < count; i++) {
         const itemName = count === 1 ? baseName : `${baseName}_${i + 1}`;
         const imageId = addZitCard(config, itemName);
+        setFlashingImage(imageId);
         startTask(imageId, '');
         try {
           const res = await fetch('/api/workflow/9/execute', {
@@ -236,6 +238,13 @@ export function ZITSidebar() {
     marginBottom: 6,
   };
 
+  const cardStyle: React.CSSProperties = {
+    backgroundColor: 'var(--card-bg)',
+    border: '1px solid var(--color-border)',
+    borderRadius: 8,
+    padding: '12px 14px',
+  };
+
   const sliderRow = (name: string, value: number, min: number, max: number, step: number, setter: (v: number) => void) => (
     <div style={{ marginBottom: 10 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
@@ -256,7 +265,7 @@ export function ZITSidebar() {
 
   return (
     <div style={{
-      width: 260,
+      width: width ?? 260,
       flexShrink: 0,
       borderLeft: '1px solid var(--color-border)',
       backgroundColor: 'var(--color-surface)',
@@ -264,10 +273,10 @@ export function ZITSidebar() {
       flexDirection: 'column',
       overflow: 'hidden',
     }}>
-      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
 
         {/* UNet Model */}
-        <div>
+        <div style={cardStyle}>
           <div style={label}>UNet 模型</div>
           <ModelSelect
             models={unetModels}
@@ -288,34 +297,56 @@ export function ZITSidebar() {
 
         {/* LoRA collapsible sections */}
         {loras.map((lora, i) => (
-          <div key={i}>
-            <button
-              onClick={() => updateLora(i, { enabled: !lora.enabled })}
+          <div key={i} style={cardStyle}>
+            <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 4,
-                background: 'none',
-                border: 'none',
-                padding: 0,
-                cursor: 'pointer',
-                color: 'var(--color-text-secondary)',
-                fontSize: '11px',
-                fontWeight: 600,
-                letterSpacing: '0.04em',
+                gap: 8,
                 marginBottom: lora.enabled ? 10 : 0,
               }}
             >
-              {lora.enabled ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-              <input
-                type="checkbox"
-                checked={lora.enabled}
-                onChange={(e) => { e.stopPropagation(); updateLora(i, { enabled: e.target.checked }); }}
-                onClick={(e) => e.stopPropagation()}
-                style={{ margin: '0 2px', cursor: 'pointer', accentColor: 'var(--color-primary)' }}
-              />
-              启用 LoRA {i + 1}
-            </button>
+              {/* Toggle Switch */}
+              <div
+                onClick={() => updateLora(i, { enabled: !lora.enabled })}
+                style={{
+                  width: 36,
+                  height: 20,
+                  borderRadius: 10,
+                  backgroundColor: lora.enabled ? 'var(--color-primary, #4a9eff)' : 'rgba(128,128,128,0.3)',
+                  position: 'relative',
+                  cursor: 'pointer',
+                  transition: 'background-color 0.2s ease',
+                  flexShrink: 0,
+                }}
+              >
+                <div
+                  style={{
+                    width: 16,
+                    height: 16,
+                    borderRadius: '50%',
+                    backgroundColor: '#fff',
+                    position: 'absolute',
+                    top: 2,
+                    left: lora.enabled ? 18 : 2,
+                    transition: 'left 0.2s ease',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                  }}
+                />
+              </div>
+              <span
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  color: 'var(--color-text-secondary)',
+                  letterSpacing: '0.04em',
+                  cursor: 'default',
+                  userSelect: 'none',
+                }}
+              >
+                启用 LoRA {i + 1}
+              </span>
+            </div>
 
             {lora.enabled && (
               <div>
@@ -376,7 +407,7 @@ export function ZITSidebar() {
                       : <Copy size={11} color="var(--color-text-secondary)" style={{ flexShrink: 0, opacity: 0.6 }} />}
                   </div>
                 )}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12 }}>
                   <span style={{ fontSize: 11, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>权重</span>
                   <input
                     type="range"
@@ -395,7 +426,7 @@ export function ZITSidebar() {
         ))}
 
         {/* Prompt */}
-        <div>
+        <div style={cardStyle}>
           <div style={label}>提示词</div>
           <div
             style={{ position: 'relative' }}
@@ -549,7 +580,7 @@ export function ZITSidebar() {
         </div>
 
         {/* Aspect ratio */}
-        <div>
+        <div style={cardStyle}>
           <div style={label}>比例</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {RATIO_PRESETS.map((p) => (
@@ -561,7 +592,7 @@ export function ZITSidebar() {
         </div>
 
         {/* Collapsible sampler settings */}
-        <div>
+        <div style={cardStyle}>
           <button
             onClick={() => setSamplerOpen((v) => !v)}
             style={{

@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useState, useRef } from 'react';
 import { useWorkflowStore } from '../hooks/useWorkflowStore.js';
 import { useWebSocket } from '../hooks/useWebSocket.js';
 import { useImageImporter } from '../hooks/useImageImporter.js';
@@ -73,6 +73,45 @@ export function App() {
     });
   }, []);
   useWebSocket();
+
+  // --- Right sidebar resizable width ---
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const saved = localStorage.getItem('right-sidebar-width');
+    return saved ? parseInt(saved, 10) : 260;
+  });
+  const sidebarWidthRef = useRef(sidebarWidth);
+  useEffect(() => { sidebarWidthRef.current = sidebarWidth; }, [sidebarWidth]);
+  const isResizing = useRef(false);
+
+  const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
+    isResizing.current = true;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const startX = e.clientX;
+    const startWidth = sidebarWidthRef.current;
+
+    const handleMouseMove = (ev: MouseEvent) => {
+      if (!isResizing.current) return;
+      const delta = startX - ev.clientX; // 向左拖 = 增宽
+      const newWidth = Math.min(Math.max(startWidth + delta, 260), 500);
+      setSidebarWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      isResizing.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      localStorage.setItem('right-sidebar-width', String(sidebarWidthRef.current));
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, []);
+
+  const hasRightSidebar = activeTab === 7 || activeTab === 9 || activeTab === 0 || activeTab === 2;
 
   useEffect(() => {
     const saved = localStorage.getItem('theme');
@@ -246,10 +285,25 @@ export function App() {
               ) : (
                 <>
                   <PhotoWall viewSize={viewSize} />
-                  {activeTab === 7 && <Text2ImgSidebar />}
-                  {activeTab === 9 && <ZITSidebar />}
-                  {activeTab === 0 && <Workflow0SettingsPanel />}
-                  {activeTab === 2 && <Workflow2SettingsPanel />}
+                  {hasRightSidebar && (
+                    <div
+                      onMouseDown={handleResizeMouseDown}
+                      style={{
+                        width: 4,
+                        cursor: 'col-resize',
+                        backgroundColor: 'transparent',
+                        flexShrink: 0,
+                        position: 'relative',
+                        zIndex: 10,
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--color-primary)'; }}
+                      onMouseLeave={(e) => { if (!isResizing.current) e.currentTarget.style.backgroundColor = 'transparent'; }}
+                    />
+                  )}
+                  {activeTab === 7 && <Text2ImgSidebar width={sidebarWidth} />}
+                  {activeTab === 9 && <ZITSidebar width={sidebarWidth} />}
+                  {activeTab === 0 && <Workflow0SettingsPanel width={sidebarWidth} />}
+                  {activeTab === 2 && <Workflow2SettingsPanel width={sidebarWidth} />}
                 </>
               )}
             </div>

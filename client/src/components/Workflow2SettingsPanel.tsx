@@ -6,7 +6,7 @@ function readSettings() {
   try { return JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? 'null') ?? {}; } catch { return {}; }
 }
 
-export function Workflow2SettingsPanel() {
+export function Workflow2SettingsPanel({ width }: { width?: number }) {
   const [upscaleModel, setUpscaleModel] = useState<'seedvr2' | 'klein' | 'sd' | 'remacri'>(() => readSettings().upscaleModel ?? 'seedvr2');
 
   useEffect(() => {
@@ -35,7 +35,7 @@ export function Workflow2SettingsPanel() {
 
   return (
     <div style={{
-      width: 220,
+      width: width ?? 220,
       flexShrink: 0,
       borderLeft: '1px solid var(--color-border)',
       backgroundColor: 'var(--color-surface)',

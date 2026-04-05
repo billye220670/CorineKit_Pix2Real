@@ -133,6 +133,18 @@ export function PhotoWall({ viewSize }: PhotoWallProps) {
     }
   }, [dragging]);
 
+  // Auto-scroll to bottom when a new card is generated (flashingImageId changes)
+  useEffect(() => {
+    if (!flashingImageId) return;
+    const timer = setTimeout(() => {
+      const container = document.querySelector('[data-photo-wall-scroll]');
+      if (container) {
+        container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [flashingImageId]);
+
   const isMultiSelectMode = selectedImageIds.length > 0;
   const selectedCount = selectedImageIds.length;
   const allSelected = images.length > 0 && selectedCount === images.length;

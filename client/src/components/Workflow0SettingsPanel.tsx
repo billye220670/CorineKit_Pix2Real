@@ -6,7 +6,7 @@ function readSettings() {
   try { return JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? 'null') ?? {}; } catch { return {}; }
 }
 
-export function Workflow0SettingsPanel() {
+export function Workflow0SettingsPanel({ width }: { width?: number }) {
   const [drawModel, setDrawModel] = useState<'qwen' | 'klein'>(() => readSettings().drawModel ?? 'qwen');
 
   useEffect(() => {
@@ -35,7 +35,7 @@ export function Workflow0SettingsPanel() {
 
   return (
     <div style={{
-      width: 220,
+      width: width ?? 220,
       flexShrink: 0,
       borderLeft: '1px solid var(--color-border)',
       backgroundColor: 'var(--color-surface)',
