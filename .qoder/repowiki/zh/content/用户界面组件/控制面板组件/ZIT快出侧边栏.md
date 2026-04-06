@@ -5,23 +5,20 @@
 - [ZITSidebar.tsx](file://client/src/components/ZITSidebar.tsx)
 - [ModelSelect.tsx](file://client/src/components/ModelSelect.tsx)
 - [useWorkflowStore.ts](file://client/src/hooks/useWorkflowStore.ts)
-- [sessionService.ts](file://client/src/services/sessionService.ts)
-- [index.ts](file://client/src/types/index.ts)
-- [systemPrompts.ts](file://client/src/components/prompt-assistant/systemPrompts.ts)
-- [Workflow9Adapter.ts](file://server/src/adapters/Workflow9Adapter.ts)
-- [workflow.ts](file://server/src/routes/workflow.ts)
-- [Pix2Real-ZIT文生图NEW.json](file://ComfyUI_API/Pix2Real-ZIT文生图NEW.json)
-- [index.ts](file://server/src/adapters/index.ts)
 - [useModelMetadata.ts](file://client/src/hooks/useModelMetadata.ts)
-- [modelMeta.ts](file://server/src/routes/modelMeta.ts)
+- [index.ts](file://client/src/types/index.ts)
+- [global.css](file://client/src/styles/global.css)
+- [variables.css](file://client/src/styles/variables.css)
+- [Text2ImgSidebar.tsx](file://client/src/components/Text2ImgSidebar.tsx)
 </cite>
 
 ## 更新摘要
 **变更内容**
-- ModelSelect 组件获得重大增强，集成了触发词显示、分类管理和右键菜单功能
-- 新增缩略图上传和昵称编辑功能
-- 增强 UNet 和 LoRA 模型管理能力，提供更专业的模型选择体验
-- 集成服务器端模型元数据管理 API
+- ZITSidebar组件采用新的统一卡片布局系统，实现与Text2ImgSidebar一致的样式设计
+- 卡片样式统一使用 `cardStyle` 和 `dividerStyle` 定义，提升界面一致性
+- 改进的用户界面布局，包括统一的间距、边框和阴影效果
+- 集成ModelSelect组件的新功能，包括触发词显示和分类管理
+- 与ImageCard、Text2ImgSidebar等组件形成统一的卡片设计体系
 
 ## 目录
 1. [简介](#简介)
@@ -39,9 +36,10 @@
 
 ZIT快出侧边栏组件是 CorineKit Pix2Real 项目中的核心功能模块，专门用于实现快速图像生成的优化策略。该组件基于 ZIT 工作流，提供了直观的用户界面来配置和执行高质量的图像生成任务。
 
-**更新** 该组件已集成全新的 ModelSelect 组件，显著增强了模型管理功能，为用户提供更专业、更便捷的 UNet 和 LoRA 模型选择体验。ModelSelect 现已集成了触发词显示、分类管理和右键菜单功能，大幅提升了模型管理能力。
+**更新** 该组件已采用全新的统一卡片布局系统，实现了与整个应用界面风格一致的视觉设计。新的卡片布局系统包括统一的样式定义、改进的用户界面布局和更好的视觉层次感，与Text2ImgSidebar组件形成了完全一致的设计体系。
 
 本组件的主要特点包括：
+- **统一卡片布局**：采用新的卡片设计系统，实现与Text2ImgSidebar一致的视觉体验
 - **快速图像生成**：通过优化的参数配置实现高效的图像生成流程
 - **批量处理能力**：支持单次生成多个图像实例
 - **智能参数管理**：提供预设参数配置和工作流模板选择
@@ -63,50 +61,70 @@ subgraph "客户端前端"
 A[ZITSidebar.tsx]
 B[ModelSelect.tsx]
 C[useWorkflowStore.ts]
-D[sessionService.ts]
-E[systemPrompts.ts]
-F[index.ts - 类型定义]
-G[useModelMetadata.ts]
+D[useModelMetadata.ts]
+E[index.ts - 类型定义]
+F[useModelFavorites Hook]
+G[global.css]
+H[variables.css]
+I[Text2ImgSidebar.tsx]
+J[Text2Img卡片样式]
+K[ZITSidebar卡片样式]
 end
 subgraph "服务器端"
-H[workflow.ts - 路由处理]
-I[Workflow9Adapter.ts]
-J[index.ts - 适配器索引]
-K[modelMeta.ts - 模型元数据路由]
+L[workflow.ts - 路由处理]
+M[Workflow9Adapter.ts]
+N[index.ts - 适配器索引]
+O[modelMeta.ts - 模型元数据路由]
 end
-subgraph "工作流模板"
-L[Pix2Real-ZIT文生图NEW.json]
+subgraph "样式系统"
+P[CSS变量系统]
+Q[cardStyle统一定义]
+R[dividerStyle统一定义]
+S[sectionLabelStyle统一定义]
 end
 A --> B
 A --> C
-A --> D
-A --> E
+B --> D
 B --> F
-B --> G
-G --> K
-H --> I
-H --> L
+C --> L
+D --> O
+G --> P
+H --> P
+I --> J
+A --> K
+P --> Q
+P --> R
+P --> S
 ```
 
 **图表来源**
-- [ZITSidebar.tsx:1-742](file://client/src/components/ZITSidebar.tsx#L1-L742)
+- [ZITSidebar.tsx:1-765](file://client/src/components/ZITSidebar.tsx#L1-L765)
 - [ModelSelect.tsx:1-1005](file://client/src/components/ModelSelect.tsx#L1-L1005)
-- [useWorkflowStore.ts:1-645](file://client/src/hooks/useWorkflowStore.ts#L1-L645)
+- [useWorkflowStore.ts:1-690](file://client/src/hooks/useWorkflowStore.ts#L1-L690)
 - [useModelMetadata.ts:1-215](file://client/src/hooks/useModelMetadata.ts#L1-L215)
-- [modelMeta.ts:1-228](file://server/src/routes/modelMeta.ts#L1-L228)
+- [Text2ImgSidebar.tsx:220-419](file://client/src/components/Text2ImgSidebar.tsx#L220-L419)
 
 **章节来源**
-- [ZITSidebar.tsx:1-742](file://client/src/components/ZITSidebar.tsx#L1-L742)
+- [ZITSidebar.tsx:1-765](file://client/src/components/ZITSidebar.tsx#L1-L765)
 - [ModelSelect.tsx:1-1005](file://client/src/components/ModelSelect.tsx#L1-L1005)
-- [useWorkflowStore.ts:1-645](file://client/src/hooks/useWorkflowStore.ts#L1-L645)
+- [useWorkflowStore.ts:1-690](file://client/src/hooks/useWorkflowStore.ts#L1-L690)
 - [useModelMetadata.ts:1-215](file://client/src/hooks/useModelMetadata.ts#L1-L215)
-- [modelMeta.ts:1-228](file://server/src/routes/modelMeta.ts#L1-L228)
 
 ## 核心组件
 
 ### ZITSidebar 主要功能特性
 
 ZITSidebar 组件提供了完整的图像生成工作流界面，包含以下核心功能：
+
+#### 统一卡片布局系统
+**更新** 采用新的卡片布局设计，实现与Text2ImgSidebar一致的视觉体验：
+
+- **统一卡片样式**：使用 `cardStyle` 定义所有卡片的统一外观
+- **分隔线设计**：使用 `dividerStyle` 创建一致的分隔效果
+- **标题样式**：使用 `sectionLabelStyle` 确保标题样式的一致性
+- **间距一致性**：所有卡片使用相同的内边距和外边距
+- **视觉层次**：通过统一的边框、阴影和背景色建立清晰的视觉层次
+- **响应式设计**：适配不同屏幕尺寸和设备类型
 
 #### 增强的模型选择系统
 **更新** 集成 ModelSelect 组件，提供专业级的模型管理功能：
@@ -138,10 +156,11 @@ ZITSidebar 组件提供了完整的图像生成工作流界面，包含以下核
 - **状态反馈**：完整的加载状态和错误处理
 
 **章节来源**
-- [ZITSidebar.tsx:8-31](file://client/src/components/ZITSidebar.tsx#L8-L31)
-- [ZITSidebar.tsx:16-29](file://client/src/components/ZITSidebar.tsx#L16-L29)
-- [ZITSidebar.tsx:340-415](file://client/src/components/ZITSidebar.tsx#L340-L415)
-- [ModelSelect.tsx:19-1005](file://client/src/components/ModelSelect.tsx#L19-L1005)
+- [ZITSidebar.tsx:229-251](file://client/src/components/ZITSidebar.tsx#L229-L251)
+- [ZITSidebar.tsx:283-301](file://client/src/components/ZITSidebar.tsx#L283-L301)
+- [ZITSidebar.tsx:306-431](file://client/src/components/ZITSidebar.tsx#L306-L431)
+- [ZITSidebar.tsx:438-590](file://client/src/components/ZITSidebar.tsx#L438-L590)
+- [ZITSidebar.tsx:594-689](file://client/src/components/ZITSidebar.tsx#L594-L689)
 
 ## 架构概览
 
@@ -153,27 +172,24 @@ participant U as 用户界面
 participant Z as ZITSidebar
 participant MS as ModelSelect
 participant MM as ModelMetadata Hook
+participant WF as WorkflowStore
 participant S as WebSocket
-participant R as 服务器路由
-participant T as 模板引擎
 U->>Z : 点击生成按钮
 Z->>MS : 获取模型选择状态
 MS->>MM : 获取模型元数据
 MM-->>MS : 返回元数据信息
 MS-->>Z : 返回当前模型选择和元数据
-Z->>R : POST /api/workflow/9/execute
-R->>T : 加载 Pix2Real-ZIT文生图NEW.json
-T-->>R : 返回配置化模板
-R-->>Z : {promptId}
-Z->>S : register(promptId, workflowId=9)
+Z->>WF : 添加ZIT卡片
+WF-->>Z : 返回图像ID
+Z->>S : 注册WebSocket监听
 S-->>Z : 进度更新和完成通知
 ```
 
 **图表来源**
-- [ZITSidebar.tsx:120-169](file://client/src/components/ZITSidebar.tsx#L120-L169)
-- [ModelSelect.tsx:19-1005](file://client/src/components/ModelSelect.tsx#L19-L1005)
+- [ZITSidebar.tsx:145-194](file://client/src/components/ZITSidebar.tsx#L145-L194)
+- [ModelSelect.tsx:96-111](file://client/src/components/ModelSelect.tsx#L96-L111)
 - [useModelMetadata.ts:10-215](file://client/src/hooks/useModelMetadata.ts#L10-L215)
-- [workflow.ts:182-261](file://server/src/routes/workflow.ts#L182-L261)
+- [useWorkflowStore.ts:82-84](file://client/src/hooks/useWorkflowStore.ts#L82-L84)
 
 ## 详细组件分析
 
@@ -223,9 +239,53 @@ ModelSelect --> useModelMetadata : 使用
 ```
 
 **图表来源**
-- [ZITSidebar.tsx:37-742](file://client/src/components/ZITSidebar.tsx#L37-L742)
+- [ZITSidebar.tsx:37-765](file://client/src/components/ZITSidebar.tsx#L37-L765)
 - [ModelSelect.tsx:74-1005](file://client/src/components/ModelSelect.tsx#L74-L1005)
 - [useModelMetadata.ts:3-215](file://client/src/hooks/useModelMetadata.ts#L3-L215)
+
+### 统一卡片布局系统
+
+**新增** ZITSidebar 采用了全新的统一卡片布局系统，与应用整体设计风格保持一致：
+
+#### 卡片样式定义
+- **cardStyle**：统一的卡片基础样式，包含内边距、边框和背景色
+- **dividerStyle**：统一的分隔线样式，确保界面元素的一致性
+- **sectionLabelStyle**：统一的标题样式，使用一致的字体大小和颜色
+
+#### 卡片布局结构
+- **顶部卡片**：UNet 模型选择区域，使用 `paddingTop: 0` 去除顶部内边距
+- **中间卡片**：LoRA 模型配置区域，使用标准的 `paddingTop: 16, paddingBottom: 16`
+- **底部卡片**：提示词和参数配置区域，使用 `paddingTop: 16, paddingBottom: 16`
+- **比例卡片**：图像比例选择区域，使用 `paddingTop: 16, paddingBottom: 16`
+- **采样设置卡片**：高级参数配置区域，使用 `paddingTop: 16, paddingBottom: 0`
+
+#### 视觉设计改进
+- **统一的圆角设计**：所有卡片使用一致的圆角半径
+- **一致的边框样式**：使用 CSS 变量 `var(--color-border)` 确保颜色一致性
+- **标准化的间距**：使用 `var(--spacing-md)` 等 CSS 变量确保间距一致性
+- **统一的阴影效果**：通过 `box-shadow` 和 `outline` 属性实现一致的视觉反馈
+
+```mermaid
+flowchart TD
+A[ZITSidebar 初始化] --> B[定义 cardStyle]
+B --> C[定义 dividerStyle]
+C --> D[定义 sectionLabelStyle]
+D --> E[应用到各个卡片区域]
+E --> F[UNet 模型卡片]
+F --> G[LoRA 模型卡片]
+G --> H[提示词卡片]
+H --> I[比例选择卡片]
+I --> J[采样设置卡片]
+J --> K[底部操作区域]
+```
+
+**图表来源**
+- [ZITSidebar.tsx:229-251](file://client/src/components/ZITSidebar.tsx#L229-L251)
+- [Text2ImgSidebar.tsx:229-246](file://client/src/components/Text2ImgSidebar.tsx#L229-L246)
+
+**章节来源**
+- [ZITSidebar.tsx:229-251](file://client/src/components/ZITSidebar.tsx#L229-L251)
+- [Text2ImgSidebar.tsx:229-246](file://client/src/components/Text2ImgSidebar.tsx#L229-L246)
 
 ### ModelSelect 组件详细分析
 
@@ -274,10 +334,10 @@ Q --> |否| S[保持开放]
 ```
 
 **图表来源**
-- [ModelSelect.tsx:19-1005](file://client/src/components/ModelSelect.tsx#L19-L1005)
+- [ModelSelect.tsx:96-111](file://client/src/components/ModelSelect.tsx#L96-L111)
 
 **章节来源**
-- [ModelSelect.tsx:19-1005](file://client/src/components/ModelSelect.tsx#L19-L1005)
+- [ModelSelect.tsx:96-111](file://client/src/components/ModelSelect.tsx#L96-L111)
 - [ModelSelect.tsx:680-911](file://client/src/components/ModelSelect.tsx#L680-L911)
 
 ### 参数配置系统
@@ -304,7 +364,7 @@ N --> O[重新渲染]
 ```
 
 **图表来源**
-- [ZITSidebar.tsx:44-116](file://client/src/components/ZITSidebar.tsx#L44-L116)
+- [ZITSidebar.tsx:66-95](file://client/src/components/ZITSidebar.tsx#L66-L95)
 - [ModelSelect.tsx:236-260](file://client/src/components/ModelSelect.tsx#L236-L260)
 
 #### 采样器配置
@@ -318,7 +378,7 @@ N --> O[重新渲染]
 | dpm2m | 快速生成 | steps: 6-12, cfg: 1-2 |
 
 **章节来源**
-- [ZITSidebar.tsx:16-29](file://client/src/components/ZITSidebar.tsx#L16-L29)
+- [ZITSidebar.tsx:19-32](file://client/src/components/ZITSidebar.tsx#L19-L32)
 - [ZITSidebar.tsx:503-526](file://client/src/components/ZITSidebar.tsx#L503-L526)
 
 ### 批量处理机制
@@ -343,11 +403,11 @@ L --> M[更新最终输出]
 ```
 
 **图表来源**
-- [ZITSidebar.tsx:120-169](file://client/src/components/ZITSidebar.tsx#L120-L169)
-- [useWorkflowStore.ts:571-593](file://client/src/hooks/useWorkflowStore.ts#L571-L593)
+- [ZITSidebar.tsx:145-194](file://client/src/components/ZITSidebar.tsx#L145-L194)
+- [useWorkflowStore.ts:82-84](file://client/src/hooks/useWorkflowStore.ts#L82-L84)
 
 **章节来源**
-- [ZITSidebar.tsx:125-156](file://client/src/components/ZITSidebar.tsx#L125-L156)
+- [ZITSidebar.tsx:145-194](file://client/src/components/ZITSidebar.tsx#L145-L194)
 - [useWorkflowStore.ts:377-396](file://client/src/hooks/useWorkflowStore.ts#L377-L396)
 
 ### 提示词辅助系统
@@ -370,9 +430,8 @@ L --> M[更新最终输出]
 - **触发词验证**：显示触发词的存在状态
 
 **章节来源**
-- [ZITSidebar.tsx:158-179](file://client/src/components/ZITSidebar.tsx#L158-L179)
-- [ZITSidebar.tsx:360-400](file://client/src/components/ZITSidebar.tsx#L360-L400)
-- [systemPrompts.ts:4-145](file://client/src/components/prompt-assistant/systemPrompts.ts#L4-L145)
+- [ZITSidebar.tsx:196-217](file://client/src/components/ZITSidebar.tsx#L196-L217)
+- [ZITSidebar.tsx:376-414](file://client/src/components/ZITSidebar.tsx#L376-L414)
 
 ## 依赖分析
 
@@ -386,48 +445,70 @@ B[ModelSelect]
 C[提示词面板]
 D[进度显示]
 E[触发词显示]
+F[Text2ImgSidebar]
+G[卡片样式系统]
+H[统一布局]
 end
 subgraph "状态管理层"
-F[WorkflowStore]
-G[WebSocket Hook]
-H[Prompt Assistant Store]
-I[Model Favorites Hook]
-J[Model Metadata Hook]
+I[WorkflowStore]
+J[WebSocket Hook]
+K[Prompt Assistant Store]
+L[Model Favorites Hook]
+M[Model Metadata Hook]
 end
 subgraph "服务层"
-K[Session Service]
-L[ComfyUI 服务]
-M[Model Metadata Service]
+N[Session Service]
+O[ComfyUI 服务]
+P[Model Metadata Service]
+end
+subgraph "样式层"
+Q[global.css]
+R[variables.css]
+S[CSS变量系统]
+T[cardStyle定义]
+U[dividerStyle定义]
+V[sectionLabelStyle定义]
 end
 subgraph "类型定义"
-N[ImageItem]
-O[TaskInfo]
-P[ZitConfig]
-Q[ModelMetadata]
-R[ModelFavorites]
+W[ImageItem]
+X[TaskInfo]
+Y[ZitConfig]
+Z[ModelMetadata]
+AA[ModelFavorites]
+AB[ModelMetadata]
 end
-A --> F
-A --> G
-A --> H
+A --> I
+A --> J
+A --> K
 A --> B
-B --> I
-B --> J
-F --> K
-F --> L
-F --> M
-A --> N
-F --> O
-F --> P
-I --> R
-J --> Q
+B --> L
+B --> M
+I --> N
+I --> O
+I --> P
+A --> W
+I --> X
+I --> Y
+L --> AA
+M --> AB
+F --> G
+A --> H
+Q --> S
+R --> S
+S --> T
+S --> U
+S --> V
 ```
 
 **图表来源**
-- [ZITSidebar.tsx:1-8](file://client/src/components/ZITSidebar.tsx#L1-L8)
+- [ZITSidebar.tsx:1-10](file://client/src/components/ZITSidebar.tsx#L1-L10)
 - [ModelSelect.tsx:236-260](file://client/src/components/ModelSelect.tsx#L236-L260)
 - [useWorkflowStore.ts:1-6](file://client/src/hooks/useWorkflowStore.ts#L1-L6)
 - [useModelMetadata.ts:1-58](file://client/src/hooks/useModelMetadata.ts#L1-L58)
 - [index.ts:1-58](file://client/src/types/index.ts#L1-L58)
+- [Text2ImgSidebar.tsx:220-227](file://client/src/components/Text2ImgSidebar.tsx#L220-L227)
+- [global.css:1-263](file://client/src/styles/global.css#L1-L263)
+- [variables.css:1-31](file://client/src/styles/variables.css#L1-L31)
 
 ### 服务器端集成
 
@@ -515,6 +596,13 @@ ModelMetadataRouter <|-- ModelMetaController
 - **虚拟滚动**：对于大量输出采用懒加载策略
 - **组件拆分**：ModelSelect 独立封装，便于维护和测试
 - **分类颜色缓存**：使用 localStorage 缓存分类颜色映射
+- **统一卡片布局**：通过 CSS 变量和统一样式减少重复计算
+
+#### 样式优化
+- **CSS 变量复用**：使用 `var(--color-border)` 等变量确保样式一致性
+- **动画性能**：使用 GPU 加速的动画属性如 `transform` 和 `opacity`
+- **阴影优化**：通过 `box-shadow` 和 `outline` 实现轻量级视觉效果
+- **过渡效果**：使用 `transition` 属性实现流畅的交互反馈
 
 ## 故障排除指南
 
@@ -572,6 +660,15 @@ ModelMetadataRouter <|-- ModelMetaController
 3. 验证系统提示词配置
 4. **新增** 检查触发词复制功能是否正常
 
+#### 卡片布局显示异常
+**症状**：卡片样式不一致或布局错乱
+**解决方案**：
+1. 检查 CSS 变量是否正确加载
+2. 验证 `cardStyle` 和 `dividerStyle` 是否正确应用
+3. 确认 `var(--color-border)` 等 CSS 变量值
+4. 检查全局样式文件是否正确导入
+5. **新增** 验证统一卡片布局系统是否正常工作
+
 **章节来源**
 - [ZITSidebar.tsx:142-151](file://client/src/components/ZITSidebar.tsx#L142-L151)
 - [ModelSelect.tsx:32-42](file://client/src/components/ModelSelect.tsx#L32-L42)
@@ -582,15 +679,17 @@ ModelMetadataRouter <|-- ModelMetaController
 
 ZITSidebar 组件作为 CorineKit Pix2Real 项目的核心功能模块，成功实现了快速图像生成的完整解决方案。通过精心设计的架构和优化的用户体验，该组件为用户提供了高效、稳定的图像生成服务。
 
-**更新** 最新版本的组件集成了全新的 ModelSelect 组件，显著提升了模型管理的专业性和易用性。ModelSelect 提供了智能分组、收藏夹管理、触发词显示、分类管理和右键菜单等强大功能，使用户能够更高效地选择和管理 UNet 和 LoRA 模型。
+**更新** 最新版本的组件集成了全新的统一卡片布局系统，显著提升了界面的一致性和视觉体验。新的卡片布局系统包括统一的样式定义、改进的用户界面布局和更好的视觉层次感，与 Text2ImgSidebar 等组件形成了统一的设计体系。
 
 主要优势包括：
+- **统一视觉设计**：采用新的卡片布局系统，实现与Text2ImgSidebar一致的视觉体验
 - **易用性**：直观的界面设计和智能的参数配置
 - **专业性**：ModelSelect 组件提供专业的模型管理体验
 - **稳定性**：完善的错误处理和状态管理机制
 - **扩展性**：模块化的架构支持未来功能扩展
 - **性能**：优化的批量处理和资源管理策略
 - **完整性**：完整的模型元数据管理功能
+- **一致性**：与应用整体设计风格保持一致
 
 该组件在整体工作流系统中扮演着关键角色，为其他侧边栏组件提供了统一的集成接口和一致的用户体验。
 
@@ -603,6 +702,13 @@ ZITSidebar 组件作为 CorineKit Pix2Real 项目的核心功能模块，成功�
 2. 使用 ModelSelect 组件选择合适的模型和采样器参数
 3. 设置图像尺寸和批量数量
 4. 点击生成按钮开始处理
+
+#### 卡片布局使用技巧
+**新增** 统一卡片布局系统的使用建议：
+- **卡片间距**：所有卡片使用相同的内边距和外边距，确保视觉一致性
+- **分隔线**：使用统一的分隔线样式，建立清晰的视觉层次
+- **颜色系统**：通过 CSS 变量 `var(--color-border)` 确保颜色一致性
+- **响应式设计**：适配不同屏幕尺寸，保持布局的灵活性
 
 #### ModelSelect 使用技巧
 **新增** ModelSelect 组件的使用建议：
@@ -637,5 +743,6 @@ ZITSidebar 组件作为 CorineKit Pix2Real 项目的核心功能模块，成功�
 - 合理设置生成时间间隔避免服务器过载
 - 使用草稿功能保存常用配置
 - 利用 ModelSelect 的收藏夹功能快速选择常用模型
+- **新增** 利用统一卡片布局系统提升界面一致性
 - **新增** 利用触发词功能提升生成质量和一致性
 - **新增** 使用分类管理功能组织和筛选模型

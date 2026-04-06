@@ -22,6 +22,7 @@
 - [maskConfig.ts](file://client/src/config/maskConfig.ts)
 - [index.ts](file://client/src/types/index.ts)
 - [package.json](file://client/package.json)
+- [global.css](file://client/src/styles/global.css)
 </cite>
 
 ## 目录
@@ -39,10 +40,10 @@
 ## 简介
 本项目是一个基于 React 的图像处理与生成工作流前端应用，围绕 App 主组件构建了完整的组件体系。系统通过多 Tab 工作流、拖拽交互、蒙版编辑、实时进度反馈等能力，支撑从图像导入、处理到结果输出的完整流程。本文档将深入解析 App 主组件的设计架构、组件层次结构、状态传递机制与事件处理模式，并详细说明 Sidebar、PhotoWall、DropZone、ImageCard 等核心组件的职责与协作方式。
 
-**更新** 本版本新增了 ModelSelect 组件的触发词编辑功能、多槽位 LoRA 支持、复制粘贴触发词功能，以及 Text2ImgSidebar 和 ZITSidebar 的增强功能。
+**更新** 本版本新增了右侧侧边栏可调整大小功能、卡片布局系统、滑块控件改进和切换开关等UI增强功能。
 
 ## 项目结构
-客户端采用按功能模块组织的目录结构，核心入口位于 main.tsx，应用根组件为 App.tsx，其余组件分布在 components 目录下，状态管理通过 hooks 中的 Zustand stores 实现，类型定义集中在 types 目录。
+客户端采用按功能模块组织的目录结构，核心入口位于 main.tsx，应用根组件为 App.tsx，其余组件分布在 components 目录下，状态管理通过 hooks 中的 Zustand stores 实现，类型定义集中在 types 目录，样式通过全局 CSS 控制。
 
 ```mermaid
 graph TB
@@ -65,6 +66,8 @@ R["Text2ImgSidebar.tsx<br/>文生图侧边栏"] --> P
 S["ZITSidebar.tsx<br/>ZIT侧边栏"] --> P
 T["sessionService.ts<br/>会话服务"] --> R
 U["sessionService.ts<br/>会话服务"] --> S
+V["global.css<br/>全局样式"] --> R
+V --> S
 ```
 
 **图表来源**
@@ -88,6 +91,7 @@ U["sessionService.ts<br/>会话服务"] --> S
 - [maskConfig.ts:1-20](file://client/src/config/maskConfig.ts#L1-L20)
 - [index.ts:1-58](file://client/src/types/index.ts#L1-L58)
 - [package.json:1-25](file://client/package.json#L1-L25)
+- [global.css:220-263](file://client/src/styles/global.css#L220-L263)
 
 **章节来源**
 - [main.tsx:1-11](file://client/src/main.tsx#L1-L11)
@@ -95,19 +99,19 @@ U["sessionService.ts<br/>会话服务"] --> S
 
 ## 核心组件
 本节概述主要组件及其职责：
-- App：应用根容器，负责全局布局、主题切换、欢迎页、拖拽处理、状态持久化与子组件编排。
+- App：应用根容器，负责全局布局、主题切换、欢迎页、拖拽处理、状态持久化与子组件编排，**新增右侧侧边栏可调整大小功能**。
 - Sidebar：工作流导航与任务队列管理，支持跨标签拖拽与任务状态指示。
-- PhotoWall：图片墙展示与批量操作，支持懒加载、多选、批量执行与删除。
+- PhotoWall：图片墙展示与批量操作，支持懒加载、多选、批量执行与删除，**采用CSS Grid实现响应式卡片布局**。
 - DropZone：通用拖拽导入区域，支持文件夹与文件拖放。
 - ImageCard：单张图片卡片，包含预览、输出缩略条、蒙版控制、提示词编辑、执行与撤销等。
 - FaceSwapPhotoWall：换脸专用图片墙，支持左右分区拖拽与批量换脸。
 - ThumbnailStrip：输出缩略条，支持原图与结果间切换与拖拽。
 - MaskEditor：蒙版编辑器，支持多种模式、笔刷参数、自动识别与导出。
 - ModelSelect：增强的模型选择器，支持触发词编辑、收藏管理、缩略图上传、昵称设置。
-- Text2ImgSidebar：文生图工作流侧边栏，支持多槽位 LoRA、触发词复制、提示词助手。
-- ZITSidebar：ZIT工作流侧边栏，支持 UNet 模型选择、多槽位 LoRA、触发词复制、采样算法偏移。
+- Text2ImgSidebar：文生图工作流侧边栏，支持多槽位 LoRA、触发词复制、提示词助手、**自定义切换开关**。
+- ZITSidebar：ZIT工作流侧边栏，支持 UNet 模型选择、多槽位 LoRA、触发词复制、采样算法偏移、**自定义切换开关**。
 
-**更新** 新增了 ModelSelect、Text2ImgSidebar 和 ZITSidebar 的核心功能描述。
+**更新** 新增了右侧侧边栏可调整大小功能、CSS Grid卡片布局、改进的滑块控件样式和自定义切换开关等UI增强功能。
 
 **章节来源**
 - [App.tsx:54-335](file://client/src/components/App.tsx#L54-L335)
@@ -128,6 +132,7 @@ U["sessionService.ts<br/>会话服务"] --> S
 - 展示组件（ImageCard、DropZone、ThumbnailStrip、MaskEditor、ModelSelect）专注渲染与最小化重渲染。
 - 状态管理通过多个 Zustand stores 实现，避免深层 props 传递与样板代码。
 - 模型元数据通过 useModelMetadata hook 管理，支持触发词、缩略图、昵称等信息的持久化。
+- **新增全局样式系统**，通过 CSS 变量和自定义样式类提供一致的UI体验。
 
 ```mermaid
 graph TB
@@ -155,6 +160,9 @@ end
 subgraph "服务层"
 SS["sessionService"]
 end
+subgraph "样式系统"
+GC["global.css"]
+end
 APP --> SIDEBAR
 APP --> PW
 APP --> FSPW
@@ -181,6 +189,8 @@ ZITS --> WFS
 MS --> MM
 SS --> T2IS
 SS --> ZITS
+GC --> T2IS
+GC --> ZITS
 ```
 
 **图表来源**
@@ -200,6 +210,7 @@ SS --> ZITS
 - [useMaskStore.ts:1-51](file://client/src/hooks/useMaskStore.ts#L1-L51)
 - [useModelMetadata.ts:9-169](file://client/src/hooks/useModelMetadata.ts#L9-L169)
 - [sessionService.ts:1-140](file://client/src/services/sessionService.ts#L1-L140)
+- [global.css:220-263](file://client/src/styles/global.css#L220-L263)
 
 ## 详细组件分析
 
@@ -210,16 +221,20 @@ App 是整个应用的根容器，承担以下职责：
 - 视图尺寸：支持小/中/大三种视图模式，使用 localStorage 持久化。
 - 子组件编排：根据当前活动标签动态渲染 PhotoWall 或 FaceSwapPhotoWall，以及对应的工作流侧边栏与设置面板。
 - 全局对话框：重复文件名导入确认、全局 Toast 通知、遮罩层弹窗（设置、提示词助理、蒙版编辑器）。
+- **新增右侧侧边栏可调整大小功能**：通过拖拽分割线实现侧边栏宽度动态调整，支持最小260px、最大500px范围。
 
 ```mermaid
 sequenceDiagram
 participant U as "用户"
 participant APP as "App"
+participant RESIZE as "Resize Handler"
 participant DZ as "DropZone"
 participant WFS as "useWorkflowStore"
-U->>APP : 拖拽文件到主区域
-APP->>APP : 校验拖拽类型与活动标签
-APP->>APP : 读取 FileSystemEntry 列表
+U->>APP : 拖拽右侧分割线
+APP->>RESIZE : handleResizeMouseDown
+RESIZE->>RESIZE : 监听鼠标移动事件
+RESIZE->>APP : 更新 sidebarWidth 状态
+APP->>APP : 保存到 localStorage
 APP->>DZ : 调用 importFiles(files)
 DZ->>WFS : 添加图片到当前标签
 WFS-->>APP : 更新 tabData.images
@@ -227,7 +242,7 @@ APP-->>U : 刷新 PhotoWall 显示
 ```
 
 **图表来源**
-- [App.tsx:84-134](file://client/src/components/App.tsx#L84-L134)
+- [App.tsx:77-112](file://client/src/components/App.tsx#L77-L112)
 - [DropZone.tsx:42-73](file://client/src/components/DropZone.tsx#L42-L73)
 - [useWorkflowStore.ts:197-252](file://client/src/hooks/useWorkflowStore.ts#L197-L252)
 
@@ -268,6 +283,7 @@ PhotoWall 的核心特性：
 - 多选模式：全选/反选、批量替换提示词、批量删除蒙版、批量执行。
 - 删除拖拽区：拖动卡片或输出到底部删除区域，支持批量删除。
 - 任务执行：针对选中图片发起工作流请求，注册 WebSocket 进度。
+- **新增CSS Grid布局系统**：使用 `display: grid` 和 `grid-template-columns` 实现响应式卡片网格，支持自动填充和最小宽度约束。
 
 ```mermaid
 classDiagram
@@ -437,6 +453,7 @@ Text2ImgSidebar 是文生图工作流的增强侧边栏，具有以下特性：
 - 提示词助手：集成提示词助理功能，支持自然语言与标签之间的相互转换。
 - 采样设置：支持步数、CFG、采样器、调度器等高级参数调节。
 - 批量生成：支持批量生成多张图片，支持自定义命名。
+- **新增自定义切换开关**：使用纯 CSS 实现的圆形切换开关，支持平滑过渡动画和视觉反馈。
 
 ```mermaid
 flowchart TD
@@ -465,6 +482,7 @@ ZITSidebar 是 ZIT 工作流的增强侧边栏，具有以下特性：
 - 提示词助手：集成提示词助理功能，支持自然语言与标签之间的相互转换。
 - 采样设置：支持步数、CFG、采样器、调度器等高级参数调节。
 - 批量生成：支持批量生成多张图片，支持自定义命名。
+- **新增自定义切换开关**：使用纯 CSS 实现的圆形切换开关，支持启用/禁用采样算法偏移功能。
 
 **章节来源**
 - [ZITSidebar.tsx:57-716](file://client/src/components/ZITSidebar.tsx#L57-L716)
@@ -474,6 +492,7 @@ ZITSidebar 是 ZIT 工作流的增强侧边栏，具有以下特性：
 - 状态依赖：useWorkflowStore 管理全局工作流状态；useDragStore 管理拖拽上下文；useMaskStore 管理蒙版数据；useModelMetadata 管理模型元数据。
 - 类型约束：sessionService.ts 定义了 LoraSlot、Text2ImgConfig、ZitConfig 等核心类型，支持多槽位 LoRA 的配置管理。
 - 外部依赖：lucide-react 提供图标；zustand 提供轻量状态管理；React 19 提供并发与性能优化。
+- **新增样式依赖**：global.css 提供全局样式，包括改进的滑块控件样式和动画效果。
 
 ```mermaid
 graph LR
@@ -502,6 +521,8 @@ DRAG --> TYPES
 MASK --> TYPES
 CONFIG["maskConfig.ts"] --> IC
 CONFIG --> ME
+GC["global.css"] --> T2IS
+GC --> ZITS
 ```
 
 **图表来源**
@@ -512,6 +533,7 @@ CONFIG --> ME
 - [sessionService.ts:1-140](file://client/src/services/sessionService.ts#L1-L140)
 - [index.ts:1-58](file://client/src/types/index.ts#L1-L58)
 - [maskConfig.ts:1-20](file://client/src/config/maskConfig.ts#L1-L20)
+- [global.css:220-263](file://client/src/styles/global.css#L220-L263)
 
 **章节来源**
 - [index.ts:1-58](file://client/src/types/index.ts#L1-L58)
@@ -526,6 +548,9 @@ CONFIG --> ME
 - WebSocket：统一注册任务，按 promptId 分发进度，避免全局广播带来的性能损耗。
 - 模型元数据缓存：useModelMetadata 使用本地缓存机制，避免重复的 API 调用。
 - 多槽位 LoRA 优化：Text2ImgSidebar 和 ZITSidebar 通过 localStorage 持久化配置，避免页面切换时的配置丢失。
+- **新增滑块控件优化**：通过全局 CSS 样式统一管理 range 输入控件的外观，减少组件内部样式计算。
+- **新增CSS Grid布局**：PhotoWall 使用 CSS Grid 实现响应式布局，相比 JavaScript 计算更高效。
+- **新增侧边栏调整优化**：右侧侧边栏宽度调整使用 requestAnimationFrame 和防抖技术，确保流畅的用户体验。
 
 ## 故障排除指南
 - 拖拽无效：检查 App 主区域的 dragover/leave 事件处理与标签页类型限制。
@@ -536,6 +561,9 @@ CONFIG --> ME
 - 模型选择器无响应：检查 useModelMetadata 的 API 调用状态与网络连接。
 - 触发词复制失败：确认浏览器支持 Clipboard API 且用户已授权剪贴板访问权限。
 - 多槽位 LoRA 配置丢失：检查 localStorage 是否正常工作，确认配置序列化/反序列化逻辑。
+- **右侧侧边栏调整失效**：检查 handleResizeMouseDown 事件绑定和鼠标事件监听器是否正确移除。
+- **卡片布局错乱**：检查 CSS Grid 属性和 minmax() 函数的参数设置。
+- **滑块控件样式异常**：确认 global.css 中的 range 输入控件样式规则是否正确加载。
 
 **章节来源**
 - [App.tsx:84-134](file://client/src/components/App.tsx#L84-L134)
@@ -546,7 +574,7 @@ CONFIG --> ME
 ## 结论
 该 React 组件体系通过清晰的容器-展示分离、集中式状态管理与完善的拖拽/蒙版/进度反馈机制，实现了复杂图像处理工作流的高效交互。App 主组件作为中枢，协调 Sidebar、PhotoWall、DropZone、ImageCard、FaceSwapPhotoWall 等组件，形成高内聚、低耦合的架构。
 
-**更新** 本次更新显著增强了模型管理功能，ModelSelect 组件提供了完整的模型元数据管理能力，包括触发词编辑、收藏管理、缩略图上传等功能。Text2ImgSidebar 和 ZITSidebar 集成了多槽位 LoRA 支持和触发词复制功能，大大提升了用户的模型使用体验。
+**更新** 本次更新显著增强了UI交互体验，新增了右侧侧边栏可调整大小功能、CSS Grid响应式卡片布局、改进的滑块控件样式和自定义切换开关等现代化UI增强功能。这些改进不仅提升了用户体验，还通过更好的性能优化和更直观的操作界面，使用户能够更高效地完成图像处理任务。
 
 建议在后续迭代中进一步完善类型安全、错误边界与性能监控，以提升可维护性与用户体验。
 
@@ -556,13 +584,18 @@ CONFIG --> ME
   - 使用 memo 与 useShallow 减少重渲染，保持稳定引用以避免副作用。
   - 将跨组件共享的状态收敛到 Zustand stores，避免 props 钻取。
   - 利用 useModelMetadata hook 管理模型元数据，提供统一的数据访问接口。
+  - **新增样式复用**：通过全局 CSS 变量和样式类提供一致的UI设计规范。
 - 组件组合模式
-  - PhotoWall 通过 LazyCard 与 ImageCard 组合实现高性能图片墙。
+  - PhotoWall 通过 LazyCard 与 ImageCard 组合实现高性能图片墙，**采用CSS Grid实现响应式布局**。
   - ImageCard 内嵌 ThumbnailStrip 与 MaskEditor，形成"卡片内生态"。
-  - Text2ImgSidebar 和 ZITSidebar 通过 ModelSelect 组合实现增强的模型管理功能。
+  - Text2ImgSidebar 和 ZITSidebar 通过 ModelSelect 组合实现增强的模型管理功能，**集成自定义切换开关**。
+  - App 主组件通过条件渲染和动态宽度调整实现灵活的布局系统。
 - 渲染优化技巧
   - 使用 IntersectionObserver 与占位符高度补偿，减少滚动抖动。
   - 合理拆分状态订阅，避免不必要的组件重渲染。
   - 在导出/蒙版处理等重计算场景使用离屏画布与异步处理。
   - 利用 localStorage 进行配置持久化，提升用户体验。
   - 通过 useModelMetadata 的本地缓存机制减少 API 调用频率。
+  - **新增滑块控件优化**：通过全局样式统一管理，减少组件内部样式计算开销。
+  - **新增CSS Grid布局**：使用浏览器原生布局引擎，相比 JavaScript 实现更高效。
+  - **新增侧边栏调整优化**：使用防抖和节流技术，确保拖拽过程的流畅性。

@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useWorkflowStore, type ZitConfig } from '../hooks/useWorkflowStore.js';
 import { type LoraSlot } from '../services/sessionService.js';
 import { usePromptAssistantStore } from '../hooks/usePromptAssistantStore.js';
 import { useWebSocket } from '../hooks/useWebSocket.js';
-import { ChevronRight, ChevronDown, Loader, BookText, Hash, AlignLeft, Wand2, Loader2, Copy, Check as CheckIcon } from 'lucide-react';
+import { ChevronRight, ChevronDown, Loader, BookText, Hash, AlignLeft, Wand2, Loader2, AlertTriangle } from 'lucide-react';
+import PromptContextMenu from './PromptContextMenu';
 import { SYSTEM_PROMPTS } from './prompt-assistant/systemPrompts.js';
 import { ModelSelect, useModelFavorites } from './ModelSelect.js';
 import { useModelMetadata } from '../hooks/useModelMetadata.js';
@@ -82,8 +83,7 @@ export function ZITSidebar({ width }: { width?: number }) {
   // Model favorites
   const { favorites: unetFavorites, toggleFavorite: toggleUnetFavorite } = useModelFavorites('unets');
   const { favorites: loraFavorites, toggleFavorite: toggleLoraFavorite } = useModelFavorites('loras');
-  const { metadata, uploadThumbnail, setNickname, setTriggerWords, getThumbnailUrl, getTriggerWords, setCategory, deleteCategory } = useModelMetadata();
-  const [copiedLoraIndex, setCopiedLoraIndex] = useState<number | null>(null);
+  const { metadata, uploadThumbnail, setNickname, setTriggerWords, getThumbnailUrl, getTriggerWords, getNickname, setCategory, deleteCategory } = useModelMetadata();
 
   useEffect(() => {
     setLoraListLoading(true);
@@ -115,6 +115,9 @@ export function ZITSidebar({ width }: { width?: number }) {
   const [promptFocused, setPromptFocused] = useState(false);
   const [promptBtnHovered, setPromptBtnHovered] = useState(false);
   const [quickActionLoading, setQuickActionLoading] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const cursorPosRef = useRef<number>(0);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Persist to localStorage
   useEffect(() => {
@@ -355,6 +358,20 @@ export function ZITSidebar({ width }: { width?: number }) {
               >
                 启用 LoRA {i + 1}
               </span>
+              {lora.enabled && lora.model && (() => {
+                const tw = getTriggerWords(lora.model);
+                if (!tw) return null;
+                const words = tw.split(',').map(s => s.trim()).filter(Boolean);
+                if (words.length === 0) return null;
+                const promptLower = prompt.toLowerCase();
+                const anyUsed = words.some(w => promptLower.includes(w.toLowerCase()));
+                if (anyUsed) return null;
+                return (
+                  <span title="未使用触发词，请在提示词区域右键加入" style={{ display: 'inline-flex', marginLeft: 4 }}>
+                    <AlertTriangle size={12} color="#e6a817" />
+                  </span>
+                );
+              })()}
             </div>
 
             {lora.enabled && (
@@ -375,45 +392,6 @@ export function ZITSidebar({ width }: { width?: number }) {
                   onDeleteCategory={deleteCategory}
                   getThumbnailUrl={getThumbnailUrl}
                 />
-                {/* Trigger words display */}
-                {lora.model && getTriggerWords(lora.model) && (
-                  <div
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const tw = getTriggerWords(lora.model);
-                      if (tw) {
-                        navigator.clipboard.writeText(tw).then(() => {
-                          setCopiedLoraIndex(i);
-                          setTimeout(() => setCopiedLoraIndex(null), 2000);
-                        });
-                      }
-                    }}
-                    title="点击复制触发词"
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      marginTop: 4,
-                      padding: '3px 6px',
-                      borderRadius: 4,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <span style={{
-                      flex: 1,
-                      fontSize: '11px',
-                      color: 'var(--color-text-secondary)',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}>
-                      {getTriggerWords(lora.model)}
-                    </span>
-                    {copiedLoraIndex === i
-                      ? <CheckIcon size={11} color="var(--color-primary)" style={{ flexShrink: 0 }} />
-                      : <Copy size={11} color="var(--color-text-secondary)" style={{ flexShrink: 0, opacity: 0.6 }} />}
-                  </div>
-                )}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12 }}>
                   <span style={{ fontSize: 11, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>权重</span>
                   <input
@@ -443,11 +421,17 @@ export function ZITSidebar({ width }: { width?: number }) {
             className={quickActionLoading ? 'textarea-ai-active' : undefined}
           >
             <textarea
+              ref={textareaRef}
               placeholder="输入提示词（可选）"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               onFocus={() => setPromptFocused(true)}
               onBlur={() => setPromptFocused(false)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                cursorPosRef.current = e.currentTarget.selectionStart;
+                setContextMenu({ x: e.clientX, y: e.clientY });
+              }}
               readOnly={quickActionLoading !== null}
               rows={4}
               style={{
@@ -759,6 +743,35 @@ export function ZITSidebar({ width }: { width?: number }) {
           />
         </div>
       </div>
+
+      {contextMenu && (
+        <PromptContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          loras={loras}
+          getNickname={(model) => getNickname(model)}
+          getTriggerWords={(model) => getTriggerWords(model)}
+          onInsert={(text) => {
+            const pos = cursorPosRef.current;
+            const before = prompt.slice(0, pos);
+            const after = prompt.slice(pos);
+            const needComma = before.length > 0 && !before.trimEnd().endsWith(',') && before.trim().length > 0;
+            const inserted = (needComma ? ', ' : '') + text;
+            const newPrompt = before + inserted + after;
+            setPrompt(newPrompt);
+            const newPos = pos + inserted.length;
+            cursorPosRef.current = newPos;
+            setTimeout(() => {
+              if (textareaRef.current) {
+                textareaRef.current.focus();
+                textareaRef.current.selectionStart = newPos;
+                textareaRef.current.selectionEnd = newPos;
+              }
+            }, 0);
+          }}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </div>
   );
 }
