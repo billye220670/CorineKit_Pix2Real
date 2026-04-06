@@ -382,8 +382,8 @@ export function ModelSelect({
             onToggleFavorite(model);
           }}
           style={{ cursor: 'pointer', flexShrink: 0 }}
-          fill={isFavorite ? 'var(--color-primary)' : 'none'}
-          color={isFavorite ? 'var(--color-primary)' : 'var(--color-text-secondary)'}
+          fill={isFavorite ? '#f59e0b' : 'none'}
+          color={isFavorite ? '#f59e0b' : 'var(--color-text-secondary)'}
         />
 
         {/* Display name / edit inputs */}

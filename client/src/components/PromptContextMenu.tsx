@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, Star } from 'lucide-react';
 import { LoraSlot } from '../services/sessionService';
+import { showToast } from '../hooks/useToast';
 import tagDataDefault from '../data/tagData.json';
 
 interface PromptContextMenuProps {
@@ -112,7 +113,8 @@ interface SubMenuProps {
 }
 
 type SubMenuItem =
-  | { type: 'action'; label: string; onClick: () => void }
+  | { type: 'action'; label: string; onClick: () => void; disabled?: boolean }
+  | { type: 'tag-action'; label: string; value: string; onClick: () => void; isFavorite: boolean; onToggleFavorite: () => void }
   | { type: 'separator' }
   | { type: 'submenu'; label: string; children: SubMenuItem[] };
 
@@ -171,7 +173,21 @@ function SubMenu({ items, parentRect }: SubMenuProps) {
             </div>
           );
         }
+        if (item.type === 'tag-action') {
+          return (
+            <TagMenuItem
+              key={i}
+              label={item.label}
+              isFavorite={item.isFavorite}
+              onToggleFavorite={item.onToggleFavorite}
+              onClick={item.onClick}
+            />
+          );
+        }
         // action
+        if (item.disabled) {
+          return <div key={i} style={disabledStyle}>{item.label}</div>;
+        }
         return (
           <MenuItem key={i} label={item.label} onClick={item.onClick} />
         );
@@ -191,6 +207,40 @@ function MenuItem({ label, onClick }: { label: string; onClick: () => void }) {
       onMouseLeave={() => setHover(false)}
       onClick={onClick}
     >
+      {label}
+    </div>
+  );
+}
+
+// ── TagMenuItem (with star) ──
+
+function TagMenuItem({ label, isFavorite, onToggleFavorite, onClick }: {
+  label: string;
+  isFavorite: boolean;
+  onToggleFavorite: () => void;
+  onClick: () => void;
+}) {
+  const [hover, setHover] = useState(false);
+  return (
+    <div
+      style={{
+        ...itemBase,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        background: hover ? 'rgba(128, 128, 128, 0.08)' : undefined,
+      }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      onClick={onClick}
+    >
+      <Star
+        size={12}
+        onClick={(e) => { e.stopPropagation(); onToggleFavorite(); }}
+        style={{ cursor: 'pointer', flexShrink: 0 }}
+        fill={isFavorite ? '#f59e0b' : 'none'}
+        color={isFavorite ? '#f59e0b' : 'var(--color-text-secondary)'}
+      />
       {label}
     </div>
   );
@@ -236,6 +286,56 @@ function PromptContextMenu({ x, y, loras, getNickname, getTriggerWords, onInsert
     onClose();
   }, [onInsert, onClose]);
 
+  // ── recent & favorites state ──
+  const [recentTags, setRecentTags] = useState<Array<{label: string; value: string}>>(() => {
+    try {
+      const raw = localStorage.getItem('promptMenu_recentTags');
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  });
+
+  const [favoriteTags, setFavoriteTags] = useState<Array<{label: string; value: string}>>(() => {
+    try {
+      const raw = localStorage.getItem('promptMenu_favoriteTags');
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  });
+
+  const addRecentTag = useCallback((tag: {label: string; value: string}) => {
+    setRecentTags(prev => {
+      const filtered = prev.filter(t => t.value !== tag.value);
+      const next = [...filtered, tag].slice(-14);
+      localStorage.setItem('promptMenu_recentTags', JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  const clearRecent = useCallback(() => {
+    localStorage.removeItem('promptMenu_recentTags');
+    setRecentTags([]);
+    onClose();
+    showToast('已清除最近使用记录');
+  }, [onClose]);
+
+  const toggleFavorite = useCallback((tag: {label: string; value: string}) => {
+    setFavoriteTags(prev => {
+      const exists = prev.some(t => t.value === tag.value);
+      const next = exists ? prev.filter(t => t.value !== tag.value) : [...prev, tag];
+      localStorage.setItem('promptMenu_favoriteTags', JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  const isFavorite = useCallback((value: string) => {
+    return favoriteTags.some(t => t.value === value);
+  }, [favoriteTags]);
+
+  const handleTagInsert = useCallback((tag: {label: string; value: string}) => {
+    addRecentTag(tag);
+    onInsert(tag.value);
+    onClose();
+  }, [addRecentTag, onInsert, onClose]);
+
   // ── build lora items ──
   const enabledLoras = useMemo(
     () => loras.filter(l => l.enabled && l.model),
@@ -271,9 +371,12 @@ function PromptContextMenu({ x, y, loras, getNickname, getTriggerWords, onInsert
         type: 'submenu',
         label: sub.label,
         children: sub.tags.map(tag => ({
-          type: 'action' as const,
+          type: 'tag-action' as const,
           label: tag.label,
-          onClick: () => handleInsert(tag.value),
+          value: tag.value,
+          onClick: () => handleTagInsert(tag),
+          isFavorite: isFavorite(tag.value),
+          onToggleFavorite: () => toggleFavorite(tag),
         })),
       };
     }
@@ -285,6 +388,8 @@ function PromptContextMenu({ x, y, loras, getNickname, getTriggerWords, onInsert
     | { kind: 'disabled'; label: string }
     | { kind: 'lora'; label: string; words: string[] }
     | { kind: 'separator' }
+    | { kind: 'recent'; label: string }
+    | { kind: 'favorites'; label: string }
     | { kind: 'category'; label: string; children: SubMenuItem[] };
 
   const entries = useMemo<MenuEntry[]>(() => {
@@ -298,14 +403,22 @@ function PromptContextMenu({ x, y, loras, getNickname, getTriggerWords, onInsert
           result.push({ kind: 'lora', label: item.label, words: item.words });
         }
       }
-      result.push({ kind: 'separator' });
     }
 
-    if (showLoraSection) {
-      // separator already added
-    } else {
-      // no separator needed per spec
-    }
+    // 分割线
+    result.push({ kind: 'separator' });
+
+    // 最近使用
+    result.push({ kind: 'recent', label: '最近使用' });
+
+    // 分割线
+    result.push({ kind: 'separator' });
+
+    // 收藏
+    result.push({ kind: 'favorites', label: '收藏' });
+
+    // 分割线
+    result.push({ kind: 'separator' });
 
     for (const cat of tagData.categories) {
       result.push({
@@ -317,7 +430,7 @@ function PromptContextMenu({ x, y, loras, getNickname, getTriggerWords, onInsert
 
     return result;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showLoraSection, loraMenuItems, tagData, handleInsert]);
+  }, [showLoraSection, loraMenuItems, tagData, handleTagInsert, isFavorite, toggleFavorite, recentTags, favoriteTags]);
 
   return (
     <div
@@ -354,6 +467,80 @@ function PromptContextMenu({ x, y, loras, getNickname, getTriggerWords, onInsert
               onClick: () => handleInsert(w),
             })),
           ];
+          return (
+            <div
+              key={key}
+              ref={(el) => { if (el) itemRefs.current.set(key, el); }}
+              style={{ ...itemBase, padding: '6px 12px 6px 20px', background: isOpen ? 'rgba(128, 128, 128, 0.08)' : undefined }}
+              onMouseEnter={() => setOpenIdx(i)}
+              onMouseLeave={() => setOpenIdx(null)}
+            >
+              {entry.label}
+              <span style={arrowStyle}><ChevronLeft size={12} /></span>
+              {isOpen && itemRefs.current.get(key) && (
+                <SubMenu
+                  items={children}
+                  parentRect={itemRefs.current.get(key)!.getBoundingClientRect()}
+                />
+              )}
+            </div>
+          );
+        }
+
+        // recent
+        if (entry.kind === 'recent') {
+          const isOpen = openIdx === i;
+          const children: SubMenuItem[] = recentTags.length > 0
+            ? [
+                ...recentTags.map(tag => ({
+                  type: 'tag-action' as const,
+                  label: tag.label,
+                  value: tag.value,
+                  onClick: () => handleTagInsert(tag),
+                  isFavorite: isFavorite(tag.value),
+                  onToggleFavorite: () => toggleFavorite(tag),
+                })),
+                { type: 'separator' as const },
+                { type: 'action' as const, label: '清除记录', onClick: clearRecent },
+              ]
+            : [
+                { type: 'action' as const, label: '暂无记录', onClick: () => {}, disabled: true },
+              ];
+          return (
+            <div
+              key={key}
+              ref={(el) => { if (el) itemRefs.current.set(key, el); }}
+              style={{ ...itemBase, padding: '6px 12px 6px 20px', background: isOpen ? 'rgba(128, 128, 128, 0.08)' : undefined }}
+              onMouseEnter={() => setOpenIdx(i)}
+              onMouseLeave={() => setOpenIdx(null)}
+            >
+              {entry.label}
+              <span style={arrowStyle}><ChevronLeft size={12} /></span>
+              {isOpen && itemRefs.current.get(key) && (
+                <SubMenu
+                  items={children}
+                  parentRect={itemRefs.current.get(key)!.getBoundingClientRect()}
+                />
+              )}
+            </div>
+          );
+        }
+
+        // favorites
+        if (entry.kind === 'favorites') {
+          const isOpen = openIdx === i;
+          const children: SubMenuItem[] = favoriteTags.length > 0
+            ? favoriteTags.map(tag => ({
+                type: 'tag-action' as const,
+                label: tag.label,
+                value: tag.value,
+                onClick: () => handleTagInsert(tag),
+                isFavorite: true,
+                onToggleFavorite: () => toggleFavorite(tag),
+              }))
+            : [
+                { type: 'action' as const, label: '暂无收藏', onClick: () => {}, disabled: true },
+              ];
           return (
             <div
               key={key}
