@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { ChevronLeft } from 'lucide-react';
 import { LoraSlot } from '../services/sessionService';
 import tagDataDefault from '../data/tagData.json';
 
@@ -49,7 +50,7 @@ const menuStyle: React.CSSProperties = {
   position: 'fixed',
   background: 'var(--color-bg)',
   border: '1px solid var(--color-border)',
-  borderRadius: 8,
+  borderRadius: 4,
   boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
   zIndex: 10000,
   padding: '4px 0',
@@ -59,7 +60,7 @@ const menuStyle: React.CSSProperties = {
 };
 
 const itemBase: React.CSSProperties = {
-  padding: '6px 28px 6px 12px',
+  padding: '6px 12px 6px 12px',
   fontSize: 12,
   color: 'var(--color-text)',
   cursor: 'pointer',
@@ -83,10 +84,11 @@ const separatorStyle: React.CSSProperties = {
 
 const arrowStyle: React.CSSProperties = {
   position: 'absolute',
-  right: 8,
+  left: 6,
   top: '50%',
   transform: 'translateY(-50%)',
-  fontSize: 10,
+  display: 'flex',
+  alignItems: 'center',
   pointerEvents: 'none',
 };
 
@@ -112,11 +114,10 @@ function SubMenu({ items, parentRect }: SubMenuProps) {
     const el = ref.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    const gap = 3;
-    let left = parentRect.right + gap;
+    let left = parentRect.left - rect.width;
     let top = parentRect.top;
-    if (left + rect.width > window.innerWidth) {
-      left = parentRect.left - rect.width - gap;
+    if (left < 0) {
+      left = parentRect.right;
     }
     if (top + rect.height > window.innerHeight) {
       top = Math.max(0, window.innerHeight - rect.height);
@@ -143,12 +144,12 @@ function SubMenu({ items, parentRect }: SubMenuProps) {
             <div
               key={i}
               ref={(el) => { if (el) itemRefs.current.set(i, el); }}
-              style={{ ...itemBase, background: isOpen ? 'rgba(128, 128, 128, 0.08)' : undefined }}
+              style={{ ...itemBase, padding: '6px 12px 6px 20px', background: isOpen ? 'rgba(128, 128, 128, 0.08)' : undefined }}
               onMouseEnter={() => setOpenIdx(i)}
               onMouseLeave={() => setOpenIdx(null)}
             >
               {item.label}
-              <span style={arrowStyle}>▸</span>
+              <span style={arrowStyle}><ChevronLeft size={12} /></span>
               {isOpen && itemRefs.current.get(i) && (
                 <SubMenu
                   items={item.children}
@@ -345,12 +346,12 @@ function PromptContextMenu({ x, y, loras, getNickname, getTriggerWords, onInsert
             <div
               key={key}
               ref={(el) => { if (el) itemRefs.current.set(key, el); }}
-              style={{ ...itemBase, background: isOpen ? 'rgba(128, 128, 128, 0.08)' : undefined }}
+              style={{ ...itemBase, padding: '6px 12px 6px 20px', background: isOpen ? 'rgba(128, 128, 128, 0.08)' : undefined }}
               onMouseEnter={() => setOpenIdx(i)}
               onMouseLeave={() => setOpenIdx(null)}
             >
               {entry.label}
-              <span style={arrowStyle}>▸</span>
+              <span style={arrowStyle}><ChevronLeft size={12} /></span>
               {isOpen && itemRefs.current.get(key) && (
                 <SubMenu
                   items={children}
@@ -368,12 +369,12 @@ function PromptContextMenu({ x, y, loras, getNickname, getTriggerWords, onInsert
             <div
               key={key}
               ref={(el) => { if (el) itemRefs.current.set(key, el); }}
-              style={{ ...itemBase, background: isOpen ? 'rgba(128, 128, 128, 0.08)' : undefined }}
+              style={{ ...itemBase, padding: '6px 12px 6px 20px', background: isOpen ? 'rgba(128, 128, 128, 0.08)' : undefined }}
               onMouseEnter={() => setOpenIdx(i)}
               onMouseLeave={() => setOpenIdx(null)}
             >
               {entry.label}
-              <span style={arrowStyle}>▸</span>
+              <span style={arrowStyle}><ChevronLeft size={12} /></span>
               {isOpen && itemRefs.current.get(key) && (
                 <SubMenu
                   items={entry.children}
