@@ -19,6 +19,7 @@ const STARTUP_BEHAVIOR_OPTIONS: { value: StartupBehavior; label: string }[] = [
 const CATEGORIES = [
   { id: 'workflow', label: '工作流' },
   { id: 'session', label: '会话' },
+  { id: 'prompt', label: '提示词管理' },
 ];
 
 export function SettingsModal() {
@@ -227,6 +228,126 @@ export function SettingsModal() {
                   value={startupBehavior}
                   onChange={(v) => setStartupBehavior(v as StartupBehavior)}
                 />
+              </div>
+            </div>
+
+            <div style={{ height: 40 }} />
+
+            {/* ── Section: 提示词管理 ── */}
+            <div
+              ref={(el) => { sectionRefs.current['prompt'] = el; }}
+              data-section="prompt"
+            >
+              <div style={{
+                fontSize: 11, fontWeight: 600, color: 'var(--color-text-secondary)',
+                textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 16,
+              }}>
+                提示词管理
+              </div>
+
+              {/* Row: 提示词数据库 */}
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '14px 0', borderBottom: '1px solid var(--color-border)',
+              }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--color-text)', marginBottom: 3 }}>
+                    提示词数据库
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                    管理标签合成器使用的标签分类数据
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {/* 导出按钮 */}
+                  <button
+                    onClick={() => {
+                      let data: string;
+                      const stored = localStorage.getItem('tagData');
+                      if (stored) {
+                        data = stored;
+                      } else {
+                        import('../data/tagData.json').then((mod) => {
+                          const blob = new Blob([JSON.stringify(mod.default, null, 2)], { type: 'application/json' });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = 'tagData.json';
+                          a.click();
+                          URL.revokeObjectURL(url);
+                        });
+                        return;
+                      }
+                      const blob = new Blob([JSON.stringify(JSON.parse(data), null, 2)], { type: 'application/json' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = 'tagData.json';
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    }}
+                    style={{
+                      padding: '6px 16px',
+                      fontSize: 12,
+                      fontWeight: 500,
+                      border: '1px solid var(--color-border)',
+                      borderRadius: 6,
+                      background: 'var(--color-bg)',
+                      color: 'var(--color-text)',
+                      cursor: 'pointer',
+                      transition: 'background 0.15s',
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = 'var(--color-surface-hover)'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = 'var(--color-bg)'}
+                  >
+                    导出
+                  </button>
+
+                  {/* 导入按钮 */}
+                  <button
+                    onClick={() => {
+                      const input = document.createElement('input');
+                      input.type = 'file';
+                      input.accept = '.json';
+                      input.onchange = (e) => {
+                        const file = (e.target as HTMLInputElement).files?.[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = (ev) => {
+                          try {
+                            const text = ev.target?.result as string;
+                            const parsed = JSON.parse(text);
+                            if (!parsed.categories || !Array.isArray(parsed.categories)) {
+                              alert('无效的标签数据格式：缺少 categories 数组');
+                              return;
+                            }
+                            localStorage.setItem('tagData', JSON.stringify(parsed));
+                            alert('标签数据导入成功！');
+                          } catch (err) {
+                            alert('导入失败：JSON 格式无效');
+                          }
+                        };
+                        reader.readAsText(file);
+                      };
+                      input.click();
+                    }}
+                    style={{
+                      padding: '6px 16px',
+                      fontSize: 12,
+                      fontWeight: 500,
+                      border: '1px solid var(--color-border)',
+                      borderRadius: 6,
+                      background: 'var(--color-bg)',
+                      color: 'var(--color-text)',
+                      cursor: 'pointer',
+                      transition: 'background 0.15s',
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = 'var(--color-surface-hover)'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = 'var(--color-bg)'}
+                  >
+                    导入
+                  </button>
+                </div>
               </div>
             </div>
 
