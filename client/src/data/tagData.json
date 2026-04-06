@@ -8,7 +8,16 @@
           "id": "sub_role",
           "label": "角色",
           "multiSelect": true,
-          "tags": ["teacher", "student", "actress", "warrior", "maid", "princess", "knight", "sage"]
+          "tags": [
+            {"label": "老师", "value": "teacher"},
+            {"label": "学生", "value": "student"},
+            {"label": "女演员", "value": "actress"},
+            {"label": "战士", "value": "warrior"},
+            {"label": "女仆", "value": "maid"},
+            {"label": "公主", "value": "princess"},
+            {"label": "骑士", "value": "knight"},
+            {"label": "贤者", "value": "sage"}
+          ]
         },
         {
           "id": "sub_clothing",
@@ -18,19 +27,41 @@
               "id": "sub_top",
               "label": "上装",
               "multiSelect": false,
-              "tags": ["t-shirt", "dress shirt", "hoodie", "qipao", "jacket", "blazer", "sweater"]
+              "tags": [
+                {"label": "T恤", "value": "t-shirt"},
+                {"label": "衬衫", "value": "dress shirt"},
+                {"label": "连帽衫", "value": "hoodie"},
+                {"label": "旗袍", "value": "qipao"},
+                {"label": "夹克", "value": "jacket"},
+                {"label": "西装外套", "value": "blazer"},
+                {"label": "毛衣", "value": "sweater"}
+              ]
             },
             {
               "id": "sub_bottom",
               "label": "下装",
               "multiSelect": false,
-              "tags": ["jeans", "shorts", "skirt", "pleated skirt", "pants", "leggings"]
+              "tags": [
+                {"label": "牛仔裤", "value": "jeans"},
+                {"label": "短裤", "value": "shorts"},
+                {"label": "半身裙", "value": "skirt"},
+                {"label": "百褶裙", "value": "pleated skirt"},
+                {"label": "长裤", "value": "pants"},
+                {"label": "打底裤", "value": "leggings"}
+              ]
             },
             {
               "id": "sub_hat",
               "label": "帽子",
               "multiSelect": false,
-              "tags": ["baseball cap", "beret", "sun hat", "cat ears", "crown", "turban"]
+              "tags": [
+                {"label": "棒球帽", "value": "baseball cap"},
+                {"label": "贝雷帽", "value": "beret"},
+                {"label": "遮阳帽", "value": "sun hat"},
+                {"label": "猫耳", "value": "cat ears"},
+                {"label": "皇冠", "value": "crown"},
+                {"label": "头巾", "value": "turban"}
+              ]
             }
           ]
         },
@@ -38,7 +69,15 @@
           "id": "sub_action",
           "label": "动作",
           "multiSelect": true,
-          "tags": ["standing", "sitting", "running", "looking at viewer", "arms raised", "walking", "dancing"]
+          "tags": [
+            {"label": "站立", "value": "standing"},
+            {"label": "坐着", "value": "sitting"},
+            {"label": "奔跑", "value": "running"},
+            {"label": "看向镜头", "value": "looking at viewer"},
+            {"label": "举手", "value": "arms raised"},
+            {"label": "行走", "value": "walking"},
+            {"label": "跳舞", "value": "dancing"}
+          ]
         }
       ]
     },
@@ -50,13 +89,30 @@
           "id": "sub_bg",
           "label": "背景",
           "multiSelect": false,
-          "tags": ["outdoors", "indoors", "forest", "cityscape", "beach", "classroom", "kitchen", "bedroom"]
+          "tags": [
+            {"label": "户外", "value": "outdoors"},
+            {"label": "室内", "value": "indoors"},
+            {"label": "森林", "value": "forest"},
+            {"label": "城市街景", "value": "cityscape"},
+            {"label": "海滩", "value": "beach"},
+            {"label": "教室", "value": "classroom"},
+            {"label": "厨房", "value": "kitchen"},
+            {"label": "卧室", "value": "bedroom"}
+          ]
         },
         {
           "id": "sub_light",
           "label": "光线",
           "multiSelect": true,
-          "tags": ["sunlight", "neon lights", "moonlight", "soft lighting", "backlight", "rim light", "harsh shadows"]
+          "tags": [
+            {"label": "阳光", "value": "sunlight"},
+            {"label": "霓虹灯", "value": "neon lights"},
+            {"label": "月光", "value": "moonlight"},
+            {"label": "柔光", "value": "soft lighting"},
+            {"label": "逆光", "value": "backlight"},
+            {"label": "轮廓光", "value": "rim light"},
+            {"label": "硬阴影", "value": "harsh shadows"}
+          ]
         }
       ]
     },
@@ -68,13 +124,28 @@
           "id": "sub_art",
           "label": "画风",
           "multiSelect": false,
-          "tags": ["anime", "realistic", "watercolor", "oil painting", "sketch", "digital art", "3d render"]
+          "tags": [
+            {"label": "动漫", "value": "anime"},
+            {"label": "写实", "value": "realistic"},
+            {"label": "水彩", "value": "watercolor"},
+            {"label": "油画", "value": "oil painting"},
+            {"label": "素描", "value": "sketch"},
+            {"label": "数字艺术", "value": "digital art"},
+            {"label": "3D渲染", "value": "3d render"}
+          ]
         },
         {
           "id": "sub_quality",
           "label": "质量",
           "multiSelect": true,
-          "tags": ["detailed", "high resolution", "sharp focus", "cinematic", "professional", "polished"]
+          "tags": [
+            {"label": "精细", "value": "detailed"},
+            {"label": "高分辨率", "value": "high resolution"},
+            {"label": "锐利对焦", "value": "sharp focus"},
+            {"label": "电影感", "value": "cinematic"},
+            {"label": "专业", "value": "professional"},
+            {"label": "精致", "value": "polished"}
+          ]
         }
       ]
     },
@@ -86,7 +157,15 @@
           "id": "sub_framing",
           "label": "构图",
           "multiSelect": false,
-          "tags": ["portrait", "full body", "close-up", "cowboy shot", "from above", "from below", "wide shot"]
+          "tags": [
+            {"label": "肖像", "value": "portrait"},
+            {"label": "全身", "value": "full body"},
+            {"label": "特写", "value": "close-up"},
+            {"label": "牛仔镜头", "value": "cowboy shot"},
+            {"label": "俯拍", "value": "from above"},
+            {"label": "仰拍", "value": "from below"},
+            {"label": "远景", "value": "wide shot"}
+          ]
         }
       ]
     }

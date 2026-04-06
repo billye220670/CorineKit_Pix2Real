@@ -25,7 +25,7 @@ interface Subcategory {
   id: string;
   label: string;
   multiSelect?: boolean;
-  tags?: string[];
+  tags?: Array<{label: string; value: string}>;
   subcategories?: Subcategory[];
 }
 
@@ -39,7 +39,19 @@ function extractModelName(modelPath: string): string {
 function loadTagData(): TagData {
   try {
     const raw = localStorage.getItem('tagData');
-    if (raw) return JSON.parse(raw) as TagData;
+    if (raw) {
+      const parsed = JSON.parse(raw) as TagData;
+      // 检测旧格式：如果第一个tag是字符串而非对象，清除旧数据
+      const firstCat = parsed.categories?.[0];
+      const firstSub = firstCat?.subcategories?.[0];
+      const subs = firstSub?.subcategories?.[0] || firstSub;
+      const firstTag = subs?.tags?.[0];
+      if (firstTag && typeof firstTag === 'string') {
+        localStorage.removeItem('tagData');
+        return tagDataDefault as TagData;
+      }
+      return parsed;
+    }
   } catch { /* fall through */ }
   return tagDataDefault as TagData;
 }
@@ -260,8 +272,8 @@ function PromptContextMenu({ x, y, loras, getNickname, getTriggerWords, onInsert
         label: sub.label,
         children: sub.tags.map(tag => ({
           type: 'action' as const,
-          label: tag,
-          onClick: () => handleInsert(tag),
+          label: tag.label,
+          onClick: () => handleInsert(tag.value),
         })),
       };
     }

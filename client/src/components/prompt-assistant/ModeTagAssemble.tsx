@@ -16,7 +16,7 @@ interface Subcategory {
   id: string;
   label: string;
   multiSelect?: boolean;
-  tags?: string[];
+  tags?: Array<{label: string; value: string}>;
   subcategories?: Subcategory[];
 }
 
@@ -61,10 +61,21 @@ export function ModeTagAssemble() {
   const [tagData, setTagData] = useState<TagData>(() => {
     try {
       const stored = localStorage.getItem('tagData');
-      return stored ? JSON.parse(stored) : tagDataDefault;
-    } catch {
-      return tagDataDefault;
-    }
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        // 检测旧格式
+        const firstCat = parsed.categories?.[0];
+        const firstSub = firstCat?.subcategories?.[0];
+        const subs = firstSub?.subcategories?.[0] || firstSub;
+        const firstTag = subs?.tags?.[0];
+        if (firstTag && typeof firstTag === 'string') {
+          localStorage.removeItem('tagData');
+          return tagDataDefault;
+        }
+        return parsed;
+      }
+    } catch { /* fall through */ }
+    return tagDataDefault;
   });
   const [selectedCat, setSelectedCat] = useState<string>(() => {
     return localStorage.getItem('tagAssemble_selectedCat') || tagData.categories[0]?.id || '';
@@ -628,12 +639,14 @@ function SubcategoryNode({
 }) {
   const [expanded, setExpanded] = useState(true);
   const [hovered, setHovered] = useState(false);
-  const [tagsText, setTagsText] = useState(subcategory.tags?.join(', ') || '');
+  const [tagsText, setTagsText] = useState(
+    subcategory.tags?.map((t) => `${t.label}|${t.value}`).join(', ') || ''
+  );
   const [tagsFocused, setTagsFocused] = useState(false);
 
   useEffect(() => {
     if (!tagsFocused) {
-      setTagsText(subcategory.tags?.join(', ') || '');
+      setTagsText(subcategory.tags?.map((t) => `${t.label}|${t.value}`).join(', ') || '');
     }
   }, [subcategory.tags, tagsFocused]);
 
@@ -755,10 +768,17 @@ function SubcategoryNode({
               const tags = tagsText
                 .split(',')
                 .map((t) => t.trim())
-                .filter(Boolean);
+                .filter(Boolean)
+                .map((t) => {
+                  const sepIdx = t.indexOf('|');
+                  if (sepIdx >= 0) {
+                    return { label: t.slice(0, sepIdx), value: t.slice(sepIdx + 1) };
+                  }
+                  return { label: t, value: t };
+                });
               onChange({ ...subcategory, tags });
             }}
-            placeholder="输入标签，用逗号分隔"
+            placeholder="输入标签，格式: 中文|english 用逗号分隔"
             style={{
               width: '100%',
               padding: 6,
@@ -777,11 +797,11 @@ function SubcategoryNode({
         ) : (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {subcategory.tags?.map((tag) => {
-              const isSelected = selectedTags[subcategory.id]?.includes(tag) ?? false;
+              const isSelected = selectedTags[subcategory.id]?.includes(tag.value) ?? false;
               return (
                 <button
-                  key={tag}
-                  onClick={() => onTagToggle(subcategory.id, tag)}
+                  key={tag.value}
+                  onClick={() => onTagToggle(subcategory.id, tag.value)}
                   style={{
                     padding: '4px 8px',
                     background: isSelected ? 'var(--color-primary)' : 'var(--color-bg)',
@@ -792,7 +812,7 @@ function SubcategoryNode({
                     fontSize: 11,
                   }}
                 >
-                  {tag}
+                  {tag.label}
                 </button>
               );
             })}
