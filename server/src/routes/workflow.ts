@@ -148,11 +148,12 @@ router.post('/10/execute', uploadFields, async (req, res) => {
 // POST /api/workflow/7/execute — 快速出图: text-to-image, JSON body (no file upload)
 router.post('/7/execute', express.json(), async (req, res) => {
   try {
-    const { clientId, model, loras, prompt, width, height, steps, cfg, sampler, scheduler, name } = req.body as {
+    const { clientId, model, loras, prompt, negativePrompt, width, height, steps, cfg, sampler, scheduler, name } = req.body as {
       clientId: string;
       model: string;
       loras?: Array<{ model: string; enabled: boolean; strength: number }>;
       prompt: string;
+      negativePrompt?: string;
       width: number;
       height: number;
       steps: number;
@@ -183,6 +184,10 @@ router.post('/7/execute', express.json(), async (req, res) => {
     // Node 39: user prompt (replaces default; empty = keep JSON default)
     if (prompt !== undefined) {
       template['39'].inputs.prompt = prompt;
+    }
+    // 节点 7：负面提示词（用户额外负面提示词追加到默认文本前面）
+    if (negativePrompt && negativePrompt.trim()) {
+      template['7'].inputs.text = negativePrompt.trim() + ', ' + template['7'].inputs.text;
     }
     // Node 45: output filename prefix
     if (name) {
@@ -515,7 +520,7 @@ router.post('/2/execute', upload.single('image'), async (req, res) => {
       const template = JSON.parse(fs.readFileSync(sdUpscaleTemplatePath, 'utf-8'));
       template['483'].inputs.image = comfyFilename;
       template['170'].inputs.seed = Math.floor(Math.random() * 1125899906842624);
-      template['171'].inputs.model_name = 'Remacri_original.safetensor';
+      template['171'].inputs.model_name = 'remacri_original.safetensors';
       promptJson = template;
     } else {
       // seedvr2 (default)

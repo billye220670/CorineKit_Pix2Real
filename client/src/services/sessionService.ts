@@ -11,6 +11,7 @@ export interface Text2ImgConfig {
   model: string;
   loras: LoraSlot[];
   prompt: string;
+  negativePrompt?: string;
   width: number;
   height: number;
   steps: number;

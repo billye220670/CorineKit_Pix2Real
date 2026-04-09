@@ -100,6 +100,7 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
     setLoras(prev => prev.map((l, i) => i === index ? { ...l, ...patch } : l));
   };
   const [prompt,     setPrompt]     = useState(() => readDraft().prompt    ?? '');
+  const [negativePrompt, setNegativePrompt] = useState(() => readDraft().negativePrompt ?? '');
   const [ratio,      setRatio]      = useState(() => readDraft().ratio     ?? '3:4');
   const [steps,      setSteps]      = useState(() => readDraft().steps     ?? 30);
   const [cfg,        setCfg]        = useState(() => readDraft().cfg       ?? 6);
@@ -112,14 +113,17 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
   const [promptFocused, setPromptFocused] = useState(false);
   const [promptBtnHovered, setPromptBtnHovered] = useState(false);
   const [quickActionLoading, setQuickActionLoading] = useState<string | null>(null);
+  const [negPromptFocused, setNegPromptFocused] = useState(false);
+  const [negPromptBtnHovered, setNegPromptBtnHovered] = useState(false);
+  const [negQuickActionLoading, setNegQuickActionLoading] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const cursorPosRef = useRef<number>(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Persist config to localStorage whenever it changes
   useEffect(() => {
-    localStorage.setItem(DRAFT_KEY, JSON.stringify({ model, loras, prompt, ratio, steps, cfg, sampler, scheduler, customName }));
-  }, [model, loras, prompt, ratio, steps, cfg, sampler, scheduler, customName]);
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({ model, loras, prompt, negativePrompt, ratio, steps, cfg, sampler, scheduler, customName }));
+  }, [model, loras, prompt, negativePrompt, ratio, steps, cfg, sampler, scheduler, customName]);
 
   // Default model once loaded (only if none was saved or saved model not in list)
   useEffect(() => {
@@ -147,6 +151,7 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
       model: model || (models[0] ?? ''),
       loras,
       prompt,
+      negativePrompt,
       width:     selectedPreset.width,
       height:    selectedPreset.height,
       steps,
@@ -188,7 +193,7 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
     } finally {
       setIsGenerating(false);
     }
-  }, [clientId, isGenerating, model, models, loras, loraModels, prompt, selectedPreset, steps, cfg, sampler, scheduler, customName, batchCount, addText2ImgCard, startTask, sendMessage, sessionId]);
+  }, [clientId, isGenerating, model, models, loras, loraModels, prompt, negativePrompt, selectedPreset, steps, cfg, sampler, scheduler, customName, batchCount, addText2ImgCard, startTask, sendMessage, sessionId]);
 
   const handleQuickAction = useCallback(async (mode: 'naturalToTags' | 'tagsToNatural' | 'detailer') => {
     if (!prompt.trim()) return;
@@ -212,6 +217,29 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
       setQuickActionLoading(null);
     }
   }, [prompt]);
+
+  const handleNegQuickAction = useCallback(async (mode: 'naturalToTags' | 'tagsToNatural' | 'detailer') => {
+    if (!negativePrompt.trim()) return;
+    setNegQuickActionLoading(mode);
+    try {
+      const sysPrompt =
+        mode === 'naturalToTags' ? SYSTEM_PROMPTS.naturalToTags :
+        mode === 'tagsToNatural' ? SYSTEM_PROMPTS.tagsToNatural :
+        SYSTEM_PROMPTS.detailer;
+      const res = await fetch('/api/workflow/prompt-assistant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ systemPrompt: sysPrompt, userPrompt: negativePrompt }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const { text: result } = await res.json();
+      setNegativePrompt(result);
+    } catch {
+      // silent fail
+    } finally {
+      setNegQuickActionLoading(null);
+    }
+  }, [negativePrompt]);
 
   // ── Style helpers ────────────────────────────────────────────────────────
 
@@ -549,6 +577,153 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
                   e.stopPropagation();
                   usePromptAssistantStore.getState().openPanel({
                     initialText: prompt,
+                  });
+                }}
+                title="提示词助理"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: 2,
+                  flexShrink: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  color: 'var(--color-text-secondary)',
+                }}
+              >
+                <BookText size={13} />
+              </button>
+            </div>
+          </div>
+          <div style={{ marginTop: 10, position: 'relative' }} className={negQuickActionLoading ? 'textarea-ai-active' : undefined}>
+            <textarea
+              placeholder="额外负面提示词（可选）"
+              value={negativePrompt}
+              onChange={(e) => setNegativePrompt(e.target.value)}
+              onFocus={() => setNegPromptFocused(true)}
+              onBlur={() => setNegPromptFocused(false)}
+              readOnly={negQuickActionLoading !== null}
+              rows={1}
+              style={{
+                width: '100%',
+                padding: '7px 36px 7px 8px',
+                border: '1px solid var(--color-border)',
+                borderRadius: 6,
+                backgroundColor: 'var(--color-bg)',
+                color: 'var(--color-text)',
+                fontSize: '12px',
+                resize: 'vertical',
+                outline: 'none',
+                fontFamily: 'inherit',
+                boxSizing: 'border-box' as const,
+                opacity: negQuickActionLoading !== null ? 0.45 : 1,
+                transition: 'opacity 0.2s',
+              }}
+            />
+            {/* 快速操作按钮 - 与正面提示词完全相同的结构 */}
+            <div
+              onMouseEnter={() => setNegPromptBtnHovered(true)}
+              onMouseLeave={() => setNegPromptBtnHovered(false)}
+              style={{
+                position: 'absolute',
+                bottom: 12,
+                right: 6,
+                display: 'flex',
+                flexDirection: 'row' as const,
+                alignItems: 'center',
+                opacity: negPromptFocused || negPromptBtnHovered ? 1 : 0,
+                pointerEvents: negPromptFocused || negPromptBtnHovered ? 'auto' as const : 'none' as const,
+                background: negPromptBtnHovered ? 'var(--color-surface)' : 'transparent',
+                border: `1px solid ${negPromptBtnHovered ? 'var(--color-border)' : 'transparent'}`,
+                borderRadius: 6,
+                padding: '2px 4px',
+                transition: 'opacity 0.15s, background 0.15s, border-color 0.15s',
+              }}
+            >
+              {/* 三个快速操作按钮的滑出容器 */}
+              <div style={{
+                display: 'flex',
+                gap: 4,
+                overflow: 'hidden',
+                maxWidth: negPromptBtnHovered ? 72 : 0,
+                marginRight: negPromptBtnHovered ? 4 : 0,
+                opacity: negPromptBtnHovered ? 1 : 0,
+                transition: 'max-width 0.2s ease, margin-right 0.2s ease, opacity 0.15s',
+              }}>
+                {/* 按需扩写 */}
+                <button
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => handleNegQuickAction('detailer')}
+                  disabled={negQuickActionLoading !== null}
+                  title="按需扩写（直接替换）"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: negQuickActionLoading ? 'not-allowed' : 'pointer',
+                    padding: 2,
+                    flexShrink: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    color: negQuickActionLoading === 'detailer' ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                    opacity: negQuickActionLoading && negQuickActionLoading !== 'detailer' ? 0.35 : 1,
+                  }}
+                >
+                  {negQuickActionLoading === 'detailer'
+                    ? <Loader2 size={13} style={{ animation: 'spin 0.6s linear infinite' }} />
+                    : <Wand2 size={13} />}
+                </button>
+                {/* 标签 → 自然语言 */}
+                <button
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => handleNegQuickAction('tagsToNatural')}
+                  disabled={negQuickActionLoading !== null}
+                  title="标签 → 自然语言（直接替换）"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: negQuickActionLoading ? 'not-allowed' : 'pointer',
+                    padding: 2,
+                    flexShrink: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    color: negQuickActionLoading === 'tagsToNatural' ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                    opacity: negQuickActionLoading && negQuickActionLoading !== 'tagsToNatural' ? 0.35 : 1,
+                  }}
+                >
+                  {negQuickActionLoading === 'tagsToNatural'
+                    ? <Loader2 size={13} style={{ animation: 'spin 0.6s linear infinite' }} />
+                    : <AlignLeft size={13} />}
+                </button>
+                {/* 自然语言 → 标签 */}
+                <button
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => handleNegQuickAction('naturalToTags')}
+                  disabled={negQuickActionLoading !== null}
+                  title="自然语言 → 标签（直接替换）"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: negQuickActionLoading ? 'not-allowed' : 'pointer',
+                    padding: 2,
+                    flexShrink: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    color: negQuickActionLoading === 'naturalToTags' ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                    opacity: negQuickActionLoading && negQuickActionLoading !== 'naturalToTags' ? 0.35 : 1,
+                  }}
+                >
+                  {negQuickActionLoading === 'naturalToTags'
+                    ? <Loader2 size={13} style={{ animation: 'spin 0.6s linear infinite' }} />
+                    : <Hash size={13} />}
+                </button>
+              </div>
+              {/* 提示词助理按钮 */}
+              <button
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  usePromptAssistantStore.getState().openPanel({
+                    initialText: negativePrompt,
                   });
                 }}
                 title="提示词助理"
