@@ -3,7 +3,7 @@ import { useWorkflowStore, type Text2ImgConfig } from '../hooks/useWorkflowStore
 import { type LoraSlot } from '../services/sessionService.js';
 import { usePromptAssistantStore } from '../hooks/usePromptAssistantStore.js';
 import { useWebSocket } from '../hooks/useWebSocket.js';
-import { ChevronRight, ChevronDown, Loader, BookText, Hash, AlignLeft, Wand2, Loader2, AlertTriangle } from 'lucide-react';
+import { ChevronRight, ChevronDown, Loader, BookText, Hash, AlignLeft, Wand2, Loader2, AlertTriangle, Plus, Trash2 } from 'lucide-react';
 import { SYSTEM_PROMPTS } from './prompt-assistant/systemPrompts.js';
 import { ModelSelect, useModelFavorites } from './ModelSelect.js';
 import { useModelMetadata } from '../hooks/useModelMetadata.js';
@@ -33,11 +33,7 @@ const SCHEDULERS = [
 ];
 
 const DRAFT_KEY = 't2i_draft';
-const DEFAULT_LORAS: LoraSlot[] = [
-  { model: '', enabled: false, strength: 1 },
-  { model: '', enabled: false, strength: 1 },
-  { model: '', enabled: false, strength: 1 },
-];
+const DEFAULT_LORAS: LoraSlot[] = [];
 function readDraft() {
   try {
     const raw = JSON.parse(localStorage.getItem(DRAFT_KEY) ?? 'null') ?? {};
@@ -45,8 +41,6 @@ function readDraft() {
     if (!raw.loras && (raw.loraModel || raw.loraEnabled !== undefined)) {
       raw.loras = [
         { model: raw.loraModel ?? '', enabled: raw.loraEnabled ?? false, strength: 1 },
-        { model: '', enabled: false, strength: 1 },
-        { model: '', enabled: false, strength: 1 },
       ];
       delete raw.loraModel;
       delete raw.loraEnabled;
@@ -99,6 +93,16 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
   const updateLora = (index: number, patch: Partial<LoraSlot>) => {
     setLoras(prev => prev.map((l, i) => i === index ? { ...l, ...patch } : l));
   };
+  const addLora = () => {
+    if (loras.length < 5) {
+      setLoras(prev => [...prev, { model: '', enabled: true, strength: 1 }]);
+    }
+  };
+  const removeLora = (index: number) => {
+    if (window.confirm('确定删除此 LoRA？')) {
+      setLoras(prev => prev.filter((_, i) => i !== index));
+    }
+  };
   const [prompt,     setPrompt]     = useState(() => readDraft().prompt    ?? '');
   const [negativePrompt, setNegativePrompt] = useState(() => readDraft().negativePrompt ?? '');
   const [ratio,      setRatio]      = useState(() => readDraft().ratio     ?? '3:4');
@@ -137,7 +141,7 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
   useEffect(() => {
     if (loraModels.length > 0) {
       setLoras(prev => prev.map(l =>
-        (!l.model || !loraModels.includes(l.model)) ? { ...l, model: loraModels[0] } : l
+        (l.model && !loraModels.includes(l.model)) ? { ...l, model: loraModels[0] } : l
       ));
     }
   }, [loraModels]);
@@ -329,7 +333,26 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
 
         {/* LoRA collapsible sections */}
         <div style={{ ...cardStyle, paddingTop: 16, paddingBottom: 16 }}>
-          <div style={sectionLabelStyle}>LoRA</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div style={{ ...sectionLabelStyle, marginBottom: 0 }}>LoRA</div>
+            {loras.length < 5 && (
+              <button
+                onClick={addLora}
+                title="添加 LoRA"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: 2,
+                  display: 'flex',
+                  alignItems: 'center',
+                  color: 'var(--color-text-secondary)',
+                }}
+              >
+                <Plus size={14} />
+              </button>
+            )}
+          </div>
         {loras.map((lora, i) => (
           <div key={i} style={{ marginBottom: i < loras.length - 1 ? 12 : 0 }}>
             <div
@@ -394,6 +417,22 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
                   </span>
                 );
               })()}
+              <button
+                onClick={() => removeLora(i)}
+                title="删除此 LoRA"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: 2,
+                  display: 'flex',
+                  alignItems: 'center',
+                  color: 'var(--color-text-secondary)',
+                  marginLeft: 'auto',
+                }}
+              >
+                <Trash2 size={12} />
+              </button>
             </div>
 
             {lora.enabled && (

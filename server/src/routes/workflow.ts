@@ -194,8 +194,8 @@ router.post('/7/execute', express.json(), async (req, res) => {
       template['45'].inputs.filename_prefix = name;
     }
 
-    // LoRA handling: nodes 50, 51, 52 chained from Checkpoint #4
-    const tab7LoraNodeIds = ['50', '51', '52'];
+    // LoRA handling: nodes 50, 51, 52, 53, 54 chained from Checkpoint #4
+    const tab7LoraNodeIds = ['50', '51', '52', '53', '54'];
     const tab7Loras = loras && loras.length > 0 ? loras : [];
 
     // Set lora_name and strength for each LoRA node
@@ -329,8 +329,8 @@ router.post('/9/execute', express.json(), async (req, res) => {
     // KSampler #4 始终从 #47 取模型
     template['47'].inputs.boolean = shiftEnabled;
 
-    // LoRA handling: nodes 36, 50, 51 chained from UNet #25 (model) and CLIP #26 (clip)
-    const tab9LoraNodeIds = ['36', '50', '51'];
+    // LoRA handling: nodes 36, 50, 51, 52, 53 chained from UNet #25 (model) and CLIP #26 (clip)
+    const tab9LoraNodeIds = ['36', '50', '51', '52', '53'];
     const tab9Loras = loras && loras.length > 0 ? loras : [];
 
     // Set lora_name and strength for each LoRA node

@@ -8,7 +8,7 @@
       "scheduler": "normal",
       "denoise": 1,
       "model": [
-        "52",
+        "54",
         0
       ],
       "positive": [
@@ -56,7 +56,7 @@
         0
       ],
       "clip": [
-        "52",
+        "54",
         1
       ]
     },
@@ -69,7 +69,7 @@
     "inputs": {
       "text": "lowres, worst quality, bad quality, bad anatomy, simple background, blurry, lowres, cropped, extra limbs, bad anatomy, deformed hands, bad face, sketch, jpeg artifacts, signature, watermark, old, oldest, ",
       "clip": [
-        "52",
+        "54",
         1
       ]
     },
@@ -184,6 +184,44 @@
     "class_type": "LoraLoader",
     "_meta": {
       "title": "加载LoRA 3"
+    }
+  },
+  "53": {
+    "inputs": {
+      "lora_name": "placeholder.safetensors",
+      "strength_model": 1,
+      "strength_clip": 1,
+      "model": [
+        "52",
+        0
+      ],
+      "clip": [
+        "52",
+        1
+      ]
+    },
+    "class_type": "LoraLoader",
+    "_meta": {
+      "title": "加载LoRA 4"
+    }
+  },
+  "54": {
+    "inputs": {
+      "lora_name": "placeholder.safetensors",
+      "strength_model": 1,
+      "strength_clip": 1,
+      "model": [
+        "53",
+        0
+      ],
+      "clip": [
+        "53",
+        1
+      ]
+    },
+    "class_type": "LoraLoader",
+    "_meta": {
+      "title": "加载LoRA 5"
     }
   },
   "45": {
