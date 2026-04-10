@@ -77,6 +77,7 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
         task: task ?? null,
         selectedOutputIdx: tabData?.selectedOutputIndex?.[image.id] ?? Math.max(0, outputsLen - 1),
         text2imgConfig: tab === 7 ? s.tabData[7]?.text2imgConfigs?.[image.id] : undefined,
+        zitConfig: tab === 9 ? s.tabData[9]?.zitConfigs?.[image.id] : undefined,
         backPose: tabData?.backPoseToggles?.[image.id] ?? false,
       };
     })
@@ -85,7 +86,7 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
   // Destructure for easier access
   const { setPrompt, startTask, resetTask, removeImage, setFlashingImage, setSelectedOutputIndex, toggleBackPose } = actions;
   const { activeTab, workflows, clientId, sessionId } = globalState;
-  const { promptValue, task, selectedOutputIdx, text2imgConfig, backPose } = cardData;
+  const { promptValue, task, selectedOutputIdx, text2imgConfig, zitConfig, backPose } = cardData;
   const { sendMessage } = useWebSocket();
 
   const [isHovered, setIsHovered] = useState(false);
@@ -103,6 +104,7 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
   const needsPrompt = workflows[activeTab]?.needsPrompt ?? false;
   const isVideoWorkflow = activeTab === 3 || activeTab === 4;
   const isTab7 = activeTab === 7;
+  const isTab9 = activeTab === 9;
   const isProcessing = status === 'processing' || status === 'queued';
   const canExecute = !!clientId && !isProcessing;
 
@@ -308,12 +310,13 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
           method: 'POST',
           body: formData,
         });
-        if (!res.ok) { console.error('Execute failed:', await res.text()); return; }
+        if (!res.ok) { console.error('Execute failed:', await res.text()); showToast('生成失败，请检查服务端日志'); return; }
         const data = await res.json();
         startTask(image.id, data.promptId);
         sendMessage({ type: 'register', promptId: data.promptId, workflowId: 5, sessionId, tabId: 5 });
       } catch (err) {
         console.error('Execute error:', err);
+        showToast('生成请求失败');
       }
       return;
     }
@@ -337,12 +340,13 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
           method: 'POST',
           body: formData,
         });
-        if (!res.ok) { console.error('Execute failed:', await res.text()); return; }
+        if (!res.ok) { console.error('Execute failed:', await res.text()); showToast('生成失败，请检查服务端日志'); return; }
         const data = await res.json();
         startTask(image.id, data.promptId);
         sendMessage({ type: 'register', promptId: data.promptId, workflowId: 10, sessionId, tabId: 10 });
       } catch (err) {
         console.error('Execute error:', err);
+        showToast('生成请求失败');
       }
       return;
     }
@@ -378,12 +382,13 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
         method: 'POST',
         body: formData,
       });
-      if (!res.ok) { console.error('Execute failed:', await res.text()); return; }
+      if (!res.ok) { console.error('Execute failed:', await res.text()); showToast('生成失败，请检查服务端日志'); return; }
       const data = await res.json();
       startTask(image.id, data.promptId);
       sendMessage({ type: 'register', promptId: data.promptId, workflowId: activeTab, sessionId, tabId: activeTab });
     } catch (err) {
       console.error('Execute error:', err);
+      showToast('生成请求失败');
     }
   }, [clientId, image, activeTab, promptValue, startTask, sendMessage, maskEntryForMode, backPose, maskEntryToBlob, sessionId]);
   const openMaskEditor = useCallback(() => {
@@ -484,6 +489,8 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
       className={[isFlashing ? 'card-flash-anim' : '', isReversingPrompt ? 'card-ai-glow' : ''].filter(Boolean).join(' ') || undefined}
       onAnimationEnd={() => { if (isFlashing) setFlashingImage(null); }}
       style={{
+        display: 'flex',
+        flexDirection: 'column' as const,
         position: 'relative',
         border: '1px solid var(--color-border)',
         backgroundColor: 'var(--color-surface)',
@@ -505,7 +512,7 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
     >
       {/* Image container */}
       <div
-        style={{ position: 'relative', cursor: isMultiSelectMode ? 'pointer' : 'inherit' }}
+        style={{ position: 'relative', flex: 1, minHeight: 0, overflow: 'hidden', cursor: isMultiSelectMode ? 'pointer' : 'inherit' }}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         onClick={handleImageAreaClick}
@@ -525,16 +532,16 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
         }}
       >
         {/* Image area: tab 7 has 3 states; other tabs show placeholder + optional absolute output overlay */}
-        {isTab7 && isProcessing ? (
+        {(isTab7 || isTab9) && isProcessing ? (
           <div
             className="shimmer-skeleton"
             style={{
               width: '100%',
-              aspectRatio: `${text2imgConfig?.width ?? 832} / ${text2imgConfig?.height ?? 1216}`,
+              aspectRatio: `${(isTab7 ? text2imgConfig?.width : zitConfig?.width) ?? 832} / ${(isTab7 ? text2imgConfig?.height : zitConfig?.height) ?? 1216}`,
               display: 'block',
             }}
           />
-        ) : isTab7 && displayOutput ? (
+        ) : (isTab7 || isTab9) && displayOutput ? (
           <img
             src={displayOutput.url}
             alt="Output"
@@ -558,8 +565,8 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
           />
         )}
 
-        {/* Output overlay — non-tab-7 only (tab 7 renders output as block element above) */}
-        {displayOutput && !isTab7 && (
+        {/* Output overlay — non-tab-7/9 only (tab 7 & 9 render output as block element above) */}
+        {displayOutput && !isTab7 && !isTab9 && (
           isVideoWorkflow ? (
             <video
               ref={videoRef}
@@ -820,7 +827,7 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
         )}
 
         {/* Thumbnail strip: original + generated outputs — hidden for tab 7 */}
-        {stripItems.length > 0 && !isTab7 && (
+        {stripItems.length > 0 && !isTab7 && !isTab9 && (
           <ThumbnailStrip
             items={stripItems}
             selectedIndex={stripSelectedIndex}
@@ -866,7 +873,7 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
       </div>
 
       {/* Card footer */}
-      <div style={{ padding: 'var(--spacing-sm)' }}>
+      <div style={{ padding: 'var(--spacing-sm)', flexShrink: 0 }}>
         <div style={{
           fontSize: '12px',
           color: 'var(--color-text-secondary)',
@@ -880,7 +887,7 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
 
         <div style={{ display: 'flex', gap: 'var(--spacing-sm)', alignItems: 'flex-start' }}>
           {/* Normal workflows: editable prompt textarea */}
-          {!isTab7 && needsPrompt && (
+          {!isTab7 && !isTab9 && needsPrompt && (
             <div
               style={{ position: 'relative', flex: 1 }}
               className={quickActionLoading ? 'textarea-ai-active' : undefined}
@@ -1037,19 +1044,20 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
               </div>
             </div>
           )}
-          {/* Tab 7: Copy prompt button instead of Play/RotateCcw */}
-          {!hidePlayButton && (isTab7 ? (
+          {/* Tab 7/9: Copy prompt button instead of Play/RotateCcw */}
+          {!hidePlayButton && ((isTab7 || isTab9) ? (
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                if (!text2imgConfig?.prompt) return;
-                navigator.clipboard.writeText(text2imgConfig.prompt).then(() => {
+                const promptText = isTab7 ? text2imgConfig?.prompt : zitConfig?.prompt;
+                if (!promptText) return;
+                navigator.clipboard.writeText(promptText).then(() => {
                   showToast('提示词已复制');
                 }).catch(() => {
                   showToast('复制失败');
                 });
               }}
-              disabled={!text2imgConfig?.prompt}
+              disabled={!(isTab7 ? text2imgConfig?.prompt : zitConfig?.prompt)}
               title="复制提示词"
               style={{
                 flexShrink: 0,
@@ -1062,8 +1070,8 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
                 color: 'var(--color-text-secondary)',
                 border: '1px solid var(--color-border)',
                 borderRadius: 6,
-                cursor: text2imgConfig?.prompt ? 'pointer' : 'not-allowed',
-                opacity: text2imgConfig?.prompt ? 1 : 0.4,
+                cursor: (isTab7 ? text2imgConfig?.prompt : zitConfig?.prompt) ? 'pointer' : 'not-allowed',
+                opacity: (isTab7 ? text2imgConfig?.prompt : zitConfig?.prompt) ? 1 : 0.4,
               }}
             >
               <Copy size={13} />
