@@ -849,11 +849,39 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
         <div style={{ ...cardStyle, paddingTop: 16, paddingBottom: 16 }}>
           <div style={sectionLabelStyle}>比例</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {RATIO_PRESETS.map((p) => (
-              <button key={p.label} style={pillBtn(ratio === p.label)} onClick={() => setRatio(p.label)}>
-                {p.label}
-              </button>
-            ))}
+            {RATIO_PRESETS.map((p) => {
+              const active = ratio === p.label;
+              const maxSize = p.width === p.height ? 19 : 24;
+              const w = p.width >= p.height ? maxSize : Math.round(maxSize * p.width / p.height);
+              const h = p.height >= p.width ? maxSize : Math.round(maxSize * p.height / p.width);
+              return (
+                <button
+                  key={p.label}
+                  style={{
+                    ...pillBtn(active),
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    width: 52,
+                    height: 52,
+                    padding: '4px 6px 7px',
+                  }}
+                  onClick={() => setRatio(p.label)}
+                >
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{
+                      width: w,
+                      height: h,
+                      border: `1.5px solid ${active ? 'var(--color-primary)' : 'var(--color-text-secondary)'}`,
+                      borderRadius: 2,
+                      flexShrink: 0,
+                      transition: 'border-color 0.12s',
+                    }} />
+                  </div>
+                  <span style={{ fontSize: '10px', lineHeight: 1 }}>{p.label}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -887,7 +915,7 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
               {sliderRow('步数', steps, 4, 50, 1, setSteps)}
               {sliderRow('CFG', cfg, 1, 12, 0.5, setCfg)}
 
-              <div style={{ marginBottom: 10 }}>
+              <div style={{ marginTop: 10, marginBottom: 20 }}>
                 <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginBottom: 4 }}>采样器</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                   {SAMPLERS.map((s) => (
@@ -898,7 +926,7 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
                 </div>
               </div>
 
-              <div>
+              <div style={{ marginBottom: 20 }}>
                 <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginBottom: 4 }}>调度器</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                   {SCHEDULERS.map((s) => (
