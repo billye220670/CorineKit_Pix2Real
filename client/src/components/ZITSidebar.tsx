@@ -21,7 +21,7 @@ const SAMPLERS = [
   { label: 'euler',   value: 'euler' },
   { label: 'euler_a', value: 'euler_ancestral' },
   { label: 'res_ms',  value: 'res_multistep_ancestral' },
-  { label: 'dpm2m',   value: 'dpm_2m' },
+  { label: 'dpmpp_2m', value: 'dpmpp_2m' }
 ];
 
 const SCHEDULERS = [
@@ -32,6 +32,9 @@ const SCHEDULERS = [
   { label: 'normal', value: 'normal' },
 ];
 
+const SAMPLER_VALUES = SAMPLERS.map(s => s.value);
+const SCHEDULER_VALUES = SCHEDULERS.map(s => s.value);
+
 const DRAFT_KEY = 'zit_draft';
 const DEFAULT_LORAS: LoraSlot[] = [];
 function readDraft() {
@@ -40,10 +43,17 @@ function readDraft() {
     // Backward compat: migrate old loraModel/loraEnabled to loras array
     if (!raw.loras && (raw.loraModel || raw.loraEnabled !== undefined)) {
       raw.loras = [
-        { model: raw.loraModel ?? '', enabled: raw.loraEnabled ?? false, strength: 1 },
+        { model: raw.loraModel ?? '', enabled: raw.loraEnabled ?? false, strength: 0 }
       ];
       delete raw.loraModel;
       delete raw.loraEnabled;
+    }
+    // Validate persisted sampler/scheduler against current option lists
+    if (raw.sampler && !SAMPLER_VALUES.includes(raw.sampler)) {
+      delete raw.sampler;
+    }
+    if (raw.scheduler && !SCHEDULER_VALUES.includes(raw.scheduler)) {
+      delete raw.scheduler;
     }
     return raw;
   } catch { return {}; }
@@ -96,7 +106,7 @@ export function ZITSidebar({ width }: { width?: number }) {
   };
   const addLora = () => {
     if (loras.length < 5) {
-      setLoras(prev => [...prev, { model: '', enabled: true, strength: 1 }]);
+      setLoras(prev => [...prev, { model: '', enabled: true, strength: 0 }]);
     }
   };
   const removeLora = (index: number) => {
@@ -120,8 +130,56 @@ export function ZITSidebar({ width }: { width?: number }) {
   const [promptBtnHovered, setPromptBtnHovered] = useState(false);
   const [quickActionLoading, setQuickActionLoading] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
-  const cursorPosRef = useRef<number>(0);
+  const selectionRef = useRef({ start: 0, end: 0 });
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const getSelectedText = () => {
+    const { start, end } = selectionRef.current;
+    return start !== end ? prompt.slice(start, end) : '';
+  };
+
+  const handleCtxCut = useCallback(() => {
+    const { start, end } = selectionRef.current;
+    if (start === end) return;
+    const text = prompt.slice(start, end);
+    navigator.clipboard.writeText(text);
+    const newPrompt = prompt.slice(0, start) + prompt.slice(end);
+    setPrompt(newPrompt);
+    selectionRef.current = { start, end: start };
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        textareaRef.current.selectionStart = start;
+        textareaRef.current.selectionEnd = start;
+      }
+    }, 0);
+  }, [prompt, setPrompt]);
+
+  const handleCtxCopy = useCallback(() => {
+    const { start, end } = selectionRef.current;
+    if (start === end) return;
+    navigator.clipboard.writeText(prompt.slice(start, end));
+  }, [prompt]);
+
+  const handleCtxPaste = useCallback(() => {
+    navigator.clipboard.readText().then(clipText => {
+      if (!clipText) return;
+      const { start, end } = selectionRef.current;
+      const before = prompt.slice(0, start);
+      const after = prompt.slice(end);
+      const newPrompt = before + clipText + after;
+      setPrompt(newPrompt);
+      const newPos = start + clipText.length;
+      selectionRef.current = { start: newPos, end: newPos };
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.focus();
+          textareaRef.current.selectionStart = newPos;
+          textareaRef.current.selectionEnd = newPos;
+        }
+      }, 0);
+    });
+  }, [prompt, setPrompt]);
 
   // Persist to localStorage
   useEffect(() => {
@@ -276,7 +334,7 @@ export function ZITSidebar({ width }: { width?: number }) {
   );
 
   return (
-    <div style={{
+    <div className="sidebar-panel" style={{
       width: width ?? 260,
       flexShrink: 0,
       borderLeft: '1px solid var(--color-border)',
@@ -376,7 +434,6 @@ export function ZITSidebar({ width }: { width?: number }) {
                   color: 'var(--color-text-secondary)',
                   letterSpacing: '0.04em',
                   cursor: 'default',
-                  userSelect: 'none',
                 }}
               >
                 启用 LoRA {i + 1}
@@ -435,7 +492,7 @@ export function ZITSidebar({ width }: { width?: number }) {
                   <span style={{ fontSize: 11, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>权重</span>
                   <input
                     type="range"
-                    min={0} max={2} step={0.05}
+                    min={-2} max={2} step={0.1}
                     value={lora.strength}
                     onChange={(e) => updateLora(i, { strength: parseFloat(e.target.value) })}
                     style={{ flex: 1, accentColor: 'var(--color-primary)' }}
@@ -468,7 +525,10 @@ export function ZITSidebar({ width }: { width?: number }) {
               onBlur={() => setPromptFocused(false)}
               onContextMenu={(e) => {
                 e.preventDefault();
-                cursorPosRef.current = e.currentTarget.selectionStart;
+                selectionRef.current = {
+                  start: e.currentTarget.selectionStart,
+                  end: e.currentTarget.selectionEnd,
+                };
                 setContextMenu({ x: e.clientX, y: e.clientY });
               }}
               readOnly={quickActionLoading !== null}
@@ -678,33 +738,56 @@ export function ZITSidebar({ width }: { width?: number }) {
                 </div>
               </div>
 
-              {/* Shift (AuraFlow) sub-section */}
+              {/* Shift (AuraFlow) sub-section — using LoRA-style toggle */}
               <div style={{ marginTop: 10 }}>
-                <button
-                  onClick={() => setShiftEnabled((v: boolean) => !v)}
+                <div
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 4,
-                    background: 'none',
-                    border: 'none',
-                    padding: 0,
-                    cursor: 'pointer',
-                    color: 'var(--color-text-secondary)',
-                    fontSize: '12px',
-                    marginBottom: shiftEnabled ? 8 : 0,
+                    gap: 8,
+                    marginBottom: shiftEnabled ? 10 : 0,
                   }}
                 >
-                  {shiftEnabled ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-                  <input
-                    type="checkbox"
-                    checked={shiftEnabled}
-                    onChange={() => {}}
-                    onClick={(e) => e.stopPropagation()}
-                    style={{ margin: '0 2px', cursor: 'pointer', accentColor: 'var(--color-primary)' }}
-                  />
-                  采样算法偏移
-                </button>
+                  {/* Toggle Switch */}
+                  <div
+                    onClick={() => setShiftEnabled((v: boolean) => !v)}
+                    style={{
+                      width: 36,
+                      height: 20,
+                      borderRadius: 10,
+                      backgroundColor: shiftEnabled ? 'var(--color-primary, #4a9eff)' : 'rgba(128,128,128,0.3)',
+                      position: 'relative',
+                      cursor: 'pointer',
+                      transition: 'background-color 0.2s ease',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 16,
+                        height: 16,
+                        borderRadius: '50%',
+                        backgroundColor: '#fff',
+                        position: 'absolute',
+                        top: 2,
+                        left: shiftEnabled ? 18 : 2,
+                        transition: 'left 0.2s ease',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                      }}
+                    />
+                  </div>
+                  <span
+                    style={{
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      color: 'var(--color-text-secondary)',
+                      letterSpacing: '0.04em',
+                      cursor: 'default',
+                    }}
+                  >
+                    采样算法偏移
+                  </span>
+                </div>
                 {shiftEnabled && sliderRow('偏移量', shift, 1, 5, 1, setShift)}
               </div>
             </div>
@@ -790,16 +873,32 @@ export function ZITSidebar({ width }: { width?: number }) {
           loras={loras}
           getNickname={(model) => getNickname(model)}
           getTriggerWords={(model) => getTriggerWords(model)}
+          selectedText={getSelectedText()}
+          selectionStart={selectionRef.current.start}
+          selectionEnd={selectionRef.current.end}
+          onCut={handleCtxCut}
+          onCopy={handleCtxCopy}
+          onPaste={handleCtxPaste}
           onInsert={(text) => {
-            const pos = cursorPosRef.current;
-            const before = prompt.slice(0, pos);
-            const after = prompt.slice(pos);
-            const needComma = before.length > 0 && !before.trimEnd().endsWith(',') && before.trim().length > 0;
-            const inserted = (needComma ? ', ' : '') + text;
+            const { start, end } = selectionRef.current;
+            const before = prompt.slice(0, start);
+            const after = prompt.slice(end);
+
+            const trimmedBefore = before.trimEnd();
+            const needCommaBefore = trimmedBefore.length > 0 && !trimmedBefore.endsWith(',');
+            const trimmedAfter = after.trimStart();
+            const needCommaAfter = trimmedAfter.length > 0 && !trimmedAfter.startsWith(',');
+
+            const prefix = needCommaBefore ? ', ' : '';
+            const suffix = needCommaAfter ? ', ' : '';
+            const inserted = prefix + text + suffix;
+
             const newPrompt = before + inserted + after;
             setPrompt(newPrompt);
-            const newPos = pos + inserted.length;
-            cursorPosRef.current = newPos;
+
+            const newPos = before.length + prefix.length + text.length;
+            selectionRef.current = { start: newPos, end: newPos };
+
             setTimeout(() => {
               if (textareaRef.current) {
                 textareaRef.current.focus();

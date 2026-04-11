@@ -210,6 +210,7 @@ export function Sidebar() {
   return (
     <aside
       ref={asideRef}
+      className="sidebar-panel"
       style={{
         width: 160,
         flexShrink: 0,
@@ -258,7 +259,6 @@ export function Sidebar() {
               fontWeight: 700,
               color: 'var(--color-text-secondary)',
               letterSpacing: '0.04em',
-              userSelect: 'none',
             }}>
               {group.label}
             </div>

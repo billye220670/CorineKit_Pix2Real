@@ -256,6 +256,18 @@ input[type="range"]::-moz-range-thumb {
   box-shadow: none;
 }
 
+/* Sidebar panels: prevent text selection on labels/buttons, restore for inputs */
+.sidebar-panel {
+  -webkit-user-select: none;
+  user-select: none;
+}
+.sidebar-panel input,
+.sidebar-panel textarea,
+.sidebar-panel [contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 /* LazyCard fade-in animation (GPU accelerated: only opacity + transform) */
 @keyframes lazyCardFadeIn {
   from { opacity: 0; transform: translateY(8px); }
