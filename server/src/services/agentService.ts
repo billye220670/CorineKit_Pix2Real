@@ -94,3 +94,24 @@ export function writeFavorite(sessionId: string, imageId: string, tabId: number,
   }
   fs.writeFileSync(p, JSON.stringify(favorites, null, 2), 'utf-8');
 }
+
+export function updateGenerationLogFavorite(sessionId: string, imageId: string, isFavorited: boolean): void {
+  const logs = readGenerationLog(sessionId);
+  let updated = false;
+  for (const log of logs) {
+    if (log.result.imageId === imageId) {
+      log.metadata.isFavorited = isFavorited;
+      if (isFavorited) {
+        log.metadata.favoriteTime = Date.now();
+      } else {
+        delete log.metadata.favoriteTime;
+      }
+      updated = true;
+      break;
+    }
+  }
+  if (updated) {
+    const logPath = path.join(sessionsBase, sessionId, 'generation-log.json');
+    fs.writeFileSync(logPath, JSON.stringify(logs, null, 2), 'utf-8');
+  }
+}

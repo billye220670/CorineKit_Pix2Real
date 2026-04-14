@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { readGenerationLog, appendGenerationLog, readFavorites, writeFavorite } from '../services/agentService.js';
+import { readGenerationLog, appendGenerationLog, readFavorites, writeFavorite, updateGenerationLogFavorite } from '../services/agentService.js';
 import type { GenerationRecord } from '../services/agentService.js';
 
 const router = Router();
@@ -61,6 +61,12 @@ router.post('/favorite', (req, res) => {
     setImmediate(() => {
       try {
         writeFavorite(sessionId, imageId, tabId, isFavorited);
+        // 同步更新 generation-log 中的 isFavorited
+        try {
+          updateGenerationLogFavorite(sessionId, imageId, isFavorited);
+        } catch (err) {
+          console.error('[Agent] Failed to sync favorite to generation log:', err);
+        }
       } catch (err) {
         console.error('[Agent] Failed to write favorite:', err);
       }
