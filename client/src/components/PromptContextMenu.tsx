@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { ChevronLeft, Star } from 'lucide-react';
+import { ChevronLeft, Star, Scissors, Copy, ClipboardPaste } from 'lucide-react';
 import { LoraSlot } from '../services/sessionService';
 import { showToast } from '../hooks/useToast';
 import tagDataDefault from '../data/tagData.json';
@@ -10,6 +10,12 @@ interface PromptContextMenuProps {
   loras: LoraSlot[];
   getNickname: (model: string) => string | null;
   getTriggerWords: (model: string) => string | null;
+  selectedText: string;
+  selectionStart: number;
+  selectionEnd: number;
+  onCut: () => void;
+  onCopy: () => void;
+  onPaste: () => void;
   onInsert: (text: string) => void;
   onClose: () => void;
 }
@@ -246,9 +252,44 @@ function TagMenuItem({ label, isFavorite, onToggleFavorite, onClick }: {
   );
 }
 
+// ── ClipboardButton ──
+
+function ClipboardButton({ icon: Icon, onClick, disabled, title }: {
+  icon: React.ComponentType<{size?: number}>;
+  onClick: () => void;
+  disabled?: boolean;
+  title: string;
+}) {
+  const [hover, setHover] = useState(false);
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        flex: 1,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        border: 'none',
+        background: hover && !disabled ? 'rgba(128,128,128,0.12)' : 'transparent',
+        color: 'var(--color-text)',
+        borderRadius: 4,
+        padding: '4px 0',
+        cursor: disabled ? 'default' : 'pointer',
+        opacity: disabled ? 0.35 : 1,
+      }}
+    >
+      <Icon size={14} />
+    </button>
+  );
+}
+
 // ── Main Component ──
 
-function PromptContextMenu({ x, y, loras, getNickname, getTriggerWords, onInsert, onClose }: PromptContextMenuProps) {
+function PromptContextMenu({ x, y, loras, getNickname, getTriggerWords, selectedText, selectionStart, selectionEnd, onCut, onCopy, onPaste, onInsert, onClose }: PromptContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [openIdx, setOpenIdx] = useState<number | null>(null);
   const [adjustedPos, setAdjustedPos] = useState<{ left: number; top: number }>({ left: x, top: y });
@@ -437,6 +478,32 @@ function PromptContextMenu({ x, y, loras, getNickname, getTriggerWords, onInsert
       ref={menuRef}
       style={{ ...menuStyle, left: adjustedPos.left, top: adjustedPos.top }}
     >
+      {/* 剪切/复制/粘贴按钮区 */}
+      <div style={{
+        display: 'flex',
+        padding: '4px 4px',
+        gap: 2,
+      }}>
+        <ClipboardButton
+          icon={Scissors}
+          onClick={() => { onCut(); onClose(); }}
+          disabled={!selectedText}
+          title="剪切"
+        />
+        <ClipboardButton
+          icon={Copy}
+          onClick={() => { onCopy(); onClose(); }}
+          disabled={!selectedText}
+          title="复制"
+        />
+        <ClipboardButton
+          icon={ClipboardPaste}
+          onClick={() => { onPaste(); onClose(); }}
+          title="粘贴"
+        />
+      </div>
+      {/* 分隔线 */}
+      <div style={separatorStyle} />
       {entries.map((entry, i) => {
         const key = `entry-${i}`;
 

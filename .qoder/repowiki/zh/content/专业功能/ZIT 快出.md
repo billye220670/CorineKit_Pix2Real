@@ -12,7 +12,17 @@
 - [Pix2Real-ZIT文生图NEW.json](file://ComfyUI_API/Pix2Real-ZIT文生图NEW.json)
 - [Pix2Real-释放内存.json](file://ComfyUI_API/Pix2Real-释放内存.json)
 - [StatusBar.tsx](file://client/src/components/StatusBar.tsx)
+- [ImageCard.tsx](file://client/src/components/ImageCard.tsx)
+- [Text2ImgSidebar.tsx](file://client/src/components/Text2ImgSidebar.tsx)
+- [sidebarGroups.ts](file://client/src/data/sidebarGroups.ts)
 </cite>
+
+## 更新摘要
+**变更内容**
+- 新增Tab7与Tab9共享复制提示词功能，增强用户在不同工作流间的操作一致性
+- 更新配置参数说明，包括ZitConfig和Text2ImgConfig的详细字段
+- 完善工作流状态管理机制，支持跨标签页的任务状态同步
+- 优化提示词辅助功能，支持自然语言↔标签互转
 
 ## 目录
 1. [简介](#简介)
@@ -27,7 +37,9 @@
 10. [附录](#附录)
 
 ## 简介
-ZIT 快出是本项目提供的一个面向“文本到图像”的快速生成工作流，专为批量高效产出而设计。其核心目标是在保证生成质量的前提下，最大化吞吐与响应速度，支持一键批量生成、参数预设、提示词智能辅助、以及与 ComfyUI 的深度集成。该工作流通过专用的后端路由直接接收 JSON 参数，绕过传统文件上传路径，从而减少 IO 开销，提升批处理效率。
+ZIT 快出是本项目提供的一个面向"文本到图像"的快速生成工作流，专为批量高效产出而设计。其核心目标是在保证生成质量的前提下，最大化吞吐与响应速度，支持一键批量生成、参数预设、提示词智能辅助、以及与 ComfyUI 的深度集成。该工作流通过专用的后端路由直接接收 JSON 参数，绕过传统文件上传路径，从而减少 IO 开销，提升批处理效率。
+
+**更新** ZIT 快出现已与Tab7（快速出图）共享复制提示词功能，用户可以在两个工作流间无缝复制提示词，提升操作一致性。
 
 ## 项目结构
 该项目采用前后端分离架构：前端使用 React + TypeScript 构建 Web UI，后端使用 Express + TypeScript 提供 API 与 ComfyUI 通信。ComfyUI 工作流模板集中存放于 ComfyUI_API 目录，前端通过适配器与路由将用户配置动态注入模板并提交至 ComfyUI 执行。
@@ -39,6 +51,8 @@ FE_UI["ZITSidebar.tsx<br/>参数面板与生成触发"]
 FE_STORE["useWorkflowStore.ts<br/>状态与任务管理"]
 FE_TYPES["sessionService.ts<br/>类型定义与会话服务"]
 FE_STATUS["StatusBar.tsx<br/>系统资源监控"]
+FE_CARD["ImageCard.tsx<br/>卡片与操作按钮"]
+FE_TEXT2IMG["Text2ImgSidebar.tsx<br/>快速出图参数面板"]
 end
 subgraph "后端(server)"
 BE_ROUTE["routes/workflow.ts<br/>工作流路由与执行"]
@@ -52,7 +66,8 @@ end
 FE_UI --> FE_STORE
 FE_UI --> FE_TYPES
 FE_UI --> BE_ROUTE
-FE_STORE --> BE_ROUTE
+FE_CARD --> FE_STORE
+FE_TEXT2IMG --> FE_STORE
 FE_STATUS --> BE_ROUTE
 BE_ROUTE --> BE_ADAPTER
 BE_ROUTE --> BE_COMFY
@@ -69,6 +84,8 @@ BE_COMFY --> TPL_MEM
 - [comfyui.ts:1-200](file://server/src/services/comfyui.ts#L1-L200)
 - [Pix2Real-ZIT文生图NEW.json:1-172](file://ComfyUI_API/Pix2Real-ZIT文生图NEW.json#L1-L172)
 - [Pix2Real-释放内存.json:1-39](file://ComfyUI_API/Pix2Real-释放内存.json#L1-L39)
+- [ImageCard.tsx:1047-1079](file://client/src/components/ImageCard.tsx#L1047-L1079)
+- [Text2ImgSidebar.tsx:1-200](file://client/src/components/Text2ImgSidebar.tsx#L1-L200)
 
 **章节来源**
 - [README.md:41-79](file://README.md#L41-L79)
@@ -79,12 +96,15 @@ BE_COMFY --> TPL_MEM
   - 支持提示词智能辅助（自然语言↔标签互转、按需扩写），并持久化草稿至本地存储。
 - 工作流状态与任务管理（useWorkflowStore）
   - 维护每个标签页内的图像列表、任务队列、进度与输出映射；支持批量卡片创建与任务启动。
+  - **更新** 支持跨标签页的任务状态同步与进度更新，包括ZIT快出和快速出图工作流。
 - 专用执行路由（workflow.ts）
   - 提供 /api/workflow/9/execute 接口，接收 JSON 参数，动态重写模板节点（模型、LoRA、尺寸、采样参数、提示词、文件名前缀等），并提交至 ComfyUI。
 - ComfyUI 服务层（comfyui.ts）
   - 封装上传、入队、历史查询、WebSocket 进度监听、系统资源统计等底层能力。
 - 模板与适配器（Workflow9Adapter + Pix2Real-ZIT文生图NEW.json）
   - 适配器声明工作流属性；模板定义节点连接与默认参数，后端在运行时按需重连线与赋值。
+- **新增** 卡片操作组件（ImageCard）
+  - **更新** Tab7与Tab9共享复制提示词功能，支持一键复制当前工作流的提示词到剪贴板。
 
 **章节来源**
 - [ZITSidebar.tsx:1-635](file://client/src/components/ZITSidebar.tsx#L1-L635)
@@ -93,6 +113,7 @@ BE_COMFY --> TPL_MEM
 - [Workflow9Adapter.ts:1-14](file://server/src/adapters/Workflow9Adapter.ts#L1-L14)
 - [comfyui.ts:1-200](file://server/src/services/comfyui.ts#L1-L200)
 - [Pix2Real-ZIT文生图NEW.json:1-172](file://ComfyUI_API/Pix2Real-ZIT文生图NEW.json#L1-L172)
+- [ImageCard.tsx:1047-1079](file://client/src/components/ImageCard.tsx#L1047-L1079)
 
 ## 架构总览
 ZIT 快出的执行链路从 UI 参数收集开始，经由前端状态管理与后端路由，动态构建 ComfyUI 模板并提交执行，同时通过 WebSocket 实时推送进度，最终回传结果文件路径。
@@ -105,7 +126,7 @@ participant Store as "useWorkflowStore.ts"
 participant Route as "routes/workflow.ts"
 participant Cfg as "comfyui.ts"
 participant Tpl as "Pix2Real-ZIT文生图NEW.json"
-U->>UI : 配置参数并点击“生成”
+U->>UI : 配置参数并点击"生成"
 UI->>Store : 创建ZIT卡片并启动任务
 UI->>Route : POST /api/workflow/9/execute(JSON)
 Route->>Tpl : 读取模板并重写节点
@@ -134,11 +155,11 @@ Note over Cfg : WebSocket推送进度/完成事件
   - 提示词智能辅助：自然语言↔标签互转、按需扩写。
   - 本地草稿持久化，刷新不丢失。
 - 关键行为
-  - 点击“生成”时，根据当前配置构造 ZitConfig，批量创建卡片并逐个发起 /api/workflow/9/execute 请求，随后注册 WebSocket 监听进度。
+  - 点击"生成"时，根据当前配置构造 ZitConfig，批量创建卡片并逐个发起 /api/workflow/9/execute 请求，随后注册 WebSocket 监听进度。
 
 ```mermaid
 flowchart TD
-Start(["点击“生成”"]) --> BuildCfg["组装ZitConfig<br/>宽高/采样/模型/提示词"]
+Start(["点击"生成""]) --> BuildCfg["组装ZitConfig<br/>宽高/采样/模型/提示词"]
 BuildCfg --> BatchLoop{"批量计数>1?"}
 BatchLoop --> |是| Loop["循环count次"]
 BatchLoop --> |否| Single["单次生成"]
@@ -165,9 +186,11 @@ Next --> End(["完成"])
 - 职责
   - 维护每个标签页的数据隔离（images、prompts、tasks、zitConfigs 等）。
   - 提供 addZitCard、startTask、updateProgress、completeTask、failTask 等任务生命周期方法。
-  - 支持跨标签页的任务状态同步与进度更新。
+  - **更新** 支持跨标签页的任务状态同步与进度更新，包括ZIT快出（Tab 9）和快速出图（Tab 7）工作流。
 - ZIT 卡片创建
   - 使用占位 PNG 文件作为临时占位，便于会话恢复与序列化。
+- **新增** 配置参数类型
+  - ZitConfig：包含 UNet 模型、LoRA 列表、AuraFlow 偏移设置、提示词、尺寸、采样参数等完整配置。
 
 ```mermaid
 classDiagram
@@ -195,12 +218,26 @@ class ZitConfig {
 +sampler : string
 +scheduler : string
 }
+class Text2ImgConfig {
++model : string
++loras : LoraSlot[]
++prompt : string
++negativePrompt : string
++width : number
++height : number
++steps : number
++cfg : number
++sampler : string
++scheduler : string
+}
 WorkflowStore --> ZitConfig : "创建卡片时使用"
+WorkflowStore --> Text2ImgConfig : "创建卡片时使用"
 ```
 
 **图表来源**
 - [useWorkflowStore.ts:571-593](file://client/src/hooks/useWorkflowStore.ts#L571-L593)
 - [sessionService.ts:15-28](file://client/src/services/sessionService.ts#L15-L28)
+- [sessionService.ts:23-35](file://client/src/services/sessionService.ts#L23-L35)
 
 **章节来源**
 - [useWorkflowStore.ts:1-645](file://client/src/hooks/useWorkflowStore.ts#L1-L645)
@@ -291,10 +328,40 @@ C-->>FE : 资源数据
 - [Workflow9Adapter.ts:1-14](file://server/src/adapters/Workflow9Adapter.ts#L1-L14)
 - [Pix2Real-ZIT文生图NEW.json:1-172](file://ComfyUI_API/Pix2Real-ZIT文生图NEW.json#L1-L172)
 
+### **新增** 卡片操作组件（ImageCard）
+- 功能要点
+  - **更新** Tab7与Tab9共享复制提示词功能，支持一键复制当前工作流的提示词到剪贴板。
+  - 根据工作流类型显示不同的操作按钮：Tab7/9显示复制提示词按钮，其他工作流显示执行按钮。
+  - 支持提示词智能辅助、预览缩略图、进度显示等。
+- 关键行为
+  - 当处于Tab7或Tab9时，显示复制提示词按钮，点击后自动复制对应配置的提示词。
+  - 支持提示词长度限制和格式验证，确保复制的提示词有效。
+
+```mermaid
+flowchart TD
+Card["ImageCard组件"] --> CheckTab{"isTab7或isTab9?"}
+CheckTab --> |是| CopyBtn["显示复制提示词按钮"]
+CheckTab --> |否| ExecuteBtn["显示执行按钮"]
+CopyBtn --> Click["点击复制按钮"]
+Click --> GetPrompt["获取text2imgConfig或zitConfig的prompt"]
+GetPrompt --> Copy["navigator.clipboard.writeText()"]
+Copy --> Toast["显示提示'提示词已复制'"]
+ExecuteBtn --> HandleExecute["处理执行逻辑"]
+```
+
+**图表来源**
+- [ImageCard.tsx:1047-1079](file://client/src/components/ImageCard.tsx#L1047-L1079)
+- [ImageCard.tsx:79-81](file://client/src/components/ImageCard.tsx#L79-L81)
+
+**章节来源**
+- [ImageCard.tsx:1047-1079](file://client/src/components/ImageCard.tsx#L1047-L1079)
+- [ImageCard.tsx:79-81](file://client/src/components/ImageCard.tsx#L79-L81)
+
 ## 依赖关系分析
 - 前端依赖
   - ZITSidebar 依赖 useWorkflowStore 与 WebSocket Hook，负责参数收集与任务启动。
-  - useWorkflowStore 依赖 sessionService 的类型定义，维护 ZitConfig。
+  - useWorkflowStore 依赖 sessionService 的类型定义，维护 ZitConfig 和 Text2ImgConfig。
+  - **更新** ImageCard 组件依赖 useWorkflowStore 获取工作流配置，支持Tab7/Tab9的提示词复制功能。
 - 后端依赖
   - workflow 路由依赖 ComfyUI 服务层与模板文件，负责参数校验、模板重写与入队。
 - 模板依赖
@@ -304,6 +371,8 @@ C-->>FE : 资源数据
 graph LR
 UI["ZITSidebar.tsx"] --> STORE["useWorkflowStore.ts"]
 UI --> ROUTE["routes/workflow.ts"]
+CARD["ImageCard.tsx"] --> STORE
+TEXT2IMG["Text2ImgSidebar.tsx"] --> STORE
 STORE --> ROUTE
 ROUTE --> COMFY["services/comfyui.ts"]
 ROUTE --> TPL["Pix2Real-ZIT文生图NEW.json"]
@@ -317,6 +386,8 @@ STORE --> TYPES["sessionService.ts"]
 - [comfyui.ts:1-200](file://server/src/services/comfyui.ts#L1-L200)
 - [sessionService.ts:1-134](file://client/src/services/sessionService.ts#L1-L134)
 - [Pix2Real-ZIT文生图NEW.json:1-172](file://ComfyUI_API/Pix2Real-ZIT文生图NEW.json#L1-L172)
+- [ImageCard.tsx:1047-1079](file://client/src/components/ImageCard.tsx#L1047-L1079)
+- [Text2ImgSidebar.tsx:1-200](file://client/src/components/Text2ImgSidebar.tsx#L1-L200)
 
 **章节来源**
 - [ZITSidebar.tsx:1-635](file://client/src/components/ZITSidebar.tsx#L1-L635)
@@ -339,8 +410,8 @@ STORE --> TYPES["sessionService.ts"]
 - 批量生产的最佳实践
   - 预设常用配置（比例、采样、模型、LoRA），利用草稿持久化减少重复输入。
   - 分批执行，结合进度监控，避免长时间卡顿；必要时暂停其他工作流释放资源。
-
-[本节为通用性能指导，无需特定文件引用]
+- **新增** 操作一致性优化
+  - **更新** Tab7与Tab9共享复制提示词功能，提升用户在不同工作流间的操作一致性，减少重复配置时间。
 
 ## 故障排除指南
 - 常见问题与定位
@@ -354,6 +425,8 @@ STORE --> TYPES["sessionService.ts"]
     - 确认提示词长度与格式；使用提示词助手进行自然语言↔标签互转与扩写。
   - 进度不更新
     - 确认 WebSocket 注册成功（register promptId），检查后端 connectWebSocket 事件回调。
+  - **新增** 复制提示词失败
+    - **更新** 检查浏览器权限设置，确保允许访问剪贴板功能；确认当前工作流有有效的提示词配置。
 - 相关接口与事件
   - /api/workflow/9/execute：提交参数并获取 promptId。
   - /api/workflow/system-stats：查询系统资源使用情况。
@@ -365,9 +438,7 @@ STORE --> TYPES["sessionService.ts"]
 - [StatusBar.tsx:69-102](file://client/src/components/StatusBar.tsx#L69-L102)
 
 ## 结论
-ZIT 快出通过“专用路由 + 模板重写 + WebSocket 实时反馈”的组合，在保证生成质量的同时实现了高效的批量生产。其参数面板直观易用，配合提示词助手与资源监控，能够满足从个人创作到小规模生产的多样化需求。建议在实际使用中结合内容类型与硬件条件，动态调整采样参数与批量策略，并定期清理内存显存以维持稳定吞吐。
-
-[本节为总结性内容，无需特定文件引用]
+ZIT 快出通过"专用路由 + 模板重写 + WebSocket 实时反馈"的组合，在保证生成质量的同时实现了高效的批量生产。其参数面板直观易用，配合提示词助手与资源监控，能够满足从个人创作到小规模生产的多样化需求。**更新** 新增的Tab7与Tab9共享复制提示词功能进一步提升了用户体验的一致性和操作效率。建议在实际使用中结合内容类型与硬件条件，动态调整采样参数与批量策略，并定期清理内存显存以维持稳定吞吐。
 
 ## 附录
 
@@ -378,6 +449,8 @@ ZIT 快出通过“专用路由 + 模板重写 + WebSocket 实时反馈”的组
   - 选择 16:9，步数 6–10，强调速度；必要时关闭 LoRA 与 shift 以节省显存。
 - 场景三：风格探索与迭代
   - 使用提示词助手进行自然语言↔标签互转，逐步微调提示词与采样器组合。
+- **新增** 场景四：跨工作流提示词复用
+  - **更新** 在Tab7（快速出图）和Tab9（ZIT快出）之间复制提示词，提升工作效率。
 
 ### 参数对照与建议
 - 步数（steps）：越高质量量越高，但耗时增长；建议 6–12。
@@ -386,4 +459,20 @@ ZIT 快出通过“专用路由 + 模板重写 + WebSocket 实时反馈”的组
 - 调度器：simple/exponential 快速；ddim/beta/normal 更可控。
 - AuraFlow + shift：在支持的模型上可显著提速，建议 2–4。
 
-[本节为通用建议，无需特定文件引用]
+### **新增** 配置参数详细说明
+- ZitConfig（ZIT快出配置）
+  - unetModel：UNet模型名称
+  - loras：LoRA模型数组，包含model、enabled、strength字段
+  - shiftEnabled：是否启用AuraFlow shift
+  - shift：shift偏移值（默认3）
+  - prompt：提示词文本
+  - width/height：图像宽度和高度
+  - steps：采样步数
+  - cfg：CFG尺度
+  - sampler/scheduler：采样器和调度器名称
+- Text2ImgConfig（快速出图配置）
+  - model：检查点模型名称
+  - loras：LoRA模型数组
+  - prompt：正向提示词
+  - negativePrompt：负向提示词
+  - 其他参数与ZitConfig相同

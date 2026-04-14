@@ -286,7 +286,7 @@
     "category": "表情"
   },
   "角色\\【光辉】【角色】菲谢尔.safetensors": {
-    "nickname": "菲谢尔",
+    "nickname": "菲谢尔(原神)",
     "triggerWords": "gcs_fischl, green eyes, white eyepatch, eyepatch, blonde hair, two side up, black hair ribbon, x hair ornament, black nails, black jacket, open jacket, white shirt, purple skirt, purple necktie, detached collar, black thighhighs, asymmetrical legwear, thigh strap, collar, black loafers",
     "thumbnail": "1d14d33c-5ace-4c9e-87ab-58a42b55ff5b.png",
     "category": "角色"
@@ -306,6 +306,206 @@
     "triggerWords": "glorylegup, bound legs, through wall,legs up,photo_(object),bdsm",
     "nickname": "抬腿壁尻",
     "thumbnail": "dff22e6a-32df-4f1d-ade1-777153def2a1.png",
+    "category": "姿势"
+  },
+  "角色\\【IL】【角色】GawrGura.safetensors": {
+    "nickname": "噶呜·古拉(鲨鱼娘)",
+    "triggerWords": "multicolored_hair, tail, virtual_youtuber, gawr_gura,",
+    "thumbnail": "dd75fdb4-67d3-4380-815e-421c06f28a3a.png",
+    "category": "角色"
+  },
+  "角色\\【IL】【角色】探灵直播櫻井奈奈.safetensors": {
+    "triggerWords": "sakurai nana,1girl,solo,skirt,twintails,shirt,red eyes,white shirt,red hair,long sleeves,white socks,socks,bow,black footwear,bobby socks,black bow,black skirt,shoes,striped skirt,black ribbon,ribbon,striped clothes,vertical-striped clothes,vertical-striped skirt,hair bow,frills,frilled socks,neck ribbon,mary janes,",
+    "nickname": "櫻井奈奈(探灵直播)",
+    "thumbnail": "eb7361ce-35e9-4298-9e8d-d7b771a74054.png",
+    "category": "角色"
+  },
+  "角色\\【IL】【角色】探灵直播白石梓.safetensors": {
+    "triggerWords": "Shiraishi Azusa,1girl,solo,black hair,denim jacket,skirt,breasts,jacket,cleavage,purple eyes,shirt,white shirt,black skirt,long hair,boots,blue jacket,long sleeves,miniskirt,ponytail,pencil skirt,black footwear,open clothes,denim,open jacket,collarbone,",
+    "nickname": "白石梓(探灵直播)",
+    "thumbnail": "f4ce7e7d-95e1-4ce9-9fb6-bcf238747f9d.png",
+    "category": "角色"
+  },
+  "角色\\【IL】【角色】魔女的复仇之夜 阿拉迪亚.safetensors": {
+    "triggerWords": "mai_aradia,mature_female,aged_up,black_hair,yellow_eyes,braid,gradient_hair,large_breasts,blue_dress,white_shirt,bowtie,underbust,frills,bare_shoulders,white_thighhighs,garter_strap,black_thigh_boots",
+    "nickname": "阿拉迪亚I(魔女的复仇之夜)",
+    "thumbnail": "ab3f0dcc-14ce-443c-a0a8-30a807b6c9e2.png",
+    "category": "角色"
+  },
+  "角色\\【IL】【角色】王者荣耀安琪拉.safetensors": {
+    "triggerWords": "anqila,headphones,white shirt,sailor collar,hair ornament,short sleeves,fake animal ears",
+    "nickname": "安琪拉(王者荣耀)",
+    "thumbnail": "93a4ff51-3e99-4266-a80d-257c2548fd55.png",
+    "category": "角色"
+  },
+  "角色\\【IL】【角色】原神Sandrone.safetensors": {
+    "triggerWords": "sandrone \\(genshin impact\\), brown hair, blue eyes, maid headdress",
+    "nickname": "桑多涅(原神)",
+    "thumbnail": "d50e7859-f3a1-4ac6-b37f-d577d7c86f6b.png",
+    "category": "角色"
+  },
+  "角色\\【IL】【角色】Lane-HakuhouAzu.safetensors": {
+    "thumbnail": "05b3857d-1162-4267-9314-b587029b40e8.png",
+    "nickname": "HakuhouAzu(Lane)",
+    "category": "角色",
+    "triggerWords": "hakuhou \\(azur lane\\), long hair, bare shoulders, black sash,  hair between eyes,  japanese clothes, kimono,  long hair between eyes, long sleeves, white mask, mask on head, pantyhose,  white hair, white kimono, white pantyhose, wide sleeves, yellow eyes"
+  },
+  "角色\\【IL】【角色】碧蓝档案ImashinoMisaki.safetensors": {
+    "thumbnail": "7477faa9-b9de-4e3c-9dfd-bb047674217a.png",
+    "triggerWords": "misakiBA, red eyes, brown hair,short hair,halo,  red eyes",
+    "nickname": "美咲(碧蓝档案)",
+    "category": "角色"
+  },
+  "角色\\【IL】【角色】碧蓝档案全集.safetensors": {
+    "triggerWords": "yuzudef, yuukadef, yoshimidef, wakamodef, uidef, tsurugidef, tsukuyodef, tsubakidef, tokidef, saoridef, miyudef, mikadef, maridef, kokonadef, koharudef, shizukodef, shirokodef, shiguredef, serinadef, serikadef, senadef, sayadef, sakurakodef, sakidef, nonomidef, nerudef, natsudef, nagisadef, mutsukidef, momokadef, momoidef, moedef, miyakodef, misakidef, minedef, mimoridef, midoridef, michirudef, megudef, mashirodef, marinadef, makidef, koyukidef, kotoridef, kazusadef, kayokodef, karindef, kannadef, kahodef, kaededef, junkodef, izunadef, izumidef, irohadef, ioridef, hoshinodef, hiyoridef, hinatadef, hinadef, himaridef, hifumidef, hibikidef, hasumidef, harunadef, harukadef, haredef, hanakodef, hanaedef, fuukadef, fubukidef, eimidef, chisedef, chinatsudef, chihirodef, cherinodef, azusadef, ayanedef, atsukodef, asunadef, arudef, akaridef, airidef, shundef, arisdef, akodef, akanedef",
+    "nickname": "碧蓝档案全集",
+    "category": "角色"
+  },
+  "角色\\【IL】【角色】碧蓝档案霞沢美游.safetensors": {
+    "triggerWords": "miyu \\(blue archive\\), 1girl,halo,leaf on head, ahoge,animal ears,black hair,long hair,red eyes,green neckerchief,blue school uniform,sailor collar,long sleeves,pleated skirt,white pantyhose, trash can, in contain",
+    "nickname": "霞沢美游(碧蓝档案)",
+    "thumbnail": "756d467e-0fb6-471c-a287-ad3f09fb8baf.png",
+    "category": "角色"
+  },
+  "姿势\\【IL】【姿势】战败.safetensors": {
+    "triggerWords": "defeated_heroine, defeated_heroine,top-down bottom-up, defeated_heroine,top-down bottom-up, (from behind:1.6)",
+    "nickname": "战败",
+    "thumbnail": "bf40e21a-4980-4cb3-bfda-d5a948283211.png",
+    "category": "姿势"
+  },
+  "姿势\\【IL】【姿势】食品插入.safetensors": {
+    "thumbnail": "bcaf6d0c-034a-4e91-b10b-9e4b66e799c0.png",
+    "nickname": "食品插入",
+    "category": "姿势"
+  },
+  "姿势\\【IL】【姿势】战败事后.safetensors": {
+    "thumbnail": "2b848b2f-bf9b-44a8-a377-4fdebdbc7844.png",
+    "triggerWords": "after sex, bukkake",
+    "nickname": "战败事后",
+    "category": "姿势"
+  },
+  "姿势\\【IL】【姿势】中指.safetensors": {
+    "thumbnail": "6bd53aeb-15e9-4961-90ef-351a46ce732b.png",
+    "nickname": "中指",
+    "triggerWords": "middle finger, fuck you",
+    "category": "姿势"
+  },
+  "姿势\\【IL】【姿势】足交.safetensors": {
+    "thumbnail": "eab011c7-ea3c-4529-bab2-66f843cd6f10.png",
+    "nickname": "足交",
+    "triggerWords": "toes_grasp_penis, foot job",
+    "category": "姿势"
+  },
+  "姿势\\【IL】【姿势】韩国手势.safetensors": {
+    "triggerWords": "sph gesture, pinching gesture, hand up",
+    "nickname": "韩国手势",
+    "thumbnail": "0b9d92d0-13db-4c83-8204-2e755cb26b39.png",
+    "category": "姿势"
+  },
+  "姿势\\【IL】【姿势】闻鞋.safetensors": {
+    "thumbnail": "2e029cb4-6f46-4b16-9157-3208ee91dc3f.png",
+    "triggerWords": "smelling_own_shoe,  holding_smelly_shoe, shoes removed, smell, sweat, shiny skin, half-closed eyes, breath",
+    "nickname": "闻鞋",
+    "category": "姿势"
+  },
+  "姿势\\【IL】【姿势】足底按摩.safetensors": {
+    "triggerWords": "foot massage",
+    "nickname": "足底按摩",
+    "category": "姿势",
+    "thumbnail": "0fe88f1e-b444-4287-97f8-7ca7806ef6d4.png"
+  },
+  "姿势\\【IL】【姿势】自射.safetensors": {
+    "triggerWords": "self facial,cum on face, cumming from masturbation,",
+    "category": "姿势",
+    "nickname": "自射",
+    "thumbnail": "0549537c-ea64-494e-8db0-7155cb971c61.png"
+  },
+  "姿势\\【IL】【姿势】桌下足交.safetensors": {
+    "thumbnail": "b2928a1c-ae18-43f7-bec8-305f9f8761fe.png",
+    "nickname": "桌下足交",
+    "triggerWords": "footjob under table, footjob over clothes, pov, two-footed footjob, footjob",
+    "category": "姿势"
+  },
+  "姿势\\【IL】【姿势】啃咬下体.safetensors": {
+    "triggerWords": "biting penis,bite mark",
+    "nickname": "啃咬下体",
+    "category": "姿势",
+    "thumbnail": "f8b634ae-85cf-4ecf-91a0-92bfd831d45e.png"
+  },
+  "多视图\\【PONY】【多视图】多视角.safetensors": {
+    "thumbnail": "01a63eb7-7754-4f5d-ae32-2dbce9504e2c.png",
+    "nickname": "PONY多视角",
+    "triggerWords": "MULTI_CHAN,   multiple panels",
+    "category": "姿势"
+  },
+  "PONY-PonyDiffusionV6XL.safetensors": {
+    "thumbnail": "524f391d-86c2-4f43-8f99-21f922ce9246.png",
+    "nickname": "PONY-PonyDiffusionV6XL",
+    "category": "PONY"
+  },
+  "角色\\【PONY】【角色】魔女的复仇之夜 阿拉迪亚.safetensors": {
+    "triggerWords": "Aradia，Black hair , yellow eyes , braid , gradient hair / two-tone hair ，default costume，Blue dress , white shirt , ( color ) bowtie , underbust , frills , bare shoulders / clothing cutout , white thighhighs , garter strap , thigh boots",
+    "nickname": "阿拉迪亚II(魔女的复仇之夜)",
+    "thumbnail": "50f71aab-1ace-4cfb-8a4f-8de1ff10b3db.png",
+    "category": "角色"
+  },
+  "姿势\\【IL】【姿势】股绳.safetensors": {
+    "triggerWords": "rope walking",
+    "nickname": "股绳",
+    "category": "姿势",
+    "thumbnail": "65660b56-f317-4991-a0dc-00f58fd9e9c0.png"
+  },
+  "姿势\\【IL】【姿势】浣肠.safetensors": {
+    "triggerWords": "enema, syringe enema, alcohol enema, bubble tea enema",
+    "nickname": "浣肠",
+    "category": "姿势",
+    "thumbnail": "ad5ec2fb-3925-4b35-9ce7-52b066e7aa8c.png"
+  },
+  "姿势\\【IL】【姿势】昏迷.safetensors": {
+    "thumbnail": "cf119c5c-9289-42c1-a091-bd1bab18323e.png",
+    "nickname": "昏迷",
+    "triggerWords": "DefeatPoseIL, 1girl, solo, unconscious, defeat, lying, on back, spread legs, torn clothes, bruise",
+    "category": "姿势"
+  },
+  "角色\\【IL】【角色】鸣潮Lynae.safetensors": {
+    "triggerWords": "lynae \\(wuthering waves\\), blonde hair, long hair,skull hair ornament, earrings,purple eyes,gyaru,braid,multicolored hair",
+    "thumbnail": "544367ad-a67f-4ee0-9012-eb8a1c759686.png",
+    "category": "角色",
+    "nickname": "琳奈(鸣潮)"
+  },
+  "角色\\【IL】【角色】碧蓝档案Maia.safetensors": {
+    "thumbnail": "be2e443b-d1a2-4462-b3d8-47d136eeeeba.png",
+    "nickname": "Maia(碧蓝档案)",
+    "category": "角色",
+    "triggerWords": "maia \\(blue archive\\), ahoge, angry,  blue eyes, blue halo, twin braids, white hair,medium breasts"
+  },
+  "角色\\【IL】【角色】绝区零ellenJoe.safetensors": {
+    "nickname": "艾莲·乔(绝区零)",
+    "triggerWords": "ellenJoeZzz, red eyes,short hair, hair ornament,shark tail",
+    "category": "角色",
+    "thumbnail": "4b4b87f3-efc1-4c30-a0c3-b1c7a68c9af8.png"
+  },
+  "角色\\【IL】【角色】绝区零UkinamiYuzuha.safetensors": {
+    "nickname": "浮波柚叶(绝区零)",
+    "category": "角色",
+    "thumbnail": "2746f353-dc0a-40ae-bd04-0345ab46e1ab.png"
+  },
+  "角色\\【IL】【角色】终末地全集.safetensors": {
+    "nickname": "终末地全集",
+    "triggerWords": "zhuang_fangyi_(arknights), yvonne_(arknights), xaihi_(arknights), rossi_(arknights), perlica_(arknights), male_endministrator_(arknights), lifeng_(arknights), last_rite_(arknights), laevatein_(arknights), gilberta_(arknights), fluorite_(arknights), female_endministrator_(arknights), estella_(arknights), ember_(arknights), chen_qianyu_(arknights)",
+    "thumbnail": "c998a715-dc63-40d0-bdd3-33650fd1fed5.png",
+    "category": "角色"
+  },
+  "姿势\\【IL】【姿势】射鞋.safetensors": {
+    "nickname": "射鞋",
+    "triggerWords": "shoe_job, loafers",
+    "thumbnail": "71c041ed-c5c2-4824-a726-f8596f233634.png",
+    "category": "姿势"
+  },
+  "姿势\\【PONY】【姿势】怼脸后入.safetensors": {
+    "nickname": "怼脸后入",
+    "triggerWords": "doggystyle-facing-viewer, top-down bottom-up,sex from behind",
+    "thumbnail": "b8ec1c95-b896-4216-9248-fefbb0a297d6.png",
     "category": "姿势"
   }
 }
