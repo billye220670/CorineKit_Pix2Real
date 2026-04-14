@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { readGenerationLog, appendGenerationLog } from '../services/agentService.js';
+import { readGenerationLog, appendGenerationLog, readFavorites, writeFavorite } from '../services/agentService.js';
 import type { GenerationRecord } from '../services/agentService.js';
 
 const router = Router();
@@ -41,6 +41,51 @@ router.get('/generation-history', (req, res) => {
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Internal server error';
     console.error('[Agent] generation-history error:', err);
+    res.status(500).json({ error: message });
+  }
+});
+
+// POST /api/agent/favorite - 收藏/取消收藏
+router.post('/favorite', (req, res) => {
+  try {
+    const { sessionId, imageId, tabId, isFavorited } = req.body as {
+      sessionId: string;
+      imageId: string;
+      tabId: number;
+      isFavorited: boolean;
+    };
+    if (!sessionId || !imageId || tabId == null) {
+      res.status(400).json({ error: 'Missing required fields: sessionId, imageId, tabId' });
+      return;
+    }
+    setImmediate(() => {
+      try {
+        writeFavorite(sessionId, imageId, tabId, isFavorited);
+      } catch (err) {
+        console.error('[Agent] Failed to write favorite:', err);
+      }
+    });
+    res.json({ ok: true });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Internal server error';
+    console.error('[Agent] favorite error:', err);
+    res.status(500).json({ error: message });
+  }
+});
+
+// GET /api/agent/favorites - 获取收藏列表
+router.get('/favorites', (req, res) => {
+  try {
+    const sessionId = req.query.sessionId as string;
+    if (!sessionId) {
+      res.status(400).json({ error: 'Missing required query param: sessionId' });
+      return;
+    }
+    const favorites = readFavorites(sessionId);
+    res.json(favorites);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Internal server error';
+    console.error('[Agent] favorites error:', err);
     res.status(500).json({ error: message });
   }
 });

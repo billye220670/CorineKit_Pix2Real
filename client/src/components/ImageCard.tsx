@@ -1,5 +1,5 @@
 import { useCallback, useState, useRef, useEffect, memo } from 'react';
-import { X, Play, RotateCcw, Check, AlertCircle, Layers, ChevronDown, Flower, Sparkles, Copy, BookText, Hash, AlignLeft, Wand2, Loader2 } from 'lucide-react';
+import { X, Play, RotateCcw, Check, AlertCircle, Layers, ChevronDown, Flower, Sparkles, Copy, BookText, Hash, AlignLeft, Wand2, Loader2, Heart } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { SYSTEM_PROMPTS } from './prompt-assistant/systemPrompts.js';
 import { useWorkflowStore } from '../hooks/useWorkflowStore.js';
@@ -12,6 +12,7 @@ import { maskKey, TAB_MASK_MODE } from '../config/maskConfig.js';
 import { showToast } from '../hooks/useToast.js';
 import { useDragStore } from '../hooks/useDragStore.js';
 import { useSettingsStore } from '../hooks/useSettingsStore.js';
+import { useAgentStore } from '../hooks/useAgentStore.js';
 import type { ImageItem } from '../types/index.js';
 
 interface ImageCardProps {
@@ -135,6 +136,8 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
 
   const setDragging = useDragStore((s) => s.setDragging);
   const reversePromptModel = useSettingsStore((s) => s.reversePromptModel);
+  const favorited = useAgentStore((s) => image.id in s.favorites);
+  const toggleFavorite = useAgentStore((s) => s.toggleFavorite);
 
   const [maskMenuOpen, setMaskMenuOpen] = useState(false);
   const [isReversingPrompt, setIsReversingPrompt] = useState(false);
@@ -845,6 +848,33 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
             onMouseEnter={handleStripMouseEnter}
             onMouseLeave={handleStripMouseLeave}
           />
+        )}
+
+        {/* Favorite heart button — bottom-right of image area */}
+        {(isTab7 || isTab9) && !isMultiSelectMode && !isProcessing && (isCardHovered || favorited) && (
+          <div
+            onClick={(e) => { e.stopPropagation(); if (sessionId) toggleFavorite(sessionId, image.id, activeTab); }}
+            title={favorited ? '取消收藏' : '收藏'}
+            style={{
+              position: 'absolute',
+              bottom: stripItems.length > 0 && !isTab7 && !isTab9 ? 38 : 8,
+              right: 8,
+              zIndex: 10,
+              display: 'flex',
+              alignItems: 'center',
+              background: 'rgba(0,0,0,0.68)',
+              borderRadius: 6,
+              padding: '5px 7px',
+              cursor: 'pointer',
+              userSelect: 'none',
+            }}
+          >
+            <Heart
+              size={14}
+              color={favorited ? '#ef4444' : '#9ca3af'}
+              fill={favorited ? '#ef4444' : 'none'}
+            />
+          </div>
         )}
 
         {/* Reverse-prompt button — top-right of card, visible on card hover, hidden in multi-select or processing */}

@@ -21,6 +21,7 @@ import { SettingsModal } from './SettingsModal.js';
 import { PromptAssistantPanel } from './PromptAssistantPanel.js';
 import { WelcomePage } from './WelcomePage.js';
 import { useSettingsStore } from '../hooks/useSettingsStore.js';
+import { useAgentStore } from '../hooks/useAgentStore.js';
 import { StartupOverlay } from './StartupOverlay.js';
 
 function isImageOrVideo(file: File): boolean {
@@ -73,6 +74,13 @@ export function App() {
     });
   }, []);
   useWebSocket();
+
+  // Load favorites when session is available
+  useEffect(() => {
+    if (sessionId) {
+      useAgentStore.getState().loadFavorites(sessionId);
+    }
+  }, [sessionId]);
 
   // --- Right sidebar resizable width ---
   const [sidebarWidth, setSidebarWidth] = useState(() => {
