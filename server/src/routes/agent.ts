@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { readGenerationLog, appendGenerationLog, readFavorites, writeFavorite, updateGenerationLogFavorite } from '../services/agentService.js';
+import { buildUserProfile } from '../services/profileService.js';
 import type { GenerationRecord } from '../services/agentService.js';
 
 const router = Router();
@@ -92,6 +93,18 @@ router.get('/favorites', (req, res) => {
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Internal server error';
     console.error('[Agent] favorites error:', err);
+    res.status(500).json({ error: message });
+  }
+});
+
+// GET /api/agent/user-profile - 获取用户偏好画像（全局，跨所有 session）
+router.get('/user-profile', (req, res) => {
+  try {
+    const profile = buildUserProfile();
+    res.json(profile);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Internal server error';
+    console.error('[Agent] user-profile error:', err);
     res.status(500).json({ error: message });
   }
 });
