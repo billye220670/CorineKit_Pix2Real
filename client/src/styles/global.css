@@ -273,3 +273,15 @@ input[type="range"]::-moz-range-thumb {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+
+/* Agent dialog slide-in / slide-out */
+@keyframes agent-dialog-in {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes agent-dialog-out {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(20px); }
+}
+.agent-dialog-enter { animation: agent-dialog-in  0.2s ease-out both; }
+.agent-dialog-exit  { animation: agent-dialog-out 0.18s ease-in both; }

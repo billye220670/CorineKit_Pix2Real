@@ -23,6 +23,8 @@ import { WelcomePage } from './WelcomePage.js';
 import { useSettingsStore } from '../hooks/useSettingsStore.js';
 import { useAgentStore } from '../hooks/useAgentStore.js';
 import { StartupOverlay } from './StartupOverlay.js';
+import { AgentFab } from './AgentFab.js';
+import { AgentDialog } from './AgentDialog.js';
 
 function isImageOrVideo(file: File): boolean {
   return file.type.startsWith('image/') || file.type.startsWith('video/');
@@ -120,6 +122,8 @@ export function App() {
   }, []);
 
   const hasRightSidebar = activeTab === 7 || activeTab === 9 || activeTab === 0 || activeTab === 2;
+  const showDropZone = images.length === 0 && activeTab !== 7 && activeTab !== 8 && activeTab !== 9;
+  const agentRightOffset = (hasRightSidebar && !showDropZone) ? sidebarWidth + 4 : 0;
 
   useEffect(() => {
     const saved = localStorage.getItem('theme');
@@ -316,6 +320,10 @@ export function App() {
               )}
             </div>
           )}
+
+          {/* Agent FAB & Dialog — positioned in photo wall area */}
+          <AgentFab rightOffset={agentRightOffset} />
+          <AgentDialog rightOffset={agentRightOffset} />
 
           {/* Fullscreen drop overlay */}
           {isDragOver && images.length > 0 && (
