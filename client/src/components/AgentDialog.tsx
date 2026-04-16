@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Send, Paperclip, X } from 'lucide-react';
+import { Send, Paperclip, X, AlertCircle } from 'lucide-react';
 import { useAgentStore, type ChatMessage } from '../hooks/useAgentStore.js';
+import { useWorkflowStore } from '../hooks/useWorkflowStore.js';
 
 export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
   const isOpen = useAgentStore((s) => s.isDialogOpen);
@@ -18,10 +19,16 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
 
   const [text, setText] = useState('');
   const [closing, setClosing] = useState(false);
+  const [typingMessageId, setTypingMessageId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Stop typing immediately and show full text
+  const stopTyping = useCallback(() => {
+    setTypingMessageId(null);
+  }, []);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -81,9 +88,12 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
     reader.readAsDataURL(file);
   }, [addUploadedImage]);
 
-  const handleSend = useCallback(() => {
+  const handleSend = useCallback(async () => {
     const content = text.trim();
     if (!content && uploadedImages.length === 0) return;
+
+    // Stop any in-progress typing effect
+    stopTyping();
 
     const images = uploadedImages.map((i) => i.dataUrl);
     addMessage({
@@ -94,18 +104,83 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
     setText('');
     clearUploadedImages();
 
-    // Placeholder: simulate AI response
+    await sendMessage(content, images.length > 0 ? images : undefined);
+  }, [text, uploadedImages, addMessage, clearUploadedImages, setIsExecuting, setExecutionStatus]);
+
+  const sendMessage = useCallback(async (content: string, images?: string[]) => {
+    // 调用真实 chat API
     setIsExecuting(true);
-    setExecutionStatus('正在处理中...');
-    setTimeout(() => {
+    setExecutionStatus('正在分析您的需求...');
+
+    try {
+      const sessionId = useWorkflowStore.getState().sessionId;
+      const response = await fetch('/api/agent/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: sessionId || 'default',
+          message: content,
+          images,
+        }),
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+        throw new Error(errData.error || `请求失败: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data.type === 'tool_call') {
+        setExecutionStatus(`正在准备 ${data.intent?.workflowName ?? '工作流'}...`);
+        addMessage({
+          role: 'assistant',
+          content: data.message || `已解析您的需求，将使用 ${data.intent?.workflowName} 生成图片。`,
+        });
+        // Start typewriter for tool_call message
+        const msgs1 = useAgentStore.getState().messages;
+        const newMsg1 = msgs1[msgs1.length - 1];
+        if (newMsg1) setTypingMessageId(newMsg1.id);
+        // 存储 intent 供 Task 9 使用
+        useAgentStore.getState().setLastIntent(data.intent);
+      } else {
+        // 纯文本回复
+        addMessage({ role: 'assistant', content: data.message });
+        // Start typewriter for text reply
+        const msgs2 = useAgentStore.getState().messages;
+        const newMsg2 = msgs2[msgs2.length - 1];
+        if (newMsg2) setTypingMessageId(newMsg2.id);
+      }
+    } catch (err: any) {
       addMessage({
         role: 'assistant',
-        content: '收到你的请求，功能开发中...',
+        content: '抱歉，当前无法处理您的请求，请检查网络连接后重试。',
+        isError: true,
       });
+    } finally {
       setIsExecuting(false);
       setExecutionStatus('');
-    }, 2000);
-  }, [text, uploadedImages, addMessage, clearUploadedImages, setIsExecuting, setExecutionStatus]);
+    }
+  }, [addMessage, setIsExecuting, setExecutionStatus]);
+
+  const handleRetry = useCallback((errorMsg: ChatMessage) => {
+    const messages = useAgentStore.getState().messages;
+    const errorIndex = messages.findIndex((m) => m.id === errorMsg.id);
+    let lastUserMsg: ChatMessage | null = null;
+    for (let i = errorIndex - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') {
+        lastUserMsg = messages[i];
+        break;
+      }
+    }
+    if (!lastUserMsg) return;
+
+    // 移除错误消息
+    useAgentStore.getState().removeMessage(errorMsg.id);
+
+    // 重新发送
+    sendMessage(lastUserMsg.content, lastUserMsg.images);
+  }, [sendMessage]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -182,8 +257,15 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
             有什么可以帮你的？
           </div>
         )}
-        {messages.map((msg) => (
-          <MessageBubble key={msg.id} message={msg} />
+        {messages.map((msg, index) => (
+          <MessageBubble
+            key={msg.id}
+            message={msg}
+            onRetry={handleRetry}
+            isTyping={!msg.isError && msg.role === 'assistant' && msg.id === typingMessageId}
+            onTypingComplete={() => setTypingMessageId(null)}
+            scrollRef={messagesEndRef as React.RefObject<HTMLDivElement>}
+          />
         ))}
         {isExecuting && (
           <div style={{
@@ -350,65 +432,164 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
   );
 }
 
-function MessageBubble({ message }: { message: ChatMessage }) {
+function TypewriterText({ text, speed = 20, onComplete, scrollRef }: {
+  text: string;
+  speed?: number;
+  onComplete?: () => void;
+  scrollRef?: React.RefObject<HTMLDivElement>;
+}) {
+  const [displayed, setDisplayed] = useState('');
+  const [isTyping, setIsTyping] = useState(true);
+
+  useEffect(() => {
+    setDisplayed('');
+    setIsTyping(true);
+    let i = 0;
+    const timer = setInterval(() => {
+      i++;
+      setDisplayed(text.slice(0, i));
+      // Auto-scroll every few characters
+      if (i % 5 === 0 || i >= text.length) {
+        scrollRef?.current?.scrollIntoView({ behavior: 'smooth' });
+      }
+      if (i >= text.length) {
+        clearInterval(timer);
+        setIsTyping(false);
+        onComplete?.();
+      }
+    }, speed);
+    return () => clearInterval(timer);
+  }, [text, speed]);
+
+  return (
+    <>
+      {displayed}
+      {isTyping && (
+        <span style={{
+          display: 'inline-block',
+          width: 2,
+          height: '1em',
+          backgroundColor: 'currentColor',
+          marginLeft: 1,
+          opacity: 0.7,
+          verticalAlign: 'text-bottom',
+          animation: 'blink-cursor 0.8s step-end infinite',
+        }} />
+      )}
+    </>
+  );
+}
+
+function MessageBubble({ message, onRetry, isTyping, onTypingComplete, scrollRef }: {
+  message: ChatMessage;
+  onRetry: (msg: ChatMessage) => void;
+  isTyping?: boolean;
+  onTypingComplete?: () => void;
+  scrollRef?: React.RefObject<HTMLDivElement>;
+}) {
   const isUser = message.role === 'user';
+
+  const bubble = (
+    <div style={{
+      maxWidth: '80%',
+      padding: '8px 12px',
+      borderRadius: 12,
+      ...(isUser
+        ? { borderBottomRightRadius: 4, backgroundColor: 'var(--color-primary)', color: '#fff' }
+        : { borderBottomLeftRadius: 4, backgroundColor: 'var(--color-surface)', color: 'var(--color-text)' }
+      ),
+      fontSize: 13,
+      lineHeight: 1.5,
+      wordBreak: 'break-word' as const,
+    }}>
+      {/* Attached images */}
+      {message.images && message.images.length > 0 && (
+        <div style={{ display: 'flex', gap: 4, marginBottom: 6, flexWrap: 'wrap' }}>
+          {message.images.map((src, i) => (
+            <img
+              key={i}
+              src={src}
+              alt=""
+              style={{
+                width: 64,
+                height: 64,
+                objectFit: 'cover',
+                borderRadius: 6,
+                border: '1px solid rgba(255,255,255,0.2)',
+              }}
+            />
+          ))}
+        </div>
+      )}
+      {isTyping ? (
+        <TypewriterText text={message.content} speed={20} onComplete={onTypingComplete} scrollRef={scrollRef} />
+      ) : (
+        message.content
+      )}
+      {/* Action button */}
+      {message.actionButton && (
+        <div style={{ marginTop: 6 }}>
+          <button
+            style={{
+              background: 'none',
+              border: 'none',
+              color: isUser ? 'rgba(255,255,255,0.9)' : 'var(--color-primary)',
+              fontSize: 12,
+              cursor: 'pointer',
+              padding: 0,
+              textDecoration: 'underline',
+            }}
+          >
+            {message.actionButton.label}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
+  if (message.isError) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+          <AlertCircle size={16} style={{ color: '#ef4444', marginTop: 4, flexShrink: 0 }} />
+          <div>
+            {bubble}
+            <button
+              onClick={() => onRetry(message)}
+              style={{
+                marginTop: 4,
+                padding: '4px 12px',
+                fontSize: 12,
+                color: 'var(--color-primary)',
+                backgroundColor: 'transparent',
+                border: '1px solid var(--color-primary)',
+                borderRadius: 4,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'var(--color-primary)';
+                e.currentTarget.style.color = '#fff';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+                e.currentTarget.style.color = 'var(--color-primary)';
+              }}
+            >
+              重试
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{
       display: 'flex',
       justifyContent: isUser ? 'flex-end' : 'flex-start',
     }}>
-      <div style={{
-        maxWidth: '80%',
-        padding: '8px 12px',
-        borderRadius: 12,
-        ...(isUser
-          ? { borderBottomRightRadius: 4, backgroundColor: 'var(--color-primary)', color: '#fff' }
-          : { borderBottomLeftRadius: 4, backgroundColor: 'var(--color-surface)', color: 'var(--color-text)' }
-        ),
-        fontSize: 13,
-        lineHeight: 1.5,
-        wordBreak: 'break-word' as const,
-      }}>
-        {/* Attached images */}
-        {message.images && message.images.length > 0 && (
-          <div style={{ display: 'flex', gap: 4, marginBottom: 6, flexWrap: 'wrap' }}>
-            {message.images.map((src, i) => (
-              <img
-                key={i}
-                src={src}
-                alt=""
-                style={{
-                  width: 64,
-                  height: 64,
-                  objectFit: 'cover',
-                  borderRadius: 6,
-                  border: '1px solid rgba(255,255,255,0.2)',
-                }}
-              />
-            ))}
-          </div>
-        )}
-        {message.content}
-        {/* Action button */}
-        {message.actionButton && (
-          <div style={{ marginTop: 6 }}>
-            <button
-              style={{
-                background: 'none',
-                border: 'none',
-                color: isUser ? 'rgba(255,255,255,0.9)' : 'var(--color-primary)',
-                fontSize: 12,
-                cursor: 'pointer',
-                padding: 0,
-                textDecoration: 'underline',
-              }}
-            >
-              {message.actionButton.label}
-            </button>
-          </div>
-        )}
-      </div>
+      {bubble}
     </div>
   );
 }

@@ -16,12 +16,36 @@ export interface ChatMessage {
     tabId: number;
     imageId: string;
   };
+  isError?: boolean;
 }
 
 export interface UploadedImage {
   id: string;
   dataUrl: string;
   file?: File;
+}
+
+export interface ParsedIntent {
+  taskType: 'generate' | 'process';
+  workflowId: number;
+  workflowName: string;
+  prompt: string;
+  negativePrompt?: string;
+  character?: string;
+  pose?: string;
+  style?: string;
+  quality?: 'fast' | 'high';
+  recommendedLoras: Array<{
+    model: string;
+    strength: number;
+  }>;
+  recommendedModel?: string;
+  parameters?: {
+    width?: number;
+    height?: number;
+    steps?: number;
+    cfg?: number;
+  };
 }
 
 interface AgentState {
@@ -41,6 +65,7 @@ interface AgentState {
   // Messages
   messages: ChatMessage[];
   addMessage: (msg: Omit<ChatMessage, 'id' | 'timestamp'>) => void;
+  removeMessage: (id: string) => void;
   clearMessages: () => void;
 
   // Execution state
@@ -54,6 +79,10 @@ interface AgentState {
   addUploadedImage: (img: UploadedImage) => void;
   removeUploadedImage: (id: string) => void;
   clearUploadedImages: () => void;
+
+  // Last parsed intent (供 Task 9 工作流执行使用)
+  lastIntent: ParsedIntent | null;
+  setLastIntent: (intent: ParsedIntent | null) => void;
 }
 
 export const useAgentStore = create<AgentState>((set, get) => ({
@@ -107,6 +136,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       timestamp: Date.now(),
     }],
   })),
+  removeMessage: (id) => set((s) => ({
+    messages: s.messages.filter((m) => m.id !== id),
+  })),
   clearMessages: () => set({ messages: [] }),
 
   // Execution state
@@ -124,4 +156,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     uploadedImages: s.uploadedImages.filter((i) => i.id !== id),
   })),
   clearUploadedImages: () => set({ uploadedImages: [] }),
+
+  // Last parsed intent
+  lastIntent: null,
+  setLastIntent: (intent) => set({ lastIntent: intent }),
 }));

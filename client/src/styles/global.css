@@ -285,3 +285,8 @@ input[type="range"]::-moz-range-thumb {
 }
 .agent-dialog-enter { animation: agent-dialog-in  0.2s ease-out both; }
 .agent-dialog-exit  { animation: agent-dialog-out 0.18s ease-in both; }
+
+@keyframes blink-cursor {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 0; }
+}
