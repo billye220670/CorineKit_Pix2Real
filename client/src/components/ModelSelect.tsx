@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, Star, Loader, Check, ImagePlus, PencilLine, Tag, ChevronRight, Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, Star, Loader, Check, ImagePlus, PencilLine, Tag, ChevronRight, Plus, Trash2, Settings } from 'lucide-react';
+import { MetadataEditorModal } from './MetadataEditorModal.js';
 import type { ModelMetadata } from '../hooks/useModelMetadata.js';
 
 // ─── 分类颜色系统 ──────────────────────────────────────────────────────────────
@@ -12,7 +13,7 @@ const CATEGORY_COLORS = Array.from({ length: 12 }, (_, i) =>
 
 const CATEGORY_COLORS_KEY = 'model_category_colors';
 
-function loadCategoryColorMap(): Record<string, string> {
+export function loadCategoryColorMap(): Record<string, string> {
   try {
     const stored = JSON.parse(localStorage.getItem(CATEGORY_COLORS_KEY) ?? '{}');
     // Invalidate old hex-based cache — HSL scheme uses "hsl(" prefix
@@ -86,6 +87,8 @@ interface ModelSelectProps {
   getThumbnailUrl?: (modelPath: string) => string | null;
   onSetCategory?: (modelPath: string, category: string) => void;
   onDeleteCategory?: (modelPath: string) => void;
+  isLora?: boolean;
+  onUpdateMetadata?: (modelPath: string, fields: Record<string, any>) => Promise<void>;
 }
 
 // 从完整路径提取显示名称（去路径去后缀）
@@ -108,6 +111,8 @@ export function ModelSelect({
   getThumbnailUrl,
   onSetCategory,
   onDeleteCategory,
+  isLora,
+  onUpdateMetadata,
 }: ModelSelectProps) {
   const [open, setOpen] = useState(false);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
@@ -122,6 +127,7 @@ export function ModelSelect({
   const [tooltipModel, setTooltipModel] = useState<string | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ top: number; left: number } | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [metadataEditorModel, setMetadataEditorModel] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -582,40 +588,60 @@ export function ModelSelect({
       {/* 下拉面板 */}
       {open && models.length > 0 && (
         <div style={dropdownStyle}>
-          {/* 分类筛选条 */}
-          {showCategoryBar && (
-            <div style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: 4,
-              padding: '6px 10px',
-              flexShrink: 0,
-              borderBottom: '1px solid var(--color-border)',
-            }}>
-              {/* 全部 pill */}
-              <CategoryPill
-                label="全部"
-                active={selectedCategory === null}
-                onClick={() => setSelectedCategory(null)}
-              />
-              {allCategories.map((cat) => (
+          {/* 顶部工具栏：Settings 按钮 + 分类筛选 */}
+          <div style={{ flexShrink: 0, borderBottom: '1px solid var(--color-border)' }}>
+            {/* Settings 按钮行：独占一行，右对齐 */}
+            {onUpdateMetadata && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px 0 8px' }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)', userSelect: 'none' }}>{isLora ? '选择 LoRA' : '选择模型'}</span>
+                <span title="管理元数据" style={{ display: 'flex', alignItems: 'center' }}>
+                  <Settings
+                    size={16}
+                    style={{
+                      flexShrink: 0,
+                      cursor: 'pointer',
+                      color: 'var(--color-text-secondary)',
+                      opacity: 0.7,
+                      transition: 'opacity 0.15s',
+                    }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onMouseEnter={(e) => { (e.currentTarget as SVGElement).style.opacity = '1'; }}
+                    onMouseLeave={(e) => { (e.currentTarget as SVGElement).style.opacity = '0.7'; }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMetadataEditorModel(value || models[0]);
+                    }}
+                  />
+                </span>
+              </div>
+            )}
+            {/* 分类筛选胶囊按钮行 */}
+            {showCategoryBar && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: '6px 8px', marginTop: onUpdateMetadata ? 2 : 0 }}>
                 <CategoryPill
-                  key={cat}
-                  label={cat}
-                  active={selectedCategory === cat}
-                  onClick={() => setSelectedCategory(cat)}
-                  color={getCategoryColor(cat)}
+                  label="全部"
+                  active={selectedCategory === null}
+                  onClick={() => setSelectedCategory(null)}
                 />
-              ))}
-              {hasUncategorized && (
-                <CategoryPill
-                  label="未分类"
-                  active={selectedCategory === '__uncategorized__'}
-                  onClick={() => setSelectedCategory('__uncategorized__')}
-                />
-              )}
-            </div>
-          )}
+                {allCategories.map((cat) => (
+                  <CategoryPill
+                    key={cat}
+                    label={cat}
+                    active={selectedCategory === cat}
+                    onClick={() => setSelectedCategory(cat)}
+                    color={getCategoryColor(cat)}
+                  />
+                ))}
+                {hasUncategorized && (
+                  <CategoryPill
+                    label="未分类"
+                    active={selectedCategory === '__uncategorized__'}
+                    onClick={() => setSelectedCategory('__uncategorized__')}
+                  />
+                )}
+              </div>
+            )}
+          </div>
           {/* 模型列表（可滚动） */}
           <div style={{ overflowY: 'auto', flex: 1 }}>
             {/* 收藏区 */}
@@ -691,6 +717,21 @@ export function ModelSelect({
           getCategoryColor={getCategoryColor}
         />,
         document.body,
+      )}
+
+      {metadataEditorModel && onUpdateMetadata && (
+        <MetadataEditorModal
+          modelPath={metadataEditorModel}
+          metadata={metadata?.[metadataEditorModel]}
+          isLora={isLora ?? false}
+          models={models}
+          allMetadata={metadata}
+          getThumbnailUrl={getThumbnailUrl}
+          onSave={async (modelPath, fields) => {
+            await onUpdateMetadata(modelPath, fields);
+          }}
+          onClose={() => setMetadataEditorModel(null)}
+        />
       )}
     </div>
   );

@@ -5,6 +5,12 @@ export interface ModelMetadata {
   nickname?: string;
   triggerWords?: string;
   category?: string;
+  // AI Agent 增强字段
+  description?: string;
+  styleTags?: string[];
+  keywords?: string[];
+  compatibleModels?: string[];       // 仅 LoRA：兼容的基础模型类型
+  recommendedStrength?: number;       // 仅 LoRA：推荐强度
 }
 
 export function useModelMetadata() {
@@ -195,6 +201,32 @@ export function useModelMetadata() {
     return metadata[modelPath]?.category ?? null;
   }, [metadata]);
 
+  const updateMetadataFields = useCallback(async (modelPath: string, fields: Record<string, any>) => {
+    try {
+      const res = await fetch('/api/models/metadata/update', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ modelPath, fields }),
+      });
+      if (res.ok) {
+        setMetadata(prev => {
+          const updated = { ...prev };
+          if (!updated[modelPath]) updated[modelPath] = {};
+          for (const [key, value] of Object.entries(fields)) {
+            if (value === null || value === undefined || value === '' || (Array.isArray(value) && value.length === 0)) {
+              delete (updated[modelPath] as any)[key];
+            } else {
+              (updated[modelPath] as any)[key] = value;
+            }
+          }
+          return updated;
+        });
+      }
+    } catch (err) {
+      console.error('[ModelMeta] Failed to update metadata:', err);
+    }
+  }, []);
+
   return {
     metadata,
     loadMetadata,
@@ -210,5 +242,6 @@ export function useModelMetadata() {
     setCategory,
     deleteCategory,
     getCategory,
+    updateMetadataFields,
   };
 }

@@ -25,7 +25,7 @@ const upload = multer({
   },
 });
 
-function readMetadata(): Record<string, { thumbnail?: string; nickname?: string; triggerWords?: string; category?: string }> {
+function readMetadata(): Record<string, Record<string, any>> {
   try {
     const raw = fs.readFileSync(metadataFile, 'utf-8');
     return JSON.parse(raw);
@@ -34,7 +34,7 @@ function readMetadata(): Record<string, { thumbnail?: string; nickname?: string;
   }
 }
 
-function writeMetadata(data: Record<string, { thumbnail?: string; nickname?: string; triggerWords?: string; category?: string }>): void {
+function writeMetadata(data: Record<string, Record<string, any>>): void {
   fs.writeFileSync(metadataFile, JSON.stringify(data, null, 2), 'utf-8');
 }
 
@@ -222,6 +222,50 @@ router.delete('/metadata/category', (req: Request, res: Response) => {
   }
 
   res.json({ ok: true });
+});
+
+// PUT /metadata/update — 批量更新元数据字段
+router.put('/metadata/update', (req: Request, res: Response) => {
+  try {
+    const { modelPath, fields } = req.body as {
+      modelPath: string;
+      fields: Record<string, any>;
+    };
+    if (!modelPath) {
+      res.status(400).json({ error: 'Missing modelPath' });
+      return;
+    }
+
+    const metadata = readMetadata();
+
+    if (!metadata[modelPath]) {
+      metadata[modelPath] = {};
+    }
+
+    // 合并字段（允许的字段白名单）
+    const allowedFields = ['description', 'styleTags', 'keywords', 'compatibleModels', 'recommendedStrength', 'nickname', 'triggerWords', 'category'];
+    for (const [key, value] of Object.entries(fields)) {
+      if (allowedFields.includes(key)) {
+        if (value === null || value === undefined || value === '' || (Array.isArray(value) && value.length === 0)) {
+          delete metadata[modelPath][key];
+        } else {
+          metadata[modelPath][key] = value;
+        }
+      }
+    }
+
+    // 清理空条目
+    if (Object.keys(metadata[modelPath]).length === 0) {
+      delete metadata[modelPath];
+    }
+
+    writeMetadata(metadata);
+    res.json({ ok: true });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Internal server error';
+    console.error('[ModelMeta] update error:', err);
+    res.status(500).json({ error: message });
+  }
 });
 
 export default router;

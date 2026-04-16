@@ -74,7 +74,7 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
   // Model favorites
   const { favorites: checkpointFavorites, toggleFavorite: toggleCheckpointFavorite } = useModelFavorites('checkpoints');
   const { favorites: loraFavorites, toggleFavorite: toggleLoraFavorite } = useModelFavorites('loras');
-  const { metadata, uploadThumbnail, setNickname, setTriggerWords, getThumbnailUrl, getTriggerWords, getNickname, setCategory, deleteCategory } = useModelMetadata();
+  const { metadata, uploadThumbnail, setNickname, setTriggerWords, getThumbnailUrl, getTriggerWords, getNickname, setCategory, deleteCategory, updateMetadataFields } = useModelMetadata();
   // LoRA model list
   const [loraModels, setLoraModels] = useState<string[]>([]);
   const [loraListLoading, setLoraListLoading] = useState(false);
@@ -384,6 +384,8 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
             onSetCategory={setCategory}
             onDeleteCategory={deleteCategory}
             getThumbnailUrl={getThumbnailUrl}
+            isLora={false}
+            onUpdateMetadata={updateMetadataFields}
           />
         </div>
 
@@ -509,6 +511,8 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
                   onSetCategory={setCategory}
                   onDeleteCategory={deleteCategory}
                   getThumbnailUrl={getThumbnailUrl}
+                  isLora={true}
+                  onUpdateMetadata={updateMetadataFields}
                 />
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12 }}>
                   <span style={{ fontSize: 11, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>权重</span>
