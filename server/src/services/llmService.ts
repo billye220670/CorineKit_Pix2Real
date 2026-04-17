@@ -195,6 +195,39 @@ export function buildSystemPrompt(profile: UserPreferenceProfile, metadata: any)
     ? `${pp.preferredSize.width}x${pp.preferredSize.height}, ${pp.preferredSteps} steps, CFG ${pp.preferredCfg}`
     : '暂无数据';
 
+  // 常用 LoRA 组合
+  let comboSection = '';
+  if (profile.frequentCombinations && profile.frequentCombinations.length > 0) {
+    comboSection += `\n常用LoRA组合（按使用频率排序）：\n`;
+    profile.frequentCombinations.slice(0, 5).forEach((combo, i) => {
+      const loraNames = combo.loras?.map(l => {
+        const meta = metadata[l];
+        const m = meta && typeof meta === 'object' ? meta as Record<string, any> : null;
+        return m?.nickname || l.split('\\').pop()?.replace('.safetensors', '') || l;
+      }).join(' + ') || '无';
+      comboSection += `${i + 1}. ${loraNames}（使用 ${combo.count} 次）\n`;
+    });
+  }
+
+  // 按分类的 LoRA 偏好
+  let loraPrefSection = '';
+  if (profile.loraPreferences && profile.loraPreferences.length > 0) {
+    const grouped: Record<string, Array<{ model: string; nickname: string }>> = {};
+    profile.loraPreferences.forEach(lp => {
+      const meta = metadata[lp.model];
+      const m = meta && typeof meta === 'object' ? meta as Record<string, any> : null;
+      const cat = m?.category || '其他';
+      if (!grouped[cat]) grouped[cat] = [];
+      grouped[cat].push({ model: lp.model, nickname: m?.nickname || lp.model });
+    });
+
+    loraPrefSection += `\n用户LoRA偏好（按分类）：\n`;
+    for (const [cat, loras] of Object.entries(grouped)) {
+      const top3 = loras.slice(0, 3).map(l => l.nickname).join(', ');
+      loraPrefSection += `- ${cat}: ${top3}\n`;
+    }
+  }
+
   // 构建 LoRA 列表（只列出有 nickname 的，限制 50 个）
   const loraEntries: string[] = [];
   for (const [filePath, meta] of Object.entries(metadata)) {
@@ -234,6 +267,7 @@ export function buildSystemPrompt(profile: UserPreferenceProfile, metadata: any)
 - 常用模型: ${topModels}
 - 偏好风格: ${styleFeatures}
 - 常用参数: ${paramPreferences}
+${comboSection}${loraPrefSection}
 
 ## 可用工作流
 - generate_image: 文生图，从文字描述生成图片

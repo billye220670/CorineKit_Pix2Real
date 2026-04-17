@@ -2,90 +2,213 @@
   "IL-lunarcherrymix_v20.safetensors": {
     "nickname": "光辉-CherryMix",
     "thumbnail": "a7b00d45-c1d8-434e-b416-1bda8f5eb2c2.png",
-    "category": "光辉"
+    "category": "光辉",
+    "keywords": [
+      "光辉-CherryMix"
+    ],
+    "description": "基础模型 - 光辉-CherryMix",
+    "styleTags": []
   },
   "XL-漫画2.5D\\IL-Gembyte_20Emerald.safetensors": {
     "nickname": "光辉-Emerald",
     "thumbnail": "4e0478b1-f186-47ea-9c3b-6a9f3df1c206.png",
-    "category": "光辉"
+    "category": "光辉",
+    "keywords": [
+      "光辉-Emerald"
+    ],
+    "description": "基础模型 - 光辉-Emerald",
+    "styleTags": []
   },
   "XL-漫画2.5D\\aMixIllustrious_aMix.safetensors": {
     "nickname": "光辉-AMix",
     "thumbnail": "102a3b9a-f1b0-4869-a5e9-60f98c281b54.png",
-    "category": "光辉"
+    "category": "光辉",
+    "keywords": [
+      "光辉-AMix"
+    ],
+    "description": "基础模型 - 光辉-AMix",
+    "styleTags": []
   },
   "XL-漫画2.5D\\illustrijEVO_lvl3.safetensors": {
     "thumbnail": "7d3f940f-0641-4815-a68f-491ecce680e1.png",
     "nickname": "光辉-EVO",
-    "category": "光辉"
+    "category": "光辉",
+    "keywords": [
+      "光辉-EVO"
+    ],
+    "description": "基础模型 - 光辉-EVO",
+    "styleTags": []
   },
   "hassakuXLIllustrious_v34.safetensors": {
     "thumbnail": "fb727b8d-3fce-4d79-9821-4abcdd54f9f4.png",
     "nickname": "光辉-Hassaku",
-    "category": "光辉"
+    "category": "光辉",
+    "keywords": [
+      "光辉-Hassaku"
+    ],
+    "description": "基础模型 - 光辉-Hassaku",
+    "styleTags": []
   },
   "perfectdeliberate_v70.safetensors": {
     "thumbnail": "f9506ee3-07d9-4084-92cb-2e0e16e6fa9c.png",
     "nickname": "光辉-PerfectDeliberate",
-    "category": "光辉"
+    "category": "光辉",
+    "keywords": [
+      "光辉-PerfectDeliberate"
+    ],
+    "description": "基础模型 - 光辉-PerfectDeliberate",
+    "styleTags": []
   },
   "waiIllustriousSDXL_v160.safetensors": {
     "thumbnail": "d0b127bf-5ef4-4c0b-af7f-bd5e2884a060.png",
     "nickname": "光辉-WAI",
-    "category": "光辉"
+    "category": "光辉",
+    "keywords": [
+      "光辉-WAI"
+    ],
+    "description": "基础模型 - 光辉-WAI",
+    "styleTags": []
   },
   "XL-漫画2.5D\\illustrijQuill_v1.safetensors": {
     "thumbnail": "3f3345ab-fefe-487a-a3c3-840b5a182f23.png",
     "nickname": "光辉-Quill",
-    "category": "光辉"
+    "category": "光辉",
+    "keywords": [
+      "光辉-Quill"
+    ],
+    "description": "基础模型 - 光辉-Quill",
+    "styleTags": []
   },
   "XL-漫画2.5D\\JANKUTrainedNoobaiRouwei_v69.safetensors": {
     "nickname": "光辉-Noob",
     "thumbnail": "ca8472c5-90ba-479f-bdfd-cff85687627f.png",
-    "category": "光辉"
+    "category": "光辉",
+    "keywords": [
+      "光辉-Noob"
+    ],
+    "description": "基础模型 - 光辉-Noob",
+    "styleTags": []
   },
   "IL-illustriousSemi_v30.safetensors": {
     "thumbnail": "b7ba9611-847f-4436-b242-55d6e59f115b.png",
     "nickname": "光辉-Semi",
-    "category": "光辉"
+    "category": "光辉",
+    "keywords": [
+      "光辉-Semi"
+    ],
+    "description": "基础模型 - 光辉-Semi",
+    "styleTags": []
   },
   "hyphoriaIlluNAI_v001.safetensors": {
     "nickname": "光辉-Hyphoria",
     "thumbnail": "97d084c7-b8f9-4d9c-9798-8cc6e7ffc296.png",
-    "category": "光辉"
+    "category": "光辉",
+    "keywords": [
+      "光辉-Hyphoria"
+    ],
+    "description": "基础模型 - 光辉-Hyphoria",
+    "styleTags": []
   },
   "IL-novaOrangeXL_v100.safetensors": {
     "nickname": "光辉-NovaOrange",
     "thumbnail": "9408dd17-b9bf-4fb1-b8f0-dbf38e0d33cb.png",
-    "category": "光辉"
+    "category": "光辉",
+    "keywords": [
+      "光辉-NovaOrange"
+    ],
+    "description": "基础模型 - 光辉-NovaOrange",
+    "styleTags": []
   },
   "IllustriousLora\\face_grab_illustrious.safetensors": {
     "nickname": "表情-捏脸",
-    "thumbnail": "6bb9e990-0fd3-4312-b044-e0939bd79393.png"
+    "thumbnail": "6bb9e990-0fd3-4312-b044-e0939bd79393.png",
+    "keywords": [
+      "表情-捏脸"
+    ],
+    "description": "通用LoRA - 表情-捏脸",
+    "compatibleModels": [
+      "IL"
+    ],
+    "recommendedStrength": 0.7,
+    "styleTags": []
   },
   "IllustriousLora\\PD_Better_Boyshort_Panties-000013.safetensors": {
     "nickname": "服饰-平角裤",
-    "thumbnail": "f2e2c567-6c3f-4e51-98d4-c2532fc369a1.png"
+    "thumbnail": "f2e2c567-6c3f-4e51-98d4-c2532fc369a1.png",
+    "keywords": [
+      "服饰-平角裤"
+    ],
+    "description": "通用LoRA - 服饰-平角裤",
+    "compatibleModels": [
+      "IL"
+    ],
+    "recommendedStrength": 0.7,
+    "styleTags": []
   },
   "IllustriousLora\\PD_Female_Boxer_Briefs-000013.safetensors": {
     "nickname": "服饰-男士短裤",
-    "thumbnail": "65cb2d8d-fed1-4e7a-83dd-d17b85527327.png"
+    "thumbnail": "65cb2d8d-fed1-4e7a-83dd-d17b85527327.png",
+    "keywords": [
+      "服饰-男士短裤"
+    ],
+    "description": "通用LoRA - 服饰-男士短裤",
+    "compatibleModels": [
+      "IL"
+    ],
+    "recommendedStrength": 0.7,
+    "styleTags": []
   },
   "IllustriousLora\\PD_High_Cut_Panties-000012.safetensors": {
     "nickname": "服饰-高腰短裤",
-    "thumbnail": "edaf0fc4-305b-4976-847d-1289cf048ab2.png"
+    "thumbnail": "edaf0fc4-305b-4976-847d-1289cf048ab2.png",
+    "keywords": [
+      "服饰-高腰短裤"
+    ],
+    "description": "通用LoRA - 服饰-高腰短裤",
+    "compatibleModels": [
+      "IL"
+    ],
+    "recommendedStrength": 0.7,
+    "styleTags": []
   },
   "IllustriousLora\\betterahegao.safetensors": {
     "thumbnail": "8d1a336a-9591-456b-849d-9992c8b391d5.png",
-    "nickname": "表情-阿黑颜"
+    "nickname": "表情-阿黑颜",
+    "keywords": [
+      "表情-阿黑颜"
+    ],
+    "description": "通用LoRA - 表情-阿黑颜",
+    "compatibleModels": [
+      "IL"
+    ],
+    "recommendedStrength": 0.7,
+    "styleTags": []
   },
   "IllustriousLora\\disgusted_face_ilxl_goofy.safetensors": {
     "nickname": "表情-嫌弃脸",
-    "thumbnail": "892b1fb1-acf1-48f7-8962-85a67eec6f3a.png"
+    "thumbnail": "892b1fb1-acf1-48f7-8962-85a67eec6f3a.png",
+    "keywords": [
+      "表情-嫌弃脸"
+    ],
+    "description": "通用LoRA - 表情-嫌弃脸",
+    "compatibleModels": [
+      "IL"
+    ],
+    "recommendedStrength": 0.7,
+    "styleTags": []
   },
   "IllustriousLora\\cameltoe_illustrious_V2.0.safetensors": {
     "nickname": "身材-一字缝",
-    "thumbnail": "e56f19ed-93a0-4053-bb00-e6c2049d4c04.png"
+    "thumbnail": "e56f19ed-93a0-4053-bb00-e6c2049d4c04.png",
+    "keywords": [
+      "身材-一字缝"
+    ],
+    "description": "通用LoRA - 身材-一字缝",
+    "compatibleModels": [
+      "IL"
+    ],
+    "recommendedStrength": 0.7,
+    "styleTags": []
   },
   "多视图\\【光辉】【多视图】POV多视图.safetensors": {
     "nickname": "POV多视图",
@@ -99,7 +222,10 @@
     "compatibleModels": [
       "光辉系列"
     ],
-    "recommendedStrength": 0.8
+    "recommendedStrength": 0.8,
+    "styleTags": [
+      "multi_angle"
+    ]
   },
   "性别\\【光辉】【性别】男娘.safetensors": {
     "triggerWords": "1boy, otoko no ko, crossdressing, trap, yaoi, penis, testicles, androgynous",
@@ -113,54 +239,144 @@
     "compatibleModels": [
       "光辉系列"
     ],
-    "recommendedStrength": 0.8
+    "recommendedStrength": 0.8,
+    "styleTags": [
+      "gender"
+    ]
   },
   "性别\\【光辉】【性别】娘化胸部.safetensors": {
     "nickname": "娘化胸",
     "triggerWords": "femboy, round breasts, perky tiny nipples, erect female nipples, erotic female breasts",
     "thumbnail": "260151fd-f2b7-45c9-a8b9-ce6e9f7879f9.png",
-    "category": "性别"
+    "category": "性别",
+    "keywords": [
+      "娘化胸",
+      "光辉",
+      "性别",
+      "femboy"
+    ],
+    "description": "性别LoRA - 娘化胸，光辉系列适配",
+    "compatibleModels": [
+      "光辉"
+    ],
+    "recommendedStrength": 0.7,
+    "styleTags": [
+      "gender"
+    ]
   },
   "性别\\【光辉】【性别】一字缝.safetensors": {
     "nickname": "一字缝",
     "triggerWords": "cameltoe",
     "thumbnail": "f2ab7d8c-7208-45f6-9031-bfa4278b00ac.png",
-    "category": "性别"
+    "category": "性别",
+    "keywords": [
+      "一字缝",
+      "光辉",
+      "性别",
+      "cameltoe"
+    ],
+    "description": "性别LoRA - 一字缝，光辉系列适配",
+    "compatibleModels": [
+      "光辉"
+    ],
+    "recommendedStrength": 0.7,
+    "styleTags": [
+      "gender"
+    ]
   },
   "性别\\【光辉】【性别】贞操锁.safetensors": {
     "nickname": "贞操锁",
     "triggerWords": "chastity cage",
     "thumbnail": "23129ad0-a6f2-4289-9a89-266b83127269.png",
-    "category": "性别"
+    "category": "性别",
+    "keywords": [
+      "贞操锁",
+      "光辉",
+      "性别",
+      "chastity cage"
+    ],
+    "description": "性别LoRA - 贞操锁，光辉系列适配",
+    "compatibleModels": [
+      "光辉"
+    ],
+    "recommendedStrength": 0.7,
+    "styleTags": [
+      "gender"
+    ]
   },
   "多视图\\【光辉】【多视图】角色设计A.safetensors": {
     "nickname": "角色概念设计",
     "triggerWords": "Character_DesignV1",
     "thumbnail": "5f6c7dd7-14c5-4616-81b9-c84dc5728dc1.png",
-    "category": "多视角"
+    "category": "多视角",
+    "keywords": [
+      "角色概念设计",
+      "光辉",
+      "多视图",
+      "Character_DesignV1"
+    ],
+    "description": "多视角LoRA - 角色概念设计，光辉系列适配",
+    "compatibleModels": [
+      "光辉"
+    ],
+    "recommendedStrength": 0.7,
+    "styleTags": [
+      "multi_angle"
+    ]
   },
   "prefectPonyXL_v6.safetensors": {
     "nickname": "PONY-PrefectPony",
     "thumbnail": "ca5e0afa-2adb-447f-bbfd-44218de75985.png",
-    "category": "PONY"
+    "category": "PONY",
+    "keywords": [
+      "PONY-PrefectPony"
+    ],
+    "description": "基础模型 - PONY-PrefectPony",
+    "styleTags": []
   },
   "yumeillustrious_v10.safetensors": {
     "nickname": "光辉-Yumi",
     "thumbnail": "5289a06f-f195-467a-9853-266abbb326e1.png",
-    "category": "光辉"
+    "category": "光辉",
+    "keywords": [
+      "光辉-Yumi"
+    ],
+    "description": "基础模型 - 光辉-Yumi",
+    "styleTags": []
   },
   "XL-漫画2.5D\\illustrij_v20.safetensors": {
     "thumbnail": "cfc8c798-e320-4296-9b84-f0d3b02a9068.png",
     "nickname": "光辉-illustrij",
-    "category": "光辉"
+    "category": "光辉",
+    "keywords": [
+      "光辉-illustrij"
+    ],
+    "description": "基础模型 - 光辉-illustrij",
+    "styleTags": []
   },
   "XL-漫画2.5D\\oneObsession_v19Atypical.safetensors": {
     "nickname": "光辉-OneObsession",
     "thumbnail": "a323b046-c04d-4317-85cd-26610ef23da1.png",
-    "category": "光辉"
+    "category": "光辉",
+    "keywords": [
+      "光辉-OneObsession"
+    ],
+    "description": "基础模型 - 光辉-OneObsession",
+    "styleTags": []
   },
   "多视图\\【光辉】【多视图】多视角A.safetensors": {
-    "nickname": "多视角A"
+    "nickname": "多视角A",
+    "keywords": [
+      "多视角A",
+      "光辉",
+      "多视图"
+    ],
+    "description": "多视角LoRA - 多视角A，光辉系列适配",
+    "compatibleModels": [
+      "光辉"
+    ],
+    "recommendedStrength": 0.7,
+    "styleTags": []
   },
   "多视图\\【光辉】【多视图】多视角B.safetensors": {
     "nickname": "多视角",
@@ -174,18 +390,48 @@
     "compatibleModels": [
       "光辉系列"
     ],
-    "recommendedStrength": 0.8
+    "recommendedStrength": 0.8,
+    "styleTags": [
+      "multi_angle"
+    ]
   },
   "多视图\\【光辉】【多视图】角色设计B.safetensors": {
     "nickname": "角色拆解设计",
     "triggerWords": "character_design, chrctrdsgn, concept art, reference sheet, Hutao, genshin impact, underwear, worn panties, worn bra, used socks, dirty socks, multiple views, character profile, multiple expressions, 1girl, full body",
     "thumbnail": "6ab7131e-5fcf-4607-bfea-3791b0e5b50f.png",
-    "category": "多视角"
+    "category": "多视角",
+    "keywords": [
+      "角色拆解设计",
+      "光辉",
+      "多视图",
+      "character_design"
+    ],
+    "description": "多视角LoRA - 角色拆解设计，光辉系列适配",
+    "compatibleModels": [
+      "光辉"
+    ],
+    "recommendedStrength": 0.7,
+    "styleTags": [
+      "multi_angle"
+    ]
   },
   "多人物\\【光辉】【多人物】女孩数量滑块.safetensors": {
     "nickname": "女孩数量滑块",
     "thumbnail": "9c322377-57f7-470a-882b-df2ef9442189.png",
-    "category": "滑块"
+    "category": "滑块",
+    "keywords": [
+      "女孩数量滑块",
+      "光辉",
+      "多人物"
+    ],
+    "description": "滑块LoRA - 女孩数量滑块，光辉系列适配",
+    "compatibleModels": [
+      "光辉"
+    ],
+    "recommendedStrength": 0.5,
+    "styleTags": [
+      "slider"
+    ]
   },
   "优化\\【光辉】【优化】细节增强.safetensors": {
     "nickname": "细节增强",
@@ -199,39 +445,126 @@
     "compatibleModels": [
       "光辉系列"
     ],
-    "recommendedStrength": 0.8
+    "recommendedStrength": 0.8,
+    "styleTags": [
+      "style"
+    ]
   },
   "姿势\\【光辉】【姿势】口交多P滑块.safetensors": {
     "nickname": "口交多P滑块",
-    "triggerWords": "tripple oral"
+    "triggerWords": "tripple oral",
+    "keywords": [
+      "口交多P滑块",
+      "光辉",
+      "姿势",
+      "tripple oral"
+    ],
+    "description": "姿势LoRA - 口交多P滑块，光辉系列适配",
+    "compatibleModels": [
+      "光辉"
+    ],
+    "recommendedStrength": 0.7,
+    "styleTags": [
+      "pose"
+    ]
   },
   "姿势\\【光辉】【姿势】壁乳.safetensors": {
     "nickname": "壁乳",
-    "triggerWords": "glorytits,through wall, photo_(object)"
+    "triggerWords": "glorytits,through wall, photo_(object)",
+    "keywords": [
+      "壁乳",
+      "光辉",
+      "姿势",
+      "glorytits"
+    ],
+    "description": "姿势LoRA - 壁乳，光辉系列适配",
+    "compatibleModels": [
+      "光辉"
+    ],
+    "recommendedStrength": 0.7,
+    "styleTags": [
+      "pose"
+    ]
   },
   "姿势\\【光辉】【姿势】胶水.safetensors": {
     "triggerWords": "glue trap",
     "nickname": "胶水",
     "thumbnail": "97773ffb-b11b-4e9d-bc29-ad0557d03314.png",
-    "category": "姿势"
+    "category": "姿势",
+    "keywords": [
+      "胶水",
+      "光辉",
+      "姿势",
+      "glue trap"
+    ],
+    "description": "姿势LoRA - 胶水，光辉系列适配",
+    "compatibleModels": [
+      "光辉"
+    ],
+    "recommendedStrength": 0.7,
+    "styleTags": [
+      "pose"
+    ]
   },
   "姿势\\【光辉】【姿势】穿袜.safetensors": {
     "nickname": "穿袜",
     "triggerWords": "dressing socks, adjusting legwear",
     "thumbnail": "04fda580-d5f3-48cb-a20d-fad3adc225ce.png",
-    "category": "姿势"
+    "category": "姿势",
+    "keywords": [
+      "穿袜",
+      "光辉",
+      "姿势",
+      "dressing socks"
+    ],
+    "description": "姿势LoRA - 穿袜，光辉系列适配",
+    "compatibleModels": [
+      "光辉"
+    ],
+    "recommendedStrength": 0.7,
+    "styleTags": [
+      "pose"
+    ]
   },
   "姿势\\【光辉】【姿势】娃娃机.safetensors": {
     "nickname": "娃娃机",
     "triggerWords": "in crane game, sole focus",
     "thumbnail": "b5f5c6c4-b7c6-47f3-89b7-69511b9d93f0.png",
-    "category": "姿势"
+    "category": "姿势",
+    "keywords": [
+      "娃娃机",
+      "光辉",
+      "姿势",
+      "in crane game"
+    ],
+    "description": "姿势LoRA - 娃娃机，光辉系列适配",
+    "compatibleModels": [
+      "光辉"
+    ],
+    "recommendedStrength": 0.7,
+    "styleTags": [
+      "pose"
+    ]
   },
   "姿势\\【光辉】【姿势】锁喉.safetensors": {
     "triggerWords": "choke hold",
     "nickname": "锁喉",
     "thumbnail": "1a986c22-8206-4ec5-836d-4de68ee3ab72.png",
-    "category": "姿势"
+    "category": "姿势",
+    "keywords": [
+      "锁喉",
+      "光辉",
+      "姿势",
+      "choke hold"
+    ],
+    "description": "姿势LoRA - 锁喉，光辉系列适配",
+    "compatibleModels": [
+      "光辉"
+    ],
+    "recommendedStrength": 0.7,
+    "styleTags": [
+      "pose"
+    ]
   },
   "姿势\\【光辉】【姿势】壁尻A.safetensors": {
     "nickname": "壁尻A",
@@ -245,7 +578,10 @@
     "compatibleModels": [
       "光辉系列"
     ],
-    "recommendedStrength": 0.8
+    "recommendedStrength": 0.8,
+    "styleTags": [
+      "pose"
+    ]
   },
   "姿势\\【光辉】【姿势】壁尻B.safetensors": {
     "nickname": "壁尻B",
@@ -259,7 +595,10 @@
     "compatibleModels": [
       "光辉系列"
     ],
-    "recommendedStrength": 0.8
+    "recommendedStrength": 0.8,
+    "styleTags": [
+      "pose"
+    ]
   },
   "姿势\\【光辉】【姿势】顶墙深喉.safetensors": {
     "nickname": "顶墙深喉",
@@ -273,7 +612,10 @@
     "compatibleModels": [
       "光辉系列"
     ],
-    "recommendedStrength": 0.8
+    "recommendedStrength": 0.8,
+    "styleTags": [
+      "pose"
+    ]
   },
   "姿势\\【光辉】【姿势】颜面壁尻.safetensors": {
     "nickname": "壁尻C",
@@ -287,7 +629,10 @@
     "compatibleModels": [
       "光辉系列"
     ],
-    "recommendedStrength": 0.8
+    "recommendedStrength": 0.8,
+    "styleTags": [
+      "pose"
+    ]
   },
   "姿势\\【光辉】【姿势】悬空后入.safetensors": {
     "triggerWords": "dangling legs, full body, barefoot, size difference",
@@ -301,7 +646,10 @@
     "compatibleModels": [
       "光辉系列"
     ],
-    "recommendedStrength": 0.8
+    "recommendedStrength": 0.8,
+    "styleTags": [
+      "pose"
+    ]
   },
   "表情\\【光辉】【表情】Smug.safetensors": {
     "nickname": "Smug",
@@ -312,7 +660,16 @@
     "compatibleModels": [
       "光辉系列"
     ],
-    "recommendedStrength": 0.8
+    "recommendedStrength": 0.8,
+    "keywords": [
+      "Smug",
+      "光辉",
+      "表情",
+      "smug"
+    ],
+    "styleTags": [
+      "expression"
+    ]
   },
   "表情\\【光辉】【表情】厌恶脸.safetensors": {
     "nickname": "厌恶脸",
@@ -326,7 +683,10 @@
       "光辉系列"
     ],
     "recommendedStrength": 0.8,
-    "category": "表情"
+    "category": "表情",
+    "styleTags": [
+      "expression"
+    ]
   },
   "表情\\【光辉】【表情】嫌弃脸.safetensors": {
     "nickname": "嫌弃脸",
@@ -340,7 +700,10 @@
     "compatibleModels": [
       "光辉系列"
     ],
-    "recommendedStrength": 0.8
+    "recommendedStrength": 0.8,
+    "styleTags": [
+      "expression"
+    ]
   },
   "表情\\【光辉】【表情】小雌鬼.safetensors": {
     "nickname": "小雌鬼",
@@ -354,7 +717,10 @@
     "compatibleModels": [
       "光辉系列"
     ],
-    "recommendedStrength": 0.8
+    "recommendedStrength": 0.8,
+    "styleTags": [
+      "expression"
+    ]
   },
   "表情\\【光辉】【表情】惊恐.safetensors": {
     "nickname": "惊恐",
@@ -368,7 +734,10 @@
     "compatibleModels": [
       "光辉系列"
     ],
-    "recommendedStrength": 0.8
+    "recommendedStrength": 0.8,
+    "styleTags": [
+      "expression"
+    ]
   },
   "表情\\【光辉】【表情】捏脸.safetensors": {
     "nickname": "捏脸",
@@ -382,7 +751,10 @@
     "compatibleModels": [
       "光辉系列"
     ],
-    "recommendedStrength": 0.8
+    "recommendedStrength": 0.8,
+    "styleTags": [
+      "expression"
+    ]
   },
   "表情\\【光辉】【表情】涩涩.safetensors": {
     "nickname": "涩涩表情包",
@@ -396,7 +768,10 @@
     "compatibleModels": [
       "光辉系列"
     ],
-    "recommendedStrength": 0.8
+    "recommendedStrength": 0.8,
+    "styleTags": [
+      "expression"
+    ]
   },
   "表情\\【光辉】【表情】阿嘿颜.safetensors": {
     "nickname": "阿嘿颜",
@@ -410,7 +785,10 @@
     "compatibleModels": [
       "光辉系列"
     ],
-    "recommendedStrength": 0.8
+    "recommendedStrength": 0.8,
+    "styleTags": [
+      "expression"
+    ]
   },
   "表情\\【PONY】【表情】掌掴.safetensors": {
     "nickname": "掌掴",
@@ -424,30 +802,104 @@
     "compatibleModels": [
       "PONY系列"
     ],
-    "recommendedStrength": 0.8
+    "recommendedStrength": 0.8,
+    "styleTags": [
+      "expression"
+    ]
   },
   "角色\\【光辉】【角色】菲谢尔.safetensors": {
     "nickname": "菲谢尔(原神)",
     "triggerWords": "gcs_fischl, green eyes, white eyepatch, eyepatch, blonde hair, two side up, black hair ribbon, x hair ornament, black nails, black jacket, open jacket, white shirt, purple skirt, purple necktie, detached collar, black thighhighs, asymmetrical legwear, thigh strap, collar, black loafers",
     "thumbnail": "1d14d33c-5ace-4c9e-87ab-58a42b55ff5b.png",
-    "category": "角色"
+    "category": "角色",
+    "keywords": [
+      "菲谢尔",
+      "原神",
+      "光辉",
+      "角色",
+      "gcs_fischl"
+    ],
+    "description": "角色LoRA - 菲谢尔(原神)，光辉系列适配",
+    "compatibleModels": [
+      "光辉"
+    ],
+    "recommendedStrength": 0.8,
+    "styleTags": [
+      "character",
+      "genshin"
+    ]
   },
   "风格\\【光辉】【风格】PowerPuffMix.safetensors": {
-    "nickname": "PowerPuffMix"
+    "nickname": "PowerPuffMix",
+    "keywords": [
+      "PowerPuffMix",
+      "光辉",
+      "风格"
+    ],
+    "description": "风格LoRA - PowerPuffMix，光辉系列适配",
+    "compatibleModels": [
+      "光辉"
+    ],
+    "recommendedStrength": 0.7,
+    "styleTags": [
+      "style"
+    ]
   },
   "风格\\【光辉】【风格】明暗滑块.safetensors": {
     "nickname": "明暗滑块",
-    "triggerWords": "dark, late night, blue hour"
+    "triggerWords": "dark, late night, blue hour",
+    "keywords": [
+      "明暗滑块",
+      "光辉",
+      "风格",
+      "dark"
+    ],
+    "description": "风格LoRA - 明暗滑块，光辉系列适配",
+    "compatibleModels": [
+      "光辉"
+    ],
+    "recommendedStrength": 0.7,
+    "styleTags": [
+      "style"
+    ]
   },
   "风格\\【光辉】【风格】鬼刀.safetensors": {
     "nickname": "鬼刀",
-    "triggerWords": "wlop"
+    "triggerWords": "wlop",
+    "keywords": [
+      "鬼刀",
+      "光辉",
+      "风格",
+      "wlop"
+    ],
+    "description": "风格LoRA - 鬼刀，光辉系列适配",
+    "compatibleModels": [
+      "光辉"
+    ],
+    "recommendedStrength": 0.7,
+    "styleTags": [
+      "style"
+    ]
   },
   "姿势\\【PONY】【姿势】抬腿壁尻.safetensors": {
     "triggerWords": "glorylegup, bound legs, through wall,legs up,photo_(object),bdsm",
     "nickname": "抬腿壁尻",
     "thumbnail": "dff22e6a-32df-4f1d-ade1-777153def2a1.png",
-    "category": "姿势"
+    "category": "姿势",
+    "keywords": [
+      "抬腿壁尻",
+      "PONY",
+      "姿势",
+      "glorylegup"
+    ],
+    "description": "姿势LoRA - 抬腿壁尻，PONY系列适配",
+    "compatibleModels": [
+      "PONY"
+    ],
+    "recommendedStrength": 0.7,
+    "styleTags": [
+      "pose"
+    ]
   },
   "角色\\【IL】【角色】GawrGura.safetensors": {
     "nickname": "噶呜·古拉(鲨鱼娘)",
@@ -460,37 +912,123 @@
       "古拉",
       "鲨鱼娘"
     ],
-    "recommendedStrength": 0.8
+    "recommendedStrength": 0.8,
+    "compatibleModels": [
+      "IL"
+    ],
+    "styleTags": [
+      "character"
+    ]
   },
   "角色\\【IL】【角色】探灵直播櫻井奈奈.safetensors": {
     "triggerWords": "sakurai nana,1girl,solo,skirt,twintails,shirt,red eyes,white shirt,red hair,long sleeves,white socks,socks,bow,black footwear,bobby socks,black bow,black skirt,shoes,striped skirt,black ribbon,ribbon,striped clothes,vertical-striped clothes,vertical-striped skirt,hair bow,frills,frilled socks,neck ribbon,mary janes,",
     "nickname": "櫻井奈奈(探灵直播)",
     "thumbnail": "eb7361ce-35e9-4298-9e8d-d7b771a74054.png",
-    "category": "角色"
+    "category": "角色",
+    "keywords": [
+      "櫻井奈奈",
+      "探灵直播",
+      "IL",
+      "角色",
+      "sakurai nana"
+    ],
+    "description": "角色LoRA - 櫻井奈奈(探灵直播)，IL系列适配",
+    "compatibleModels": [
+      "IL"
+    ],
+    "recommendedStrength": 0.8,
+    "styleTags": [
+      "character",
+      "ghost_hunter"
+    ]
   },
   "角色\\【IL】【角色】探灵直播白石梓.safetensors": {
     "triggerWords": "Shiraishi Azusa,1girl,solo,black hair,denim jacket,skirt,breasts,jacket,cleavage,purple eyes,shirt,white shirt,black skirt,long hair,boots,blue jacket,long sleeves,miniskirt,ponytail,pencil skirt,black footwear,open clothes,denim,open jacket,collarbone,",
     "nickname": "白石梓(探灵直播)",
     "thumbnail": "f4ce7e7d-95e1-4ce9-9fb6-bcf238747f9d.png",
-    "category": "角色"
+    "category": "角色",
+    "keywords": [
+      "白石梓",
+      "探灵直播",
+      "IL",
+      "角色",
+      "Shiraishi Azusa"
+    ],
+    "description": "角色LoRA - 白石梓(探灵直播)，IL系列适配",
+    "compatibleModels": [
+      "IL"
+    ],
+    "recommendedStrength": 0.8,
+    "styleTags": [
+      "character",
+      "ghost_hunter"
+    ]
   },
   "角色\\【IL】【角色】魔女的复仇之夜 阿拉迪亚.safetensors": {
     "triggerWords": "mai_aradia,mature_female,aged_up,black_hair,yellow_eyes,braid,gradient_hair,large_breasts,blue_dress,white_shirt,bowtie,underbust,frills,bare_shoulders,white_thighhighs,garter_strap,black_thigh_boots",
     "nickname": "阿拉迪亚I(魔女的复仇之夜)",
     "thumbnail": "ab3f0dcc-14ce-443c-a0a8-30a807b6c9e2.png",
-    "category": "角色"
+    "category": "角色",
+    "keywords": [
+      "阿拉迪亚I",
+      "魔女的复仇之夜",
+      "IL",
+      "角色",
+      "mai_aradia"
+    ],
+    "description": "角色LoRA - 阿拉迪亚I(魔女的复仇之夜)，IL系列适配",
+    "compatibleModels": [
+      "IL"
+    ],
+    "recommendedStrength": 0.8,
+    "styleTags": [
+      "character",
+      "witch_revenge"
+    ]
   },
   "角色\\【IL】【角色】王者荣耀安琪拉.safetensors": {
     "triggerWords": "anqila,headphones,white shirt,sailor collar,hair ornament,short sleeves,fake animal ears",
     "nickname": "安琪拉(王者荣耀)",
     "thumbnail": "93a4ff51-3e99-4266-a80d-257c2548fd55.png",
-    "category": "角色"
+    "category": "角色",
+    "keywords": [
+      "安琪拉",
+      "王者荣耀",
+      "IL",
+      "角色",
+      "anqila"
+    ],
+    "description": "角色LoRA - 安琪拉(王者荣耀)，IL系列适配",
+    "compatibleModels": [
+      "IL"
+    ],
+    "recommendedStrength": 0.8,
+    "styleTags": [
+      "character",
+      "honor_of_kings"
+    ]
   },
   "角色\\【IL】【角色】原神Sandrone.safetensors": {
     "triggerWords": "sandrone \\(genshin impact\\), brown hair, blue eyes, maid headdress",
     "nickname": "桑多涅(原神)",
     "thumbnail": "d50e7859-f3a1-4ac6-b37f-d577d7c86f6b.png",
-    "category": "角色"
+    "category": "角色",
+    "keywords": [
+      "桑多涅",
+      "原神",
+      "IL",
+      "角色",
+      "sandrone \\(genshin impact\\)"
+    ],
+    "description": "角色LoRA - 桑多涅(原神)，IL系列适配",
+    "compatibleModels": [
+      "IL"
+    ],
+    "recommendedStrength": 0.8,
+    "styleTags": [
+      "character",
+      "genshin"
+    ]
   },
   "角色\\【IL】【角色】Lane-HakuhouAzu.safetensors": {
     "thumbnail": "05b3857d-1162-4267-9314-b587029b40e8.png",
@@ -498,24 +1036,84 @@
     "category": "角色",
     "triggerWords": "hakuhou \\(azur lane\\), long hair, bare shoulders, black sash,  hair between eyes,  japanese clothes, kimono,  long hair between eyes, long sleeves, white mask, mask on head, pantyhose,  white hair, white kimono, white pantyhose, wide sleeves, yellow eyes",
     "description": "HakuhouAzu(Lane) (角色)",
-    "recommendedStrength": 0.8
+    "recommendedStrength": 0.8,
+    "keywords": [
+      "HakuhouAzu",
+      "Lane",
+      "IL",
+      "角色",
+      "hakuhou \\(azur lane\\)"
+    ],
+    "compatibleModels": [
+      "IL"
+    ],
+    "styleTags": [
+      "character"
+    ]
   },
   "角色\\【IL】【角色】碧蓝档案ImashinoMisaki.safetensors": {
     "thumbnail": "7477faa9-b9de-4e3c-9dfd-bb047674217a.png",
     "triggerWords": "misakiBA, red eyes, brown hair,short hair,halo,  red eyes",
     "nickname": "美咲(碧蓝档案)",
-    "category": "角色"
+    "category": "角色",
+    "keywords": [
+      "美咲",
+      "碧蓝档案",
+      "IL",
+      "角色",
+      "misakiBA"
+    ],
+    "description": "角色LoRA - 美咲(碧蓝档案)，IL系列适配",
+    "compatibleModels": [
+      "IL"
+    ],
+    "recommendedStrength": 0.8,
+    "styleTags": [
+      "character",
+      "blue_archive"
+    ]
   },
   "角色\\【IL】【角色】碧蓝档案全集.safetensors": {
     "triggerWords": "yuzudef, yuukadef, yoshimidef, wakamodef, uidef, tsurugidef, tsukuyodef, tsubakidef, tokidef, saoridef, miyudef, mikadef, maridef, kokonadef, koharudef, shizukodef, shirokodef, shiguredef, serinadef, serikadef, senadef, sayadef, sakurakodef, sakidef, nonomidef, nerudef, natsudef, nagisadef, mutsukidef, momokadef, momoidef, moedef, miyakodef, misakidef, minedef, mimoridef, midoridef, michirudef, megudef, mashirodef, marinadef, makidef, koyukidef, kotoridef, kazusadef, kayokodef, karindef, kannadef, kahodef, kaededef, junkodef, izunadef, izumidef, irohadef, ioridef, hoshinodef, hiyoridef, hinatadef, hinadef, himaridef, hifumidef, hibikidef, hasumidef, harunadef, harukadef, haredef, hanakodef, hanaedef, fuukadef, fubukidef, eimidef, chisedef, chinatsudef, chihirodef, cherinodef, azusadef, ayanedef, atsukodef, asunadef, arudef, akaridef, airidef, shundef, arisdef, akodef, akanedef",
     "nickname": "碧蓝档案全集",
-    "category": "角色"
+    "category": "角色",
+    "keywords": [
+      "碧蓝档案全集",
+      "IL",
+      "角色",
+      "yuzudef"
+    ],
+    "description": "角色LoRA - 碧蓝档案全集，IL系列适配",
+    "compatibleModels": [
+      "IL"
+    ],
+    "recommendedStrength": 0.8,
+    "styleTags": [
+      "character",
+      "blue_archive"
+    ]
   },
   "角色\\【IL】【角色】碧蓝档案霞沢美游.safetensors": {
     "triggerWords": "miyu \\(blue archive\\), 1girl,halo,leaf on head, ahoge,animal ears,black hair,long hair,red eyes,green neckerchief,blue school uniform,sailor collar,long sleeves,pleated skirt,white pantyhose, trash can, in contain",
     "nickname": "霞沢美游(碧蓝档案)",
     "thumbnail": "756d467e-0fb6-471c-a287-ad3f09fb8baf.png",
-    "category": "角色"
+    "category": "角色",
+    "keywords": [
+      "霞沢美游",
+      "碧蓝档案",
+      "IL",
+      "角色",
+      "miyu \\(blue archive\\)"
+    ],
+    "description": "角色LoRA - 霞沢美游(碧蓝档案)，IL系列适配",
+    "compatibleModels": [
+      "IL"
+    ],
+    "recommendedStrength": 0.8,
+    "styleTags": [
+      "character",
+      "blue_archive"
+    ]
   },
   "姿势\\【IL】【姿势】战败.safetensors": {
     "triggerWords": "defeated_heroine, defeated_heroine,top-down bottom-up, defeated_heroine,top-down bottom-up, (from behind:1.6)",
@@ -526,48 +1124,151 @@
     "keywords": [
       "战败"
     ],
-    "recommendedStrength": 0.8
+    "recommendedStrength": 0.8,
+    "compatibleModels": [
+      "IL"
+    ],
+    "styleTags": [
+      "pose"
+    ]
   },
   "姿势\\【IL】【姿势】食品插入.safetensors": {
     "thumbnail": "bcaf6d0c-034a-4e91-b10b-9e4b66e799c0.png",
     "nickname": "食品插入",
-    "category": "姿势"
+    "category": "姿势",
+    "keywords": [
+      "食品插入",
+      "IL",
+      "姿势"
+    ],
+    "description": "姿势LoRA - 食品插入，IL系列适配",
+    "compatibleModels": [
+      "IL"
+    ],
+    "recommendedStrength": 0.7,
+    "styleTags": [
+      "pose"
+    ]
   },
   "姿势\\【IL】【姿势】战败事后.safetensors": {
     "thumbnail": "2b848b2f-bf9b-44a8-a377-4fdebdbc7844.png",
     "triggerWords": "after sex, bukkake",
     "nickname": "战败事后",
-    "category": "姿势"
+    "category": "姿势",
+    "keywords": [
+      "战败事后",
+      "IL",
+      "姿势",
+      "after sex"
+    ],
+    "description": "姿势LoRA - 战败事后，IL系列适配",
+    "compatibleModels": [
+      "IL"
+    ],
+    "recommendedStrength": 0.7,
+    "styleTags": [
+      "pose"
+    ]
   },
   "姿势\\【IL】【姿势】中指.safetensors": {
     "thumbnail": "6bd53aeb-15e9-4961-90ef-351a46ce732b.png",
     "nickname": "中指",
     "triggerWords": "middle finger, fuck you",
-    "category": "姿势"
+    "category": "姿势",
+    "keywords": [
+      "中指",
+      "IL",
+      "姿势",
+      "middle finger"
+    ],
+    "description": "姿势LoRA - 中指，IL系列适配",
+    "compatibleModels": [
+      "IL"
+    ],
+    "recommendedStrength": 0.7,
+    "styleTags": [
+      "pose"
+    ]
   },
   "姿势\\【IL】【姿势】足交.safetensors": {
     "thumbnail": "eab011c7-ea3c-4529-bab2-66f843cd6f10.png",
     "nickname": "足交",
     "triggerWords": "toes_grasp_penis, foot job",
-    "category": "姿势"
+    "category": "姿势",
+    "keywords": [
+      "足交",
+      "IL",
+      "姿势",
+      "toes_grasp_penis"
+    ],
+    "description": "姿势LoRA - 足交，IL系列适配",
+    "compatibleModels": [
+      "IL"
+    ],
+    "recommendedStrength": 0.7,
+    "styleTags": [
+      "pose"
+    ]
   },
   "姿势\\【IL】【姿势】韩国手势.safetensors": {
     "triggerWords": "sph gesture, pinching gesture, hand up",
     "nickname": "韩国手势",
     "thumbnail": "0b9d92d0-13db-4c83-8204-2e755cb26b39.png",
-    "category": "姿势"
+    "category": "姿势",
+    "keywords": [
+      "韩国手势",
+      "IL",
+      "姿势",
+      "sph gesture"
+    ],
+    "description": "姿势LoRA - 韩国手势，IL系列适配",
+    "compatibleModels": [
+      "IL"
+    ],
+    "recommendedStrength": 0.7,
+    "styleTags": [
+      "pose"
+    ]
   },
   "姿势\\【IL】【姿势】闻鞋.safetensors": {
     "thumbnail": "2e029cb4-6f46-4b16-9157-3208ee91dc3f.png",
     "triggerWords": "smelling_own_shoe,  holding_smelly_shoe, shoes removed, smell, sweat, shiny skin, half-closed eyes, breath",
     "nickname": "闻鞋",
-    "category": "姿势"
+    "category": "姿势",
+    "keywords": [
+      "闻鞋",
+      "IL",
+      "姿势",
+      "smelling_own_shoe"
+    ],
+    "description": "姿势LoRA - 闻鞋，IL系列适配",
+    "compatibleModels": [
+      "IL"
+    ],
+    "recommendedStrength": 0.7,
+    "styleTags": [
+      "pose"
+    ]
   },
   "姿势\\【IL】【姿势】足底按摩.safetensors": {
     "triggerWords": "foot massage",
     "nickname": "足底按摩",
     "category": "姿势",
-    "thumbnail": "0fe88f1e-b444-4287-97f8-7ca7806ef6d4.png"
+    "thumbnail": "0fe88f1e-b444-4287-97f8-7ca7806ef6d4.png",
+    "keywords": [
+      "足底按摩",
+      "IL",
+      "姿势",
+      "foot massage"
+    ],
+    "description": "姿势LoRA - 足底按摩，IL系列适配",
+    "compatibleModels": [
+      "IL"
+    ],
+    "recommendedStrength": 0.7,
+    "styleTags": [
+      "pose"
+    ]
   },
   "姿势\\【IL】【姿势】自射.safetensors": {
     "triggerWords": "self facial,cum on face, cumming from masturbation,",
@@ -578,19 +1279,53 @@
     "keywords": [
       "自射"
     ],
-    "recommendedStrength": 0.8
+    "recommendedStrength": 0.8,
+    "compatibleModels": [
+      "IL"
+    ],
+    "styleTags": [
+      "pose"
+    ]
   },
   "姿势\\【IL】【姿势】桌下足交.safetensors": {
     "thumbnail": "b2928a1c-ae18-43f7-bec8-305f9f8761fe.png",
     "nickname": "桌下足交",
     "triggerWords": "footjob under table, footjob over clothes, pov, two-footed footjob, footjob",
-    "category": "姿势"
+    "category": "姿势",
+    "keywords": [
+      "桌下足交",
+      "IL",
+      "姿势",
+      "footjob under table"
+    ],
+    "description": "姿势LoRA - 桌下足交，IL系列适配",
+    "compatibleModels": [
+      "IL"
+    ],
+    "recommendedStrength": 0.7,
+    "styleTags": [
+      "pose"
+    ]
   },
   "姿势\\【IL】【姿势】啃咬下体.safetensors": {
     "triggerWords": "biting penis,bite mark",
     "nickname": "啃咬下体",
     "category": "姿势",
-    "thumbnail": "f8b634ae-85cf-4ecf-91a0-92bfd831d45e.png"
+    "thumbnail": "f8b634ae-85cf-4ecf-91a0-92bfd831d45e.png",
+    "keywords": [
+      "啃咬下体",
+      "IL",
+      "姿势",
+      "biting penis"
+    ],
+    "description": "姿势LoRA - 啃咬下体，IL系列适配",
+    "compatibleModels": [
+      "IL"
+    ],
+    "recommendedStrength": 0.7,
+    "styleTags": [
+      "pose"
+    ]
   },
   "多视图\\【PONY】【多视图】多视角.safetensors": {
     "thumbnail": "01a63eb7-7754-4f5d-ae32-2dbce9504e2c.png",
@@ -604,36 +1339,102 @@
     "compatibleModels": [
       "PONY系列"
     ],
-    "recommendedStrength": 0.8
+    "recommendedStrength": 0.8,
+    "styleTags": [
+      "pose"
+    ]
   },
   "PONY-PonyDiffusionV6XL.safetensors": {
     "thumbnail": "524f391d-86c2-4f43-8f99-21f922ce9246.png",
     "nickname": "PONY-PonyDiffusionV6XL",
-    "category": "PONY"
+    "category": "PONY",
+    "keywords": [
+      "PONY-PonyDiffusionV6XL"
+    ],
+    "description": "基础模型 - PONY-PonyDiffusionV6XL",
+    "styleTags": []
   },
   "角色\\【PONY】【角色】魔女的复仇之夜 阿拉迪亚.safetensors": {
     "triggerWords": "Aradia，Black hair , yellow eyes , braid , gradient hair / two-tone hair ，default costume，Blue dress , white shirt , ( color ) bowtie , underbust , frills , bare shoulders / clothing cutout , white thighhighs , garter strap , thigh boots",
     "nickname": "阿拉迪亚II(魔女的复仇之夜)",
     "thumbnail": "50f71aab-1ace-4cfb-8a4f-8de1ff10b3db.png",
-    "category": "角色"
+    "category": "角色",
+    "keywords": [
+      "阿拉迪亚II",
+      "魔女的复仇之夜",
+      "PONY",
+      "角色",
+      "Aradia，Black hair"
+    ],
+    "description": "角色LoRA - 阿拉迪亚II(魔女的复仇之夜)，PONY系列适配",
+    "compatibleModels": [
+      "PONY"
+    ],
+    "recommendedStrength": 0.8,
+    "styleTags": [
+      "character",
+      "witch_revenge"
+    ]
   },
   "姿势\\【IL】【姿势】股绳.safetensors": {
     "triggerWords": "rope walking",
     "nickname": "股绳",
     "category": "姿势",
-    "thumbnail": "65660b56-f317-4991-a0dc-00f58fd9e9c0.png"
+    "thumbnail": "65660b56-f317-4991-a0dc-00f58fd9e9c0.png",
+    "keywords": [
+      "股绳",
+      "IL",
+      "姿势",
+      "rope walking"
+    ],
+    "description": "姿势LoRA - 股绳，IL系列适配",
+    "compatibleModels": [
+      "IL"
+    ],
+    "recommendedStrength": 0.7,
+    "styleTags": [
+      "pose"
+    ]
   },
   "姿势\\【IL】【姿势】浣肠.safetensors": {
     "triggerWords": "enema, syringe enema, alcohol enema, bubble tea enema",
     "nickname": "浣肠",
     "category": "姿势",
-    "thumbnail": "ad5ec2fb-3925-4b35-9ce7-52b066e7aa8c.png"
+    "thumbnail": "ad5ec2fb-3925-4b35-9ce7-52b066e7aa8c.png",
+    "keywords": [
+      "浣肠",
+      "IL",
+      "姿势",
+      "enema"
+    ],
+    "description": "姿势LoRA - 浣肠，IL系列适配",
+    "compatibleModels": [
+      "IL"
+    ],
+    "recommendedStrength": 0.7,
+    "styleTags": [
+      "pose"
+    ]
   },
   "姿势\\【IL】【姿势】昏迷.safetensors": {
     "thumbnail": "cf119c5c-9289-42c1-a091-bd1bab18323e.png",
     "nickname": "昏迷",
     "triggerWords": "DefeatPoseIL, 1girl, solo, unconscious, defeat, lying, on back, spread legs, torn clothes, bruise",
-    "category": "姿势"
+    "category": "姿势",
+    "keywords": [
+      "昏迷",
+      "IL",
+      "姿势",
+      "DefeatPoseIL"
+    ],
+    "description": "姿势LoRA - 昏迷，IL系列适配",
+    "compatibleModels": [
+      "IL"
+    ],
+    "recommendedStrength": 0.7,
+    "styleTags": [
+      "pose"
+    ]
   },
   "角色\\【IL】【角色】鸣潮Lynae.safetensors": {
     "triggerWords": "lynae \\(wuthering waves\\), blonde hair, long hair,skull hair ornament, earrings,purple eyes,gyaru,braid,multicolored hair",
@@ -645,50 +1446,165 @@
       "琳奈",
       "鸣潮"
     ],
-    "recommendedStrength": 0.8
+    "recommendedStrength": 0.8,
+    "compatibleModels": [
+      "IL"
+    ],
+    "styleTags": [
+      "character",
+      "wuthering_waves"
+    ]
   },
   "角色\\【IL】【角色】碧蓝档案Maia.safetensors": {
     "thumbnail": "be2e443b-d1a2-4462-b3d8-47d136eeeeba.png",
     "nickname": "Maia(碧蓝档案)",
     "category": "角色",
-    "triggerWords": "maia \\(blue archive\\), ahoge, angry,  blue eyes, blue halo, twin braids, white hair,medium breasts"
+    "triggerWords": "maia \\(blue archive\\), ahoge, angry,  blue eyes, blue halo, twin braids, white hair,medium breasts",
+    "keywords": [
+      "Maia",
+      "碧蓝档案",
+      "IL",
+      "角色",
+      "maia \\(blue archive\\)"
+    ],
+    "description": "角色LoRA - Maia(碧蓝档案)，IL系列适配",
+    "compatibleModels": [
+      "IL"
+    ],
+    "recommendedStrength": 0.8,
+    "styleTags": [
+      "character",
+      "blue_archive"
+    ]
   },
   "角色\\【IL】【角色】绝区零ellenJoe.safetensors": {
     "nickname": "艾莲·乔(绝区零)",
     "triggerWords": "ellenJoeZzz, red eyes,short hair, hair ornament,shark tail",
     "category": "角色",
-    "thumbnail": "4b4b87f3-efc1-4c30-a0c3-b1c7a68c9af8.png"
+    "thumbnail": "4b4b87f3-efc1-4c30-a0c3-b1c7a68c9af8.png",
+    "keywords": [
+      "艾莲·乔",
+      "绝区零",
+      "IL",
+      "角色",
+      "ellenJoeZzz"
+    ],
+    "description": "角色LoRA - 艾莲·乔(绝区零)，IL系列适配",
+    "compatibleModels": [
+      "IL"
+    ],
+    "recommendedStrength": 0.8,
+    "styleTags": [
+      "character",
+      "zenless"
+    ]
   },
   "角色\\【IL】【角色】绝区零UkinamiYuzuha.safetensors": {
     "nickname": "浮波柚叶(绝区零)",
     "category": "角色",
-    "thumbnail": "2746f353-dc0a-40ae-bd04-0345ab46e1ab.png"
+    "thumbnail": "2746f353-dc0a-40ae-bd04-0345ab46e1ab.png",
+    "keywords": [
+      "浮波柚叶",
+      "绝区零",
+      "IL",
+      "角色"
+    ],
+    "description": "角色LoRA - 浮波柚叶(绝区零)，IL系列适配",
+    "compatibleModels": [
+      "IL"
+    ],
+    "recommendedStrength": 0.8,
+    "styleTags": [
+      "character",
+      "zenless"
+    ]
   },
   "角色\\【IL】【角色】终末地全集.safetensors": {
     "nickname": "终末地全集",
     "triggerWords": "zhuang_fangyi_(arknights), yvonne_(arknights), xaihi_(arknights), rossi_(arknights), perlica_(arknights), male_endministrator_(arknights), lifeng_(arknights), last_rite_(arknights), laevatein_(arknights), gilberta_(arknights), fluorite_(arknights), female_endministrator_(arknights), estella_(arknights), ember_(arknights), chen_qianyu_(arknights)",
     "thumbnail": "c998a715-dc63-40d0-bdd3-33650fd1fed5.png",
-    "category": "角色"
+    "category": "角色",
+    "keywords": [
+      "终末地全集",
+      "IL",
+      "角色",
+      "zhuang_fangyi_(arknights)"
+    ],
+    "description": "角色LoRA - 终末地全集，IL系列适配",
+    "compatibleModels": [
+      "IL"
+    ],
+    "recommendedStrength": 0.8,
+    "styleTags": [
+      "character",
+      "arknights_endfield"
+    ]
   },
   "姿势\\【IL】【姿势】射鞋.safetensors": {
     "nickname": "射鞋",
     "triggerWords": "shoe_job, loafers",
     "thumbnail": "71c041ed-c5c2-4824-a726-f8596f233634.png",
-    "category": "姿势"
+    "category": "姿势",
+    "keywords": [
+      "射鞋",
+      "IL",
+      "姿势",
+      "shoe_job"
+    ],
+    "description": "姿势LoRA - 射鞋，IL系列适配",
+    "compatibleModels": [
+      "IL"
+    ],
+    "recommendedStrength": 0.7,
+    "styleTags": [
+      "pose"
+    ]
   },
   "姿势\\【PONY】【姿势】怼脸后入.safetensors": {
     "nickname": "怼脸后入",
     "triggerWords": "doggystyle-facing-viewer, top-down bottom-up,sex from behind",
     "thumbnail": "b8ec1c95-b896-4216-9248-fefbb0a297d6.png",
-    "category": "姿势"
+    "category": "姿势",
+    "keywords": [
+      "怼脸后入",
+      "PONY",
+      "姿势",
+      "doggystyle-facing-viewer"
+    ],
+    "description": "姿势LoRA - 怼脸后入，PONY系列适配",
+    "compatibleModels": [
+      "PONY"
+    ],
+    "recommendedStrength": 0.7,
+    "styleTags": [
+      "pose"
+    ]
   },
   "脱裤魔.safetensors": {
-    "recommendedStrength": 0.8
+    "recommendedStrength": 0.8,
+    "keywords": [],
+    "description": "未分类LoRA - 脱裤魔",
+    "compatibleModels": [
+      "通用"
+    ],
+    "styleTags": []
   },
   "Qwen-style\\PanelPainter_v3_Qwen2511.safetensors": {
-    "recommendedStrength": 0.8
+    "recommendedStrength": 0.8,
+    "keywords": [],
+    "description": "未分类LoRA - PanelPainter_v3_Qwen2511",
+    "compatibleModels": [
+      "通用"
+    ],
+    "styleTags": []
   },
   "20251221-0734-vag_000004200.safetensors": {
-    "recommendedStrength": 0.8
+    "recommendedStrength": 0.8,
+    "keywords": [],
+    "description": "未分类LoRA - 20251221-0734-vag_000004200",
+    "compatibleModels": [
+      "通用"
+    ],
+    "styleTags": []
   }
 }

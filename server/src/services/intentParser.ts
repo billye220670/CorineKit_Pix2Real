@@ -1,5 +1,7 @@
 // ── 意图解析器 ─ 将 LLM Function Calling 结果映射为工作流参数 ─────────────
 
+import type { UserPreferenceProfile } from './profileService.js';
+
 export interface ParsedIntent {
   taskType: 'generate' | 'process';
   workflowId: number;
@@ -83,15 +85,71 @@ export function findMatchingLoras(
 // 最低匹配分数阈值：低于此值的 LoRA 视为不相关
 const MATCH_SCORE_THRESHOLD = 5;
 
+// ── 分类默认强度 ───────────────────────────────────────────────────────────────
+
+function getDefaultStrength(category?: string): number {
+  const map: Record<string, number> = {
+    '角色': 0.8, '姿势': 0.7, '表情': 0.65, '风格': 0.6,
+    '性别': 0.7, '多视角': 0.7, '滑块': 0.5,
+  };
+  return map[category || ''] || 0.7;
+}
+
+// ── 分类去重 ─────────────────────────────────────────────────────────────────
+
+const CATEGORY_LIMITS: Record<string, number> = {
+  '角色': 1,
+  '姿势': 1,
+  '表情': 1,
+  '风格': 1,
+  '性别': 1,
+  '多视角': 1,
+  '滑块': 1,
+};
+
+function deduplicateByCategory(
+  results: Array<{ model: string; strength: number; score: number; category?: string }>,
+): Array<{ model: string; strength: number }> {
+  const categoryCount: Record<string, number> = {};
+  const deduped: Array<{ model: string; strength: number }> = [];
+
+  for (const r of results) {
+    const cat = r.category || '其他';
+    const limit = CATEGORY_LIMITS[cat] || 1;
+    categoryCount[cat] = categoryCount[cat] || 0;
+
+    if (categoryCount[cat] < limit) {
+      deduped.push({ model: r.model, strength: r.strength });
+      categoryCount[cat]++;
+    }
+
+    if (deduped.length >= 5) break;
+  }
+
+  return deduped;
+}
+
+// ── 意图上下文：LLM Function Calling 已明确指定的维度 ──────────────────────
+
+export interface IntentContext {
+  specifiedCharacter?: string;
+  specifiedPose?: string;
+  specifiedStyle?: string;
+}
+
+// ── findMatchingLorasFromPrompt ─────────────────────────────────────────────
+
 export function findMatchingLorasFromPrompt(
   prompt: string,
   keywords: string[],
   metadata: any,
+  userProfile?: UserPreferenceProfile,
+  intentContext?: IntentContext,
 ): Array<{ model: string; strength: number }> {
   if (!prompt) return [];
   const promptLower = prompt.toLowerCase();
   const lowerKeywords = keywords.filter((k) => k).map((k) => k.toLowerCase());
-  const matches: Array<{ model: string; strength: number; score: number }> = [];
+  const matches: Array<{ model: string; strength: number; score: number; category?: string }> = [];
 
   for (const [filePath, meta] of Object.entries(metadata)) {
     if (!meta || typeof meta !== 'object') continue;
@@ -161,8 +219,8 @@ export function findMatchingLorasFromPrompt(
     }
 
     // 4. 文件路径中的名称 vs keywords
+    const fileName = filePath.split(/[\\/]/).pop()?.replace('.safetensors', '') ?? '';
     if (lowerKeywords.length > 0) {
-      const fileName = filePath.split(/[\\/]/).pop()?.replace('.safetensors', '') ?? '';
       for (const kw of lowerKeywords) {
         if (kw && fileName.toLowerCase().includes(kw)) {
           score += 6;
@@ -180,24 +238,28 @@ export function findMatchingLorasFromPrompt(
       }
     }
 
+    // 注：推荐完全基于 prompt 匹配，不混入画像偏好加分
+
     if (score >= MATCH_SCORE_THRESHOLD) {
+      // 使用元数据 recommendedStrength，回退到分类默认强度
+      const strength = (m.recommendedStrength as number) || getDefaultStrength(m.category);
       matches.push({
         model: filePath,
-        strength: (m.recommendedStrength as number) ?? 0.8,
+        strength,
         score,
+        category: m.category || undefined,
       });
     }
   }
 
-  return matches
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 5)
-    .map(({ model, strength }) => ({ model, strength }));
+  // 按分数排序后进行分类去重
+  matches.sort((a, b) => b.score - a.score);
+  return deduplicateByCategory(matches);
 }
 
 // ── 工具调用解析 ─────────────────────────────────────────────────────────────
 
-export function parseToolCall(toolCall: any, metadata: any): ParsedIntent {
+export function parseToolCall(toolCall: any, metadata: any, userProfile?: UserPreferenceProfile): ParsedIntent {
   const fnName: string = toolCall.function?.name ?? '';
   let args: Record<string, any> = {};
   try {
@@ -207,18 +269,19 @@ export function parseToolCall(toolCall: any, metadata: any): ParsedIntent {
   }
 
   if (fnName === 'generate_image') {
-    return parseGenerateImage(args, metadata);
+    return parseGenerateImage(args, metadata, userProfile);
   } else if (fnName === 'process_image') {
     return parseProcessImage(args, metadata);
   }
 
   // 未知工具 — 回退为文生图
-  return parseGenerateImage(args, metadata);
+  return parseGenerateImage(args, metadata, userProfile);
 }
 
 function parseGenerateImage(
   args: Record<string, any>,
   metadata: any,
+  userProfile?: UserPreferenceProfile,
 ): ParsedIntent {
   const prompt: string = args.prompt ?? '';
   const negativePrompt: string = args.negative_prompt ?? '';
@@ -233,11 +296,18 @@ function parseGenerateImage(
   if (pose) searchKeywords.push(pose);
   if (style) searchKeywords.push(style);
 
+  // 构建意图上下文：记录用户已明确指定的维度，画像加权时跳过这些维度
+  const intentContext: IntentContext = {
+    specifiedCharacter: character || undefined,
+    specifiedPose: pose || undefined,
+    specifiedStyle: style || undefined,
+  };
+
   // 始终使用 prompt-based 匹配作为主逻辑（prompt 总是有的）
   // keywords 仅作为额外加分项，不作为必要条件
   let recommendedLoras: Array<{ model: string; strength: number }> = [];
   if (prompt) {
-    recommendedLoras = findMatchingLorasFromPrompt(prompt, searchKeywords, metadata);
+    recommendedLoras = findMatchingLorasFromPrompt(prompt, searchKeywords, metadata, userProfile, intentContext);
   }
   // 如果 prompt 匹配无结果但有明确关键词，用关键词兜底
   if (recommendedLoras.length === 0 && searchKeywords.length > 0) {

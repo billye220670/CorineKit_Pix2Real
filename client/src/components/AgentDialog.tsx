@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Send, Paperclip, X, AlertCircle } from 'lucide-react';
+import { Send, Paperclip, X, AlertCircle, RefreshCw, Loader2 } from 'lucide-react';
 import { useAgentStore, type ChatMessage } from '../hooks/useAgentStore.js';
 import { useWorkflowStore } from '../hooks/useWorkflowStore.js';
 
@@ -20,6 +20,9 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
   const [text, setText] = useState('');
   const [closing, setClosing] = useState(false);
   const [typingMessageId, setTypingMessageId] = useState<string | null>(null);
+  const [warmUpSuggestions, setWarmUpSuggestions] = useState<string[]>([]);
+  const [followUpSuggestions, setFollowUpSuggestions] = useState<string[]>([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -67,6 +70,28 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
     };
   }, [isOpen]);
 
+  // Reusable warm-up suggestions fetch
+  const fetchWarmUpSuggestions = useCallback(async () => {
+    setSuggestionsLoading(true);
+    try {
+      const sessionId = useWorkflowStore.getState().sessionId;
+      const res = await fetch(`/api/agent/suggestions?sessionId=${sessionId || 'default'}`);
+      const data = await res.json();
+      setWarmUpSuggestions(data.suggestions || []);
+    } catch {
+      setWarmUpSuggestions([]);
+    } finally {
+      setSuggestionsLoading(false);
+    }
+  }, []);
+
+  // Fetch warm-up suggestions when dialog opens with no messages
+  useEffect(() => {
+    if (isOpen && messages.length === 0) {
+      fetchWarmUpSuggestions();
+    }
+  }, [isOpen, messages.length]);
+
   const handleClose = useCallback(() => {
     setClosing(true);
     setTimeout(() => {
@@ -94,6 +119,10 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
 
     // Stop any in-progress typing effect
     stopTyping();
+
+    // Clear all suggestions when user sends a message
+    setWarmUpSuggestions([]);
+    setFollowUpSuggestions([]);
 
     const images = uploadedImages.map((i) => i.dataUrl);
     addMessage({
@@ -143,6 +172,12 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
         if (newMsg1) setTypingMessageId(newMsg1.id);
         // 存储 intent 供 Task 9 使用
         useAgentStore.getState().setLastIntent(data.intent);
+        // Store follow-up suggestions if present
+        if (data.suggestions?.length > 0) {
+          setFollowUpSuggestions(data.suggestions);
+        } else {
+          setFollowUpSuggestions([]);
+        }
       } else {
         // 纯文本回复
         addMessage({ role: 'assistant', content: data.message });
@@ -163,6 +198,14 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
     }
   }, [addMessage, setIsExecuting, setExecutionStatus]);
 
+  const handleSuggestionClick = useCallback((text: string) => {
+    setWarmUpSuggestions([]);
+    setFollowUpSuggestions([]);
+    // Add user message to chat
+    addMessage({ role: 'user', content: text });
+    sendMessage(text);
+  }, [sendMessage, addMessage]);
+
   const handleRetry = useCallback((errorMsg: ChatMessage) => {
     const messages = useAgentStore.getState().messages;
     const errorIndex = messages.findIndex((m) => m.id === errorMsg.id);
@@ -181,6 +224,20 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
     // 重新发送
     sendMessage(lastUserMsg.content, lastUserMsg.images);
   }, [sendMessage]);
+
+  const refreshFollowUpSuggestions = useCallback(async () => {
+    setSuggestionsLoading(true);
+    try {
+      const sessionId = useWorkflowStore.getState().sessionId;
+      const res = await fetch(`/api/agent/suggestions?sessionId=${sessionId || 'default'}`);
+      const data = await res.json();
+      setFollowUpSuggestions(data.suggestions || []);
+    } catch {
+      setFollowUpSuggestions([]);
+    } finally {
+      setSuggestionsLoading(false);
+    }
+  }, []);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -246,7 +303,7 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
         flexDirection: 'column',
         gap: 8,
       }}>
-        {messages.length === 0 && !isExecuting && (
+        {messages.length === 0 && !isExecuting && warmUpSuggestions.length === 0 && !suggestionsLoading && (
           <div style={{
             textAlign: 'center',
             color: 'var(--color-text-secondary)',
@@ -257,15 +314,34 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
             有什么可以帮你的？
           </div>
         )}
-        {messages.map((msg, index) => (
-          <MessageBubble
-            key={msg.id}
-            message={msg}
-            onRetry={handleRetry}
-            isTyping={!msg.isError && msg.role === 'assistant' && msg.id === typingMessageId}
-            onTypingComplete={() => setTypingMessageId(null)}
-            scrollRef={messagesEndRef as React.RefObject<HTMLDivElement>}
+        {messages.length === 0 && (warmUpSuggestions.length > 0 || suggestionsLoading) && (
+          <SuggestionsPanel
+            suggestions={warmUpSuggestions}
+            loading={suggestionsLoading}
+            onClickSuggestion={handleSuggestionClick}
+            onRefresh={fetchWarmUpSuggestions}
+            title="试试这些："
           />
+        )}
+        {messages.map((msg, index) => (
+          <div key={msg.id}>
+            <MessageBubble
+              message={msg}
+              onRetry={handleRetry}
+              isTyping={!msg.isError && msg.role === 'assistant' && msg.id === typingMessageId}
+              onTypingComplete={() => setTypingMessageId(null)}
+              scrollRef={messagesEndRef as React.RefObject<HTMLDivElement>}
+            />
+            {(followUpSuggestions.length > 0 || suggestionsLoading) && !typingMessageId && index === messages.length - 1 && msg.role === 'assistant' && !msg.isError && (
+              <SuggestionsPanel
+                suggestions={followUpSuggestions}
+                loading={suggestionsLoading}
+                onClickSuggestion={handleSuggestionClick}
+                onRefresh={refreshFollowUpSuggestions}
+                title="试试这些："
+              />
+            )}
+          </div>
         ))}
         {isExecuting && (
           <div style={{
@@ -591,5 +667,127 @@ function MessageBubble({ message, onRetry, isTyping, onTypingComplete, scrollRef
     }}>
       {bubble}
     </div>
+  );
+}
+
+function SuggestionsPanel({
+  suggestions,
+  loading,
+  onClickSuggestion,
+  onRefresh,
+  title,
+}: {
+  suggestions: string[];
+  loading: boolean;
+  onClickSuggestion: (text: string) => void;
+  onRefresh: () => void;
+  title?: string;
+}) {
+  return (
+    <div style={{
+      margin: '8px 0',
+      padding: '12px',
+      backgroundColor: 'rgba(255,255,255,0.03)',
+      border: '1px solid var(--color-border, rgba(255,255,255,0.1))',
+      borderRadius: 10,
+    }}>
+      {title && (
+        <div style={{
+          fontSize: 12,
+          color: 'var(--color-text-secondary, #888)',
+          marginBottom: 8,
+        }}>
+          {title}
+        </div>
+      )}
+
+      {loading ? (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '16px 0',
+          gap: 8,
+          color: 'var(--color-text-secondary, #888)',
+          fontSize: 13,
+        }}>
+          <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+          <span>正在生成建议...</span>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {suggestions.map((s, i) => (
+            <SuggestionButton key={i} text={s} onClick={() => onClickSuggestion(s)} />
+          ))}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+        <button
+          onClick={onRefresh}
+          disabled={loading}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 28,
+            height: 28,
+            padding: 0,
+            backgroundColor: 'transparent',
+            border: 'none',
+            borderRadius: 6,
+            cursor: loading ? 'not-allowed' : 'pointer',
+            color: 'var(--color-text-secondary, #888)',
+            opacity: loading ? 0.4 : 0.6,
+            transition: 'all 0.15s',
+          }}
+          onMouseEnter={(e) => {
+            if (!loading) {
+              e.currentTarget.style.opacity = '1';
+              e.currentTarget.style.backgroundColor = 'var(--color-hover, rgba(255,255,255,0.05))';
+            }
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.opacity = loading ? '0.4' : '0.6';
+            e.currentTarget.style.backgroundColor = 'transparent';
+          }}
+          title="刷新建议"
+        >
+          <RefreshCw size={14} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SuggestionButton({ text, onClick }: { text: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: 'block',
+        width: '100%',
+        padding: '8px 12px',
+        fontSize: 13,
+        color: 'var(--color-text)',
+        backgroundColor: 'transparent',
+        border: '1px solid var(--color-border)',
+        borderRadius: 8,
+        cursor: 'pointer',
+        textAlign: 'left' as const,
+        transition: 'all 0.15s',
+        lineHeight: 1.4,
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.backgroundColor = 'var(--color-hover, rgba(255,255,255,0.05))';
+        e.currentTarget.style.borderColor = 'var(--color-primary)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.backgroundColor = 'transparent';
+        e.currentTarget.style.borderColor = 'var(--color-border)';
+      }}
+    >
+      {text}
+    </button>
   );
 }
