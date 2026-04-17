@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Send, Paperclip, X, AlertCircle, RefreshCw, Loader2 } from 'lucide-react';
+import { Send, Paperclip, X, AlertCircle, RefreshCw, Loader2, ExternalLink } from 'lucide-react';
 import { useAgentStore, type ChatMessage } from '../hooks/useAgentStore.js';
 import { useWorkflowStore } from '../hooks/useWorkflowStore.js';
+import { useWebSocket } from '../hooks/useWebSocket.js';
 
 export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
   const isOpen = useAgentStore((s) => s.isDialogOpen);
@@ -16,6 +17,9 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
   const addUploadedImage = useAgentStore((s) => s.addUploadedImage);
   const removeUploadedImage = useAgentStore((s) => s.removeUploadedImage);
   const clearUploadedImages = useAgentStore((s) => s.clearUploadedImages);
+  const agentExecution = useAgentStore((s) => s.agentExecution);
+
+  const { sendMessage: wsSendMessage } = useWebSocket();
 
   const [text, setText] = useState('');
   const [closing, setClosing] = useState(false);
@@ -100,6 +104,121 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
     }, 180);
   }, [closeDialog]);
 
+  const executeAgentIntent = useCallback(async (intent: any) => {
+    const { clientId, sessionId } = useWorkflowStore.getState();
+    const { setAgentExecution } = useAgentStore.getState();
+
+    // 设置初始状态
+    setAgentExecution({
+      promptId: '',
+      workflowId: intent.workflowId || 7,
+      tabId: intent.workflowId || 7,
+      imageId: '',
+      status: 'preparing',
+      progress: 0,
+      outputs: [],
+    });
+
+    try {
+      // 调用后端执行
+      const res = await fetch('/api/agent/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ intent, clientId, sessionId }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Execution failed' }));
+        throw new Error(err.error || 'Execution failed');
+      }
+
+      const data = await res.json();
+      const { promptId, workflowId, tabId, resolvedConfig } = data;
+
+      // 在目标 Tab 创建卡片（不切换 activeTab，避免竞态条件导致 session 丢失数据）
+      const store = useWorkflowStore.getState();
+      const now = new Date();
+      const ts = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+      const itemName = `agent_${ts}`;
+
+      // addText2ImgCard / addZitCard 已硬编码写入 tab 7 / tab 9，不依赖 activeTab
+      let imageId: string;
+      if (tabId === 9) {
+        imageId = store.addZitCard({
+          unetModel: resolvedConfig.unetModel,
+          loras: resolvedConfig.loras,
+          prompt: resolvedConfig.prompt,
+          width: resolvedConfig.width,
+          height: resolvedConfig.height,
+          steps: resolvedConfig.steps,
+          cfg: resolvedConfig.cfg,
+          sampler: resolvedConfig.sampler,
+          scheduler: resolvedConfig.scheduler,
+          shiftEnabled: resolvedConfig.shiftEnabled,
+          shift: resolvedConfig.shift,
+        }, itemName);
+      } else {
+        imageId = store.addText2ImgCard({
+          model: resolvedConfig.model,
+          loras: resolvedConfig.loras,
+          prompt: resolvedConfig.prompt,
+          negativePrompt: resolvedConfig.negativePrompt,
+          width: resolvedConfig.width,
+          height: resolvedConfig.height,
+          steps: resolvedConfig.steps,
+          cfg: resolvedConfig.cfg,
+          sampler: resolvedConfig.sampler,
+          scheduler: resolvedConfig.scheduler,
+        }, itemName);
+      }
+
+      // 使用 startTaskInTab 在目标 tab 下关联 promptId（不依赖 activeTab）
+      store.startTaskInTab(tabId, imageId, promptId);
+
+      // 注册 WebSocket 进度跟踪
+      wsSendMessage({ type: 'register', promptId, workflowId: tabId, sessionId, tabId });
+
+      // 更新 agent execution 状态
+      useAgentStore.getState().setAgentExecution({
+        promptId,
+        workflowId,
+        tabId,
+        imageId,
+        status: 'executing',
+        progress: 0,
+        outputs: [],
+      });
+
+    } catch (err: any) {
+      useAgentStore.getState().failAgentExecution(err.message || '执行失败');
+    }
+  }, [wsSendMessage]);
+
+  const handleNavigateToResult = useCallback(() => {
+    const exec = useAgentStore.getState().agentExecution;
+    if (!exec) return;
+
+    // 1. 关闭对话框
+    handleClose();
+
+    // 2. 切换到目标 Tab
+    useWorkflowStore.getState().setActiveTab(exec.tabId);
+
+    // 3. 卡片闪烁高亮
+    useWorkflowStore.getState().setFlashingImage(exec.imageId);
+
+    // 4. 滚动到卡片位置（延迟一点让 Tab 切换完成）
+    setTimeout(() => {
+      const card = document.querySelector(`[data-image-id="${exec.imageId}"]`);
+      if (card) {
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 300);
+
+    // 5. 清理
+    useAgentStore.getState().clearAgentExecution();
+  }, [handleClose]);
+
   const handleImageFile = useCallback((file: File) => {
     if (!file.type.startsWith('image/')) return;
     const reader = new FileReader();
@@ -172,6 +291,8 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
         if (newMsg1) setTypingMessageId(newMsg1.id);
         // 存储 intent 供 Task 9 使用
         useAgentStore.getState().setLastIntent(data.intent);
+        // 触发工作流执行
+        executeAgentIntent(data.intent);
         // Store follow-up suggestions if present
         if (data.suggestions?.length > 0) {
           setFollowUpSuggestions(data.suggestions);
@@ -369,6 +490,80 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
                 />
               ))}
             </span>
+          </div>
+        )}
+        {/* Agent execution progress */}
+        {agentExecution && (
+          <div style={{
+            margin: '8px 48px 8px 8px',
+            padding: '12px 16px',
+            backgroundColor: 'rgba(59, 130, 246, 0.08)',
+            border: '1px solid rgba(59, 130, 246, 0.2)',
+            borderRadius: 10,
+            fontSize: 13,
+          }}>
+            {agentExecution.status === 'preparing' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#93c5fd' }}>
+                <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                <span>正在准备工作流...</span>
+              </div>
+            )}
+            {agentExecution.status === 'executing' && (
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#93c5fd', marginBottom: 8 }}>
+                  <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                  <span>正在生成图片... {agentExecution.progress}%</span>
+                </div>
+                <div style={{
+                  height: 4,
+                  backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                  borderRadius: 2,
+                  overflow: 'hidden',
+                }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${agentExecution.progress}%`,
+                    backgroundColor: '#3b82f6',
+                    borderRadius: 2,
+                    transition: 'width 0.3s ease',
+                  }} />
+                </div>
+              </div>
+            )}
+            {agentExecution.status === 'complete' && (
+              <div>
+                <div style={{ color: '#86efac', marginBottom: 8 }}>
+                  已完成！生成了 {agentExecution.outputs.length} 张图片
+                </div>
+                <button
+                  onClick={handleNavigateToResult}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '6px 14px',
+                    backgroundColor: '#3b82f6',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                    fontSize: 13,
+                    fontWeight: 500,
+                    transition: 'background-color 0.15s',
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2563eb'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#3b82f6'}
+                >
+                  <ExternalLink size={14} />
+                  前往查看
+                </button>
+              </div>
+            )}
+            {agentExecution.status === 'error' && (
+              <div style={{ color: '#fca5a5' }}>
+                生成失败：{agentExecution.error || '未知错误'}
+              </div>
+            )}
           </div>
         )}
         <div ref={messagesEndRef} />

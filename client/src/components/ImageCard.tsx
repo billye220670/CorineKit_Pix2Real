@@ -1,5 +1,6 @@
 import { useCallback, useState, useRef, useEffect, memo } from 'react';
-import { X, Play, RotateCcw, Check, AlertCircle, Layers, ChevronDown, Flower, Sparkles, Copy, BookText, Hash, AlignLeft, Wand2, Loader2, Heart } from 'lucide-react';
+import { X, Play, RotateCcw, Check, AlertCircle, Layers, ChevronDown, Flower, Sparkles, Copy, BookText, Hash, AlignLeft, Wand2, Loader2, Heart, FileText } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import { useShallow } from 'zustand/react/shallow';
 import { SYSTEM_PROMPTS } from './prompt-assistant/systemPrompts.js';
 import { useWorkflowStore } from '../hooks/useWorkflowStore.js';
@@ -144,6 +145,8 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
   const [textareaFocused, setTextareaFocused] = useState(false);
   const [promptBtnHovered, setPromptBtnHovered] = useState(false);
   const [quickActionLoading, setQuickActionLoading] = useState<string | null>(null);
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
+  const [showConfigPanel, setShowConfigPanel] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -455,6 +458,12 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
     }
   }, [selectedOutputIdx, displayOutput, image, reversePromptModel]);
 
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCtxMenu({ x: e.clientX, y: e.clientY });
+  }, []);
+
   const handleQuickAction = useCallback(async (mode: 'naturalToTags' | 'tagsToNatural' | 'detailer') => {
     const text = promptValue;
     if (!text.trim()) return;
@@ -489,6 +498,7 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseLeaveOuter}
       onMouseEnter={() => setIsCardHovered(true)}
+      onContextMenu={handleContextMenu}
       className={[isFlashing ? 'card-flash-anim' : '', isReversingPrompt ? 'card-ai-glow' : ''].filter(Boolean).join(' ') || undefined}
       onAnimationEnd={() => { if (isFlashing) setFlashingImage(null); }}
       style={{
@@ -1141,6 +1151,221 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
           cursor: 'not-allowed',
         }} onClick={(e) => e.stopPropagation()} />
       )}
+
+      {/* Right-click context menu */}
+      {ctxMenu && createPortal(
+        <CardContextMenu
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          onViewConfig={() => { setCtxMenu(null); setShowConfigPanel(true); }}
+          onClose={() => setCtxMenu(null)}
+        />,
+        document.body,
+      )}
+
+      {/* Config detail panel */}
+      {showConfigPanel && createPortal(
+        <ConfigPanel
+          activeTab={activeTab}
+          text2imgConfig={text2imgConfig}
+          zitConfig={zitConfig}
+          onClose={() => setShowConfigPanel(false)}
+        />,
+        document.body,
+      )}
     </div>
   );
 }, arePropsEqual);
+
+// ─── CardContextMenu ──────────────────────────────────────────────────
+
+function CardContextMenu({ x, y, onViewConfig, onClose }: {
+  x: number; y: number;
+  onViewConfig: () => void;
+  onClose: () => void;
+}) {
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ left: x, top: y });
+  const [hoverIdx, setHoverIdx] = useState(-1);
+
+  useEffect(() => {
+    const el = menuRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    let left = x;
+    let top = y;
+    if (left + rect.width > window.innerWidth) left = Math.max(0, window.innerWidth - rect.width);
+    if (top + rect.height > window.innerHeight) top = Math.max(0, y - rect.height);
+    setPos({ left, top });
+  }, [x, y]);
+
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const handleClick = (e: MouseEvent) => { if (menuRef.current && !menuRef.current.contains(e.target as Node)) onClose(); };
+    document.addEventListener('keydown', handleKey);
+    document.addEventListener('mousedown', handleClick);
+    return () => { document.removeEventListener('keydown', handleKey); document.removeEventListener('mousedown', handleClick); };
+  }, [onClose]);
+
+  return (
+    <div
+      ref={menuRef}
+      style={{
+        position: 'fixed',
+        left: pos.left,
+        top: pos.top,
+        backgroundColor: 'var(--color-surface, #1e1e1e)',
+        border: '1px solid var(--color-border, rgba(255,255,255,0.1))',
+        borderRadius: 8,
+        padding: '4px 0',
+        boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+        minWidth: 160,
+        zIndex: 9999,
+      }}
+    >
+      <div
+        style={{
+          padding: '8px 12px',
+          fontSize: 13,
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          color: '#e0e0e0',
+          background: hoverIdx === 0 ? 'rgba(128, 128, 128, 0.08)' : undefined,
+        }}
+        onMouseEnter={() => setHoverIdx(0)}
+        onMouseLeave={() => setHoverIdx(-1)}
+        onClick={onViewConfig}
+      >
+        <FileText size={14} />
+        查看配置
+      </div>
+    </div>
+  );
+}
+
+// ─── ConfigPanel (modal) ──────────────────────────────────────────────
+
+function ConfigFieldRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ fontSize: 11, color: '#888', marginBottom: 2 }}>{label}</div>
+      <div style={{ fontSize: 13, color: '#e0e0e0', wordBreak: 'break-all' }}>{children}</div>
+    </div>
+  );
+}
+
+function ConfigPanel({ activeTab, text2imgConfig, zitConfig, onClose }: {
+  activeTab: number;
+  text2imgConfig?: import('../services/sessionService.js').Text2ImgConfig;
+  zitConfig?: import('../services/sessionService.js').ZitConfig;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [onClose]);
+
+  const config = activeTab === 7 ? text2imgConfig : activeTab === 9 ? zitConfig : undefined;
+
+  const renderLoraList = (loras: import('../services/sessionService.js').LoraSlot[]) => {
+    if (!loras || loras.length === 0) return <span style={{ color: '#666' }}>无</span>;
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {loras.map((lora, i) => {
+          const name = lora.model.split(/[/\\]/).pop()?.replace(/\.[^.]+$/, '') || lora.model;
+          return (
+            <div key={i} style={{
+              padding: '6px 10px',
+              borderRadius: 6,
+              backgroundColor: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.06)',
+              fontSize: 12,
+            }}>
+              <div style={{ color: '#e0e0e0', marginBottom: 2 }}>{name}</div>
+              <div style={{ color: '#888', fontSize: 11 }}>
+                强度: {lora.strength} · {lora.enabled ? '✓ 启用' : '✗ 禁用'}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 9999 }}
+        onClick={onClose}
+      />
+      {/* Panel */}
+      <div style={{
+        position: 'fixed',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        backgroundColor: '#1a1a2e',
+        border: '1px solid rgba(255,255,255,0.12)',
+        borderRadius: 12,
+        padding: 20,
+        maxWidth: 480,
+        width: '90vw',
+        maxHeight: '70vh',
+        overflow: 'auto',
+        zIndex: 10000,
+        boxShadow: '0 16px 48px rgba(0,0,0,0.5)',
+      }}>
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div style={{ fontSize: 15, fontWeight: 600, color: '#e0e0e0' }}>卡片配置详情</div>
+          <div
+            onClick={onClose}
+            style={{ cursor: 'pointer', color: '#888', display: 'flex', alignItems: 'center', padding: 4, borderRadius: 4 }}
+          >
+            <X size={16} />
+          </div>
+        </div>
+
+        {!config ? (
+          <div style={{ color: '#666', fontSize: 13, textAlign: 'center', padding: '20px 0' }}>无配置数据</div>
+        ) : activeTab === 7 && text2imgConfig ? (
+          <>
+            <ConfigFieldRow label="模型">{text2imgConfig.model}</ConfigFieldRow>
+            <ConfigFieldRow label="LoRA 列表">{renderLoraList(text2imgConfig.loras)}</ConfigFieldRow>
+            <ConfigFieldRow label="提示词">
+              <div style={{ whiteSpace: 'pre-wrap' }}>{text2imgConfig.prompt || '(空)'}</div>
+            </ConfigFieldRow>
+            <ConfigFieldRow label="负面提示词">
+              <div style={{ whiteSpace: 'pre-wrap' }}>{text2imgConfig.negativePrompt || '(空)'}</div>
+            </ConfigFieldRow>
+            <ConfigFieldRow label="尺寸">{text2imgConfig.width} × {text2imgConfig.height}</ConfigFieldRow>
+            <ConfigFieldRow label="步数">{text2imgConfig.steps}</ConfigFieldRow>
+            <ConfigFieldRow label="CFG">{text2imgConfig.cfg}</ConfigFieldRow>
+            <ConfigFieldRow label="采样器">{text2imgConfig.sampler}</ConfigFieldRow>
+            <ConfigFieldRow label="调度器">{text2imgConfig.scheduler}</ConfigFieldRow>
+          </>
+        ) : activeTab === 9 && zitConfig ? (
+          <>
+            <ConfigFieldRow label="UNET 模型">{zitConfig.unetModel}</ConfigFieldRow>
+            <ConfigFieldRow label="LoRA 列表">{renderLoraList(zitConfig.loras)}</ConfigFieldRow>
+            <ConfigFieldRow label="提示词">
+              <div style={{ whiteSpace: 'pre-wrap' }}>{zitConfig.prompt || '(空)'}</div>
+            </ConfigFieldRow>
+            <ConfigFieldRow label="Shift">{zitConfig.shiftEnabled ? `开启 (${zitConfig.shift})` : '关闭'}</ConfigFieldRow>
+            <ConfigFieldRow label="尺寸">{zitConfig.width} × {zitConfig.height}</ConfigFieldRow>
+            <ConfigFieldRow label="步数">{zitConfig.steps}</ConfigFieldRow>
+            <ConfigFieldRow label="CFG">{zitConfig.cfg}</ConfigFieldRow>
+            <ConfigFieldRow label="采样器">{zitConfig.sampler}</ConfigFieldRow>
+            <ConfigFieldRow label="调度器">{zitConfig.scheduler}</ConfigFieldRow>
+          </>
+        ) : (
+          <div style={{ color: '#666', fontSize: 13, textAlign: 'center', padding: '20px 0' }}>无配置数据</div>
+        )}
+      </div>
+    </>
+  );
+}

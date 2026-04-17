@@ -1,5 +1,6 @@
 import { useEffect, useCallback } from 'react';
 import { useWorkflowStore } from './useWorkflowStore.js';
+import { useAgentStore } from './useAgentStore.js';
 import type { Text2ImgConfig, ZitConfig } from '../services/sessionService.js';
 import type { WSMessage } from '../types/index.js';
 
@@ -122,6 +123,30 @@ function getOrCreateConnection(): WebSocket {
         case 'error':
           store.failTask(msg.promptId, msg.message);
           break;
+      }
+    } catch {
+      // ignore
+    }
+
+    // Agent execution 进度同步（在 switch 之外，独立追踪）
+    try {
+      const msg: WSMessage = JSON.parse(event.data);
+      const agentExec = useAgentStore.getState().agentExecution;
+      if (agentExec && agentExec.promptId && msg.type !== 'connected' && agentExec.promptId === msg.promptId) {
+        switch (msg.type) {
+          case 'execution_start':
+            useAgentStore.getState().setAgentExecution({ ...agentExec, status: 'executing' });
+            break;
+          case 'progress':
+            useAgentStore.getState().updateAgentProgress(msg.percentage);
+            break;
+          case 'complete':
+            useAgentStore.getState().completeAgentExecution(msg.outputs);
+            break;
+          case 'error':
+            useAgentStore.getState().failAgentExecution(msg.message || 'Unknown error');
+            break;
+        }
       }
     } catch {
       // ignore

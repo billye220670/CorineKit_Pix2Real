@@ -257,6 +257,111 @@ export function findMatchingLorasFromPrompt(
   return deduplicateByCategory(matches);
 }
 
+// ── 模型系列标准化 ─────────────────────────────────────────────────────────────
+
+/** 将 LoRA compatibleModels 中的各种别名统一为 checkpoint category 值 */
+function normalizeModelFamily(family: string): string | null {
+  const f = family.trim();
+  if (['IL', '光辉', '光辉系列'].includes(f)) return '光辉';
+  if (['PONY', 'PONY系列'].includes(f)) return 'PONY';
+  if (f === '通用') return null; // 通用 = 不限制
+  return null;
+}
+
+// ── 基础模型推荐 ─────────────────────────────────────────────────────────────
+
+/**
+ * 根据推荐 LoRA 的兼容性 + 用户偏好，智能推荐基础模型（checkpoint）
+ * 优先级：LoRA 兼容性（硬约束）> 用户偏好（软排序）> 默认值（不返回）
+ */
+function recommendBaseModel(
+  recommendedLoras: Array<{ model: string; strength: number }>,
+  metadata: any,
+  profile?: UserPreferenceProfile,
+): string | undefined {
+  // ── 1. 收集所有 checkpoint 模型（按 category 索引） ──
+  const checkpointsByFamily = new Map<string, string[]>(); // category → filename[]
+  for (const [filePath, meta] of Object.entries(metadata)) {
+    if (!meta || typeof meta !== 'object') continue;
+    const m = meta as Record<string, any>;
+    const cat = m.category as string | undefined;
+    if (cat === '光辉' || cat === 'PONY') {
+      const list = checkpointsByFamily.get(cat) ?? [];
+      list.push(filePath);
+      checkpointsByFamily.set(cat, list);
+    }
+  }
+
+  // ── 2. 从推荐 LoRA 提取兼容模型系列 ──
+  let candidateFamilies: string[] | null = null;
+
+  if (recommendedLoras.length > 0) {
+    // 提取每个 LoRA 的标准化 compatibleModels
+    const loraFamilies: Array<Set<string>> = [];
+    for (const lora of recommendedLoras) {
+      const m = metadata[lora.model] as Record<string, any> | undefined;
+      if (!m?.compatibleModels || !Array.isArray(m.compatibleModels)) continue;
+      const families = new Set<string>();
+      for (const raw of m.compatibleModels as string[]) {
+        const norm = normalizeModelFamily(raw);
+        if (norm) families.add(norm);
+      }
+      if (families.size > 0) loraFamilies.push(families);
+    }
+
+    if (loraFamilies.length > 0) {
+      // 尝试取交集（所有 LoRA 都兼容的系列）
+      let intersection = new Set(loraFamilies[0]);
+      for (let i = 1; i < loraFamilies.length; i++) {
+        intersection = new Set([...intersection].filter(f => loraFamilies[i].has(f)));
+      }
+
+      if (intersection.size > 0) {
+        candidateFamilies = [...intersection];
+      } else {
+        // 无交集时，以第一个 LoRA（通常是角色 LoRA，权重最高）的系列为准
+        candidateFamilies = [...loraFamilies[0]];
+      }
+    }
+  }
+
+  // ── 3. 确定候选 checkpoint 列表 ──
+  let candidateCheckpoints: string[] = [];
+
+  if (candidateFamilies && candidateFamilies.length > 0) {
+    // 有 LoRA 兼容性约束：只从兼容的系列中选
+    for (const fam of candidateFamilies) {
+      const ckpts = checkpointsByFamily.get(fam);
+      if (ckpts) candidateCheckpoints.push(...ckpts);
+    }
+  } else {
+    // 无 LoRA 或 LoRA 无兼容性信息：所有 checkpoint 都是候选
+    for (const ckpts of checkpointsByFamily.values()) {
+      candidateCheckpoints.push(...ckpts);
+    }
+  }
+
+  if (candidateCheckpoints.length === 0) return undefined;
+
+  // ── 4. 用用户偏好排序 ──
+  if (profile?.modelPreferences && profile.modelPreferences.length > 0) {
+    // 构建 model → score 映射
+    const prefScores = new Map<string, number>();
+    for (const pref of profile.modelPreferences) {
+      prefScores.set(pref.model, pref.score);
+    }
+
+    // 按偏好分数降序排序，无偏好的排最后
+    candidateCheckpoints.sort((a, b) => {
+      const sa = prefScores.get(a) ?? -1;
+      const sb = prefScores.get(b) ?? -1;
+      return sb - sa;
+    });
+  }
+
+  return candidateCheckpoints[0];
+}
+
 // ── 工具调用解析 ─────────────────────────────────────────────────────────────
 
 export function parseToolCall(toolCall: any, metadata: any, userProfile?: UserPreferenceProfile): ParsedIntent {
@@ -319,6 +424,9 @@ function parseGenerateImage(
     ? { width: 768, height: 1152, steps: 20, cfg: 7 }
     : { width: 1024, height: 1536, steps: 35, cfg: 7 };
 
+  // 根据 LoRA 兼容性 + 用户偏好推荐基础模型
+  const recommendedModel = recommendBaseModel(recommendedLoras, metadata, userProfile);
+
   return {
     taskType: 'generate',
     workflowId: 7,       // 快速出图
@@ -330,6 +438,7 @@ function parseGenerateImage(
     style: style || undefined,
     quality,
     recommendedLoras,
+    recommendedModel,
     parameters,
   };
 }

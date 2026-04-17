@@ -68,6 +68,7 @@ interface WorkflowStore {
 
   // Task management
   startTask: (imageId: string, promptId: string) => void;
+  startTaskInTab: (tabId: number, imageId: string, promptId: string) => void;
   markTaskStarted: (promptId: string) => void;
   updateProgress: (promptId: string, percentage: number) => void;
   completeTask: (promptId: string, outputs: Array<{ filename: string; url: string }>) => void;
@@ -389,6 +390,26 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         tabData: {
           ...state.tabData,
           [tab]: {
+            ...prev,
+            tasks: {
+              ...prev.tasks,
+              [imageId]: { promptId, status: 'queued' as TaskStatus, progress: 0, outputs: existingOutputs },
+            },
+            imagePromptMap: { ...prev.imagePromptMap, [imageId]: promptId },
+          },
+        },
+      };
+    });
+  },
+
+  startTaskInTab: (tabId, imageId, promptId) => {
+    set((state) => {
+      const prev = state.tabData[tabId] || emptyTabData();
+      const existingOutputs = prev.tasks[imageId]?.outputs ?? [];
+      return {
+        tabData: {
+          ...state.tabData,
+          [tabId]: {
             ...prev,
             tasks: {
               ...prev.tasks,

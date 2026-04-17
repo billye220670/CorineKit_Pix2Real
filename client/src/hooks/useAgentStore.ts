@@ -83,6 +83,24 @@ interface AgentState {
   // Last parsed intent (供 Task 9 工作流执行使用)
   lastIntent: ParsedIntent | null;
   setLastIntent: (intent: ParsedIntent | null) => void;
+
+  // Agent 执行状态（Task 9）
+  agentExecution: {
+    promptId: string;
+    workflowId: number;
+    tabId: number;
+    imageId: string;
+    status: 'preparing' | 'executing' | 'complete' | 'error';
+    progress: number;
+    outputs: Array<{ filename: string; url: string }>;
+    error?: string;
+  } | null;
+
+  setAgentExecution: (exec: AgentState['agentExecution']) => void;
+  updateAgentProgress: (percentage: number) => void;
+  completeAgentExecution: (outputs: Array<{ filename: string; url: string }>) => void;
+  failAgentExecution: (error: string) => void;
+  clearAgentExecution: () => void;
 }
 
 export const useAgentStore = create<AgentState>((set, get) => ({
@@ -160,4 +178,26 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   // Last parsed intent
   lastIntent: null,
   setLastIntent: (intent) => set({ lastIntent: intent }),
+
+  // Agent execution state
+  agentExecution: null,
+
+  setAgentExecution: (exec) => set({ agentExecution: exec }),
+
+  updateAgentProgress: (percentage) => set((s) => {
+    if (!s.agentExecution) return s;
+    return { agentExecution: { ...s.agentExecution, status: 'executing', progress: percentage } };
+  }),
+
+  completeAgentExecution: (outputs) => set((s) => {
+    if (!s.agentExecution) return s;
+    return { agentExecution: { ...s.agentExecution, status: 'complete', progress: 100, outputs } };
+  }),
+
+  failAgentExecution: (error) => set((s) => {
+    if (!s.agentExecution) return s;
+    return { agentExecution: { ...s.agentExecution, status: 'error', error } };
+  }),
+
+  clearAgentExecution: () => set({ agentExecution: null }),
 }));

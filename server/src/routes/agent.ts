@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -6,11 +6,16 @@ import { readGenerationLog, appendGenerationLog, readFavorites, writeFavorite, u
 import { buildUserProfile } from '../services/profileService.js';
 import { callLLM, buildSystemPrompt, getAgentTools } from '../services/llmService.js';
 import { parseToolCall } from '../services/intentParser.js';
+import { queuePrompt } from '../services/comfyui.js';
+import type { ParsedIntent } from '../services/intentParser.js';
 import type { GenerationRecord } from '../services/agentService.js';
 import type { LLMMessage } from '../services/llmService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const metadataPath = path.resolve(__dirname, '../../../model_meta/metadata.json');
+const comfyApiDir = path.resolve(__dirname, '../../../ComfyUI_API');
+const text2imgTemplatePath = path.join(comfyApiDir, 'Pix2Real-二次元生成.json');
+const zitTemplatePath = path.join(comfyApiDir, 'Pix2Real-ZIT文生图NEW2.json');
 
 // metadata 缓存 — 避免每次请求都读文件
 let metadataCache: any = null;
@@ -554,6 +559,283 @@ router.post('/chat', async (req, res) => {
   } catch (error: any) {
     console.error('[Agent] chat error:', error);
     res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+});
+
+// ── POST /api/agent/execute — 执行 AI Agent 意图 ────────────────────────────
+
+const TAB7_DEFAULTS = {
+  model: 'prefectPonyXL_v6.safetensors',
+  width: 768,
+  height: 1152,
+  steps: 30,
+  cfg: 7,
+  sampler: 'euler_ancestral',
+  scheduler: 'normal',
+};
+
+const TAB9_DEFAULTS = {
+  unetModel: 'Z-image\\z_image_turbo_bf16.safetensors',
+  width: 720,
+  height: 1280,
+  steps: 9,
+  cfg: 1,
+  sampler: 'euler',
+  scheduler: 'simple',
+  shiftEnabled: true,
+  shift: 3,
+};
+
+function generateTimestamp(): string {
+  const now = new Date();
+  return `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+}
+
+router.post('/execute', express.json(), async (req, res) => {
+  try {
+    const { intent, clientId, sessionId } = req.body as {
+      intent: ParsedIntent;
+      clientId: string;
+      sessionId: string;
+    };
+
+    if (!intent || !clientId) {
+      res.status(400).json({ error: 'intent and clientId are required' });
+      return;
+    }
+
+    const workflowId = intent.workflowId || 7;
+    const tabId = workflowId;
+    const ts = generateTimestamp();
+
+    if (workflowId === 7) {
+      // ── Tab 7 快速出图 ──────────────────────────────────────────────────────
+      const model = intent.recommendedModel || TAB7_DEFAULTS.model;
+      const prompt = intent.prompt || '';
+      const negativePrompt = intent.negativePrompt || '';
+      const width = intent.parameters?.width || TAB7_DEFAULTS.width;
+      const height = intent.parameters?.height || TAB7_DEFAULTS.height;
+      const steps = intent.parameters?.steps || TAB7_DEFAULTS.steps;
+      const cfg = intent.parameters?.cfg || TAB7_DEFAULTS.cfg;
+      const sampler = (intent.parameters as any)?.sampler || TAB7_DEFAULTS.sampler;
+      const scheduler = (intent.parameters as any)?.scheduler || TAB7_DEFAULTS.scheduler;
+
+      const loras = (intent.recommendedLoras || []).map(l => ({
+        model: l.model,
+        enabled: true,
+        strength: l.strength || 0.8,
+      }));
+
+      const template = JSON.parse(fs.readFileSync(text2imgTemplatePath, 'utf-8'));
+
+      // Node 4: checkpoint model
+      template['4'].inputs.ckpt_name = model;
+      // Node 5: image dimensions
+      template['5'].inputs.width = width;
+      template['5'].inputs.height = height;
+      // Node 3: sampler settings + random seed
+      template['3'].inputs.seed = Math.floor(Math.random() * 1125899906842624);
+      template['3'].inputs.steps = steps;
+      template['3'].inputs.cfg = cfg;
+      template['3'].inputs.sampler_name = sampler;
+      template['3'].inputs.scheduler = scheduler;
+      // Node 39: user prompt
+      if (prompt) {
+        template['39'].inputs.prompt = prompt;
+      }
+      // Node 7: negative prompt (prepend user negative to default)
+      if (negativePrompt && negativePrompt.trim()) {
+        template['7'].inputs.text = negativePrompt.trim() + ', ' + template['7'].inputs.text;
+      }
+      // Node 45: output filename prefix
+      template['45'].inputs.filename_prefix = `agent_${ts}`;
+
+      // LoRA handling: nodes 50, 51, 52, 53, 54 chained from Checkpoint #4
+      const tab7LoraNodeIds = ['50', '51', '52', '53', '54'];
+
+      loras.forEach((lora, i) => {
+        if (i < tab7LoraNodeIds.length) {
+          template[tab7LoraNodeIds[i]].inputs.lora_name = lora.model;
+          template[tab7LoraNodeIds[i]].inputs.strength_model = lora.strength;
+          template[tab7LoraNodeIds[i]].inputs.strength_clip = lora.strength;
+        }
+      });
+
+      // Dynamic reconnection: bypass disabled LoRAs
+      const tab7ModelSource: [string, number] = ['4', 0];
+      const tab7ClipSource: [string, number] = ['4', 1];
+      const tab7EnabledIndices = loras.map((l, i) => l.enabled ? i : -1).filter(i => i >= 0 && i < tab7LoraNodeIds.length);
+
+      if (tab7EnabledIndices.length === 0) {
+        template['3'].inputs.model = tab7ModelSource;
+        template['6'].inputs.clip = tab7ClipSource;
+        template['7'].inputs.clip = tab7ClipSource;
+      } else {
+        const firstIdx = tab7EnabledIndices[0];
+        template[tab7LoraNodeIds[firstIdx]].inputs.model = tab7ModelSource;
+        template[tab7LoraNodeIds[firstIdx]].inputs.clip = tab7ClipSource;
+
+        for (let k = 1; k < tab7EnabledIndices.length; k++) {
+          const curr = tab7EnabledIndices[k];
+          const prev = tab7EnabledIndices[k - 1];
+          template[tab7LoraNodeIds[curr]].inputs.model = [tab7LoraNodeIds[prev], 0];
+          template[tab7LoraNodeIds[curr]].inputs.clip = [tab7LoraNodeIds[prev], 1];
+        }
+
+        const lastIdx = tab7EnabledIndices[tab7EnabledIndices.length - 1];
+        template['3'].inputs.model = [tab7LoraNodeIds[lastIdx], 0];
+        template['6'].inputs.clip = [tab7LoraNodeIds[lastIdx], 1];
+        template['7'].inputs.clip = [tab7LoraNodeIds[lastIdx], 1];
+      }
+
+      const result = await queuePrompt(template, clientId);
+
+      res.json({
+        promptId: result.prompt_id,
+        workflowId: 7,
+        workflowName: '快速出图',
+        tabId,
+        resolvedConfig: {
+          model,
+          loras,
+          prompt,
+          negativePrompt,
+          width,
+          height,
+          steps,
+          cfg,
+          sampler,
+          scheduler,
+        },
+      });
+
+    } else if (workflowId === 9) {
+      // ── Tab 9 ZIT快出 ───────────────────────────────────────────────────────
+      const unetModel = TAB9_DEFAULTS.unetModel;
+      const prompt = intent.prompt || '';
+      const width = intent.parameters?.width || TAB9_DEFAULTS.width;
+      const height = intent.parameters?.height || TAB9_DEFAULTS.height;
+      const steps = intent.parameters?.steps || TAB9_DEFAULTS.steps;
+      const cfg = intent.parameters?.cfg || TAB9_DEFAULTS.cfg;
+      const sampler = (intent.parameters as any)?.sampler || TAB9_DEFAULTS.sampler;
+      const scheduler = (intent.parameters as any)?.scheduler || TAB9_DEFAULTS.scheduler;
+      const shiftEnabled = TAB9_DEFAULTS.shiftEnabled;
+      const shift = TAB9_DEFAULTS.shift;
+
+      const loras = (intent.recommendedLoras || []).map(l => ({
+        model: l.model,
+        enabled: true,
+        strength: l.strength || 0.8,
+      }));
+
+      const template = JSON.parse(fs.readFileSync(zitTemplatePath, 'utf-8'));
+
+      // Node 25: UNET model
+      template['25'].inputs.unet_name = unetModel;
+      // Node 45: AuraFlow shift value
+      template['45'].inputs.shift = shift;
+      // Node 7: image dimensions
+      template['7'].inputs.width = width;
+      template['7'].inputs.height = height;
+      // Node 4: sampler settings + random seed
+      template['4'].inputs.seed = Math.floor(Math.random() * 1125899906842624);
+      template['4'].inputs.steps = steps;
+      template['4'].inputs.cfg = cfg;
+      template['4'].inputs.sampler_name = sampler;
+      template['4'].inputs.scheduler = scheduler;
+      // Node 5: prompt text
+      if (prompt) {
+        template['5'].inputs.text = prompt;
+      }
+      // #47(ifElse) 控制 shift 开关
+      template['47'].inputs.boolean = shiftEnabled;
+
+      // LoRA handling: nodes 36, 50, 51, 52, 53 chained from UNet #25 (model) and CLIP #26 (clip)
+      const tab9LoraNodeIds = ['36', '50', '51', '52', '53'];
+
+      loras.forEach((lora, i) => {
+        if (i < tab9LoraNodeIds.length) {
+          template[tab9LoraNodeIds[i]].inputs.lora_name = lora.model;
+          template[tab9LoraNodeIds[i]].inputs.strength_model = lora.strength;
+          template[tab9LoraNodeIds[i]].inputs.strength_clip = lora.strength;
+        }
+      });
+
+      // Dynamic reconnection: bypass disabled LoRAs
+      const tab9ModelSource: [string, number] = ['25', 0];
+      const tab9ClipSource: [string, number] = ['26', 0];
+      const tab9EnabledIndices = loras.map((l, i) => l.enabled ? i : -1).filter(i => i >= 0 && i < tab9LoraNodeIds.length);
+
+      if (tab9EnabledIndices.length === 0) {
+        template['45'].inputs.model = tab9ModelSource;
+        template['5'].inputs.clip = tab9ClipSource;
+        template['47'].inputs.on_false = tab9ModelSource;
+      } else {
+        const firstIdx = tab9EnabledIndices[0];
+        template[tab9LoraNodeIds[firstIdx]].inputs.model = tab9ModelSource;
+        template[tab9LoraNodeIds[firstIdx]].inputs.clip = tab9ClipSource;
+
+        for (let k = 1; k < tab9EnabledIndices.length; k++) {
+          const curr = tab9EnabledIndices[k];
+          const prev = tab9EnabledIndices[k - 1];
+          template[tab9LoraNodeIds[curr]].inputs.model = [tab9LoraNodeIds[prev], 0];
+          template[tab9LoraNodeIds[curr]].inputs.clip = [tab9LoraNodeIds[prev], 1];
+        }
+
+        const lastIdx = tab9EnabledIndices[tab9EnabledIndices.length - 1];
+        template['45'].inputs.model = [tab9LoraNodeIds[lastIdx], 0];
+        template['5'].inputs.clip = [tab9LoraNodeIds[lastIdx], 1];
+        template['47'].inputs.on_false = [tab9LoraNodeIds[lastIdx], 0];
+      }
+
+      // Node 24: output filename prefix
+      template['24'].inputs.filename_prefix = `agent_${ts}`;
+
+      const result = await queuePrompt(template, clientId);
+
+      res.json({
+        promptId: result.prompt_id,
+        workflowId: 9,
+        workflowName: 'ZIT快出',
+        tabId,
+        resolvedConfig: {
+          unetModel,
+          model: '',
+          loras,
+          prompt,
+          negativePrompt: '',
+          width,
+          height,
+          steps,
+          cfg,
+          sampler,
+          scheduler,
+          shiftEnabled,
+          shift,
+        },
+      });
+
+    } else {
+      res.status(400).json({ error: `Unsupported workflowId: ${workflowId}` });
+      return;
+    }
+  } catch (err: any) {
+    console.error('[Agent Execute Error]', err);
+
+    let friendlyMessage = '执行失败，请稍后重试';
+    const errStr = err.message || String(err);
+
+    if (errStr.includes('value_not_in_list') && errStr.includes('ckpt_name')) {
+      friendlyMessage = '模型文件未找到，请检查 ComfyUI 模型是否已正确安装';
+    } else if (errStr.includes('value_not_in_list') && errStr.includes('lora_name')) {
+      friendlyMessage = 'LoRA 文件未找到，请检查 LoRA 是否已正确安装';
+    } else if (errStr.includes('value_not_in_list') && errStr.includes('unet_name')) {
+      friendlyMessage = 'UNET 模型文件未找到，请检查模型是否已正确安装';
+    } else if (errStr.includes('Queue prompt failed')) {
+      friendlyMessage = '工作流执行失败，请检查 ComfyUI 是否正常运行';
+    }
+
+    res.status(500).json({ error: friendlyMessage });
   }
 });
 
