@@ -135,7 +135,7 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
       const data = await res.json();
       const { promptId, workflowId, tabId, resolvedConfig } = data;
 
-      // 在目标 Tab 创建卡片（不切换 activeTab，避免竞态条件导致 session 丢失数据）
+      // 在目标 Tab 创建卡片（先创建卡片，再切换 Tab，避免竞态）
       const store = useWorkflowStore.getState();
       const now = new Date();
       const ts = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
@@ -174,6 +174,9 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
 
       // 使用 startTaskInTab 在目标 tab 下关联 promptId（不依赖 activeTab）
       store.startTaskInTab(tabId, imageId, promptId);
+
+      // 单向跳转到目标 Tab（让用户看到生成进度）
+      store.setActiveTab(tabId);
 
       // 注册 WebSocket 进度跟踪
       wsSendMessage({ type: 'register', promptId, workflowId: tabId, sessionId, tabId });
