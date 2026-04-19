@@ -27,6 +27,7 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
   const [warmUpSuggestions, setWarmUpSuggestions] = useState<string[]>([]);
   const [followUpSuggestions, setFollowUpSuggestions] = useState<string[]>([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const pendingFollowUpRef = useRef<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -41,6 +42,56 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isExecuting]);
+
+  // 生成完成后追加上下文消息到对话历史，并显示后续建议
+  const completionHandledRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (
+      agentExecution?.status === 'complete' &&
+      agentExecution.generationContext &&
+      agentExecution.promptId &&
+      completionHandledRef.current !== agentExecution.promptId
+    ) {
+      completionHandledRef.current = agentExecution.promptId;
+      const ctx = agentExecution.generationContext;
+      // 精简LoRA名称：去掉路径和.safetensors后缀，只保留名称
+      const loraNames = ctx.loras.length > 0
+        ? ctx.loras.map(l => {
+            const name = l.model.replace(/\\/g, '/').split('/').pop() || l.model;
+            return name.replace(/\.safetensors$/i, '');
+          }).join(', ')
+        : '无';
+      const shortPrompt = ctx.prompt.length > 200 ? ctx.prompt.substring(0, 200) + '...' : ctx.prompt;
+
+      // 隐藏的上下文消息（仅作为 LLM 上下文，UI 不显示）
+      addMessage({
+        role: 'assistant',
+        content: `[生成完成] 提示词: ${shortPrompt} | LoRA: ${loraNames}`,
+        hidden: true,
+      });
+
+      // 可见的图片结果消息
+      const execution = agentExecution;
+      if (execution.outputs.length > 0) {
+        addMessage({
+          role: 'assistant',
+          content: `✅ 生成完成！共 ${execution.outputs.length} 张图片`,
+          images: execution.outputs.map(o => o.url),
+          tabId: execution.tabId,
+          imageId: execution.imageId,
+        });
+      }
+
+      // 清除执行状态卡片（图片已在消息气泡中展示，无需重复）
+      useAgentStore.getState().clearAgentExecution();
+
+      // 生成完成后才显示后续建议
+      if (pendingFollowUpRef.current.length > 0) {
+        setFollowUpSuggestions(pendingFollowUpRef.current);
+        pendingFollowUpRef.current = [];
+      }
+    }
+  }, [agentExecution?.status, agentExecution?.promptId, addMessage]);
 
   // ESC to close
   useEffect(() => {
@@ -175,13 +226,8 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
       // 使用 startTaskInTab 在目标 tab 下关联 promptId（不依赖 activeTab）
       store.startTaskInTab(tabId, imageId, promptId);
 
-      // 单向跳转到目标 Tab（让用户看到生成进度）
-      store.setActiveTab(tabId);
-
-      // 注册 WebSocket 进度跟踪
-      wsSendMessage({ type: 'register', promptId, workflowId: tabId, sessionId, tabId });
-
-      // 更新 agent execution 状态
+      // 先更新 agent execution 状态（含真实 promptId），再注册 WebSocket，
+      // 避免 WS 事件到达时 promptId 仍为空导致进度匹配失败的竞态条件
       useAgentStore.getState().setAgentExecution({
         promptId,
         workflowId,
@@ -190,37 +236,54 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
         status: 'executing',
         progress: 0,
         outputs: [],
+        generationContext: {
+          prompt: resolvedConfig.prompt || intent.prompt || '',
+          negativePrompt: resolvedConfig.negativePrompt,
+          model: resolvedConfig.model || resolvedConfig.unetModel || '默认模型',
+          loras: resolvedConfig.loras || intent.recommendedLoras || [],
+          workflowName: intent.workflowName || (tabId === 9 ? 'ZIT快出' : '快速出图'),
+          width: resolvedConfig.width,
+          height: resolvedConfig.height,
+        },
       });
+
+      // 注册 WebSocket 进度跟踪（promptId 已就绪，WS 事件可正确匹配）
+      wsSendMessage({ type: 'register', promptId, workflowId: tabId, sessionId, tabId });
 
     } catch (err: any) {
       useAgentStore.getState().failAgentExecution(err.message || '执行失败');
     }
   }, [wsSendMessage]);
 
-  const handleNavigateToResult = useCallback(() => {
-    const exec = useAgentStore.getState().agentExecution;
-    if (!exec) return;
-
+  // 通用跳转函数：接受 tabId 和 imageId 参数，不依赖当前 agentExecution 状态
+  const navigateToCard = useCallback((tabId: number, imageId: string) => {
     // 1. 关闭对话框
     handleClose();
 
     // 2. 切换到目标 Tab
-    useWorkflowStore.getState().setActiveTab(exec.tabId);
+    useWorkflowStore.getState().setActiveTab(tabId);
 
     // 3. 卡片闪烁高亮
-    useWorkflowStore.getState().setFlashingImage(exec.imageId);
+    useWorkflowStore.getState().setFlashingImage(imageId);
 
     // 4. 滚动到卡片位置（延迟一点让 Tab 切换完成）
     setTimeout(() => {
-      const card = document.querySelector(`[data-image-id="${exec.imageId}"]`);
+      const card = document.querySelector(`[data-image-id="${imageId}"]`);
       if (card) {
         card.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
     }, 300);
-
-    // 5. 清理
-    useAgentStore.getState().clearAgentExecution();
   }, [handleClose]);
+
+  const handleNavigateToResult = useCallback(() => {
+    const exec = useAgentStore.getState().agentExecution;
+    if (!exec) return;
+
+    navigateToCard(exec.tabId, exec.imageId);
+
+    // 清理
+    useAgentStore.getState().clearAgentExecution();
+  }, [navigateToCard]);
 
   const handleImageFile = useCallback((file: File) => {
     if (!file.type.startsWith('image/')) return;
@@ -265,12 +328,19 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
 
     try {
       const sessionId = useWorkflowStore.getState().sessionId;
+      // 获取当前对话历史（不包含本次用户消息，因为后端会自动 push 当前 message）
+      const currentMessages = useAgentStore.getState().messages;
+      const historyMessages = currentMessages.slice(0, -1)
+        .filter(m => m.role === 'user' || m.role === 'assistant')
+        .map(m => ({ role: m.role, content: m.content }));
+
       const response = await fetch('/api/agent/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sessionId: sessionId || 'default',
           message: content,
+          messages: historyMessages,
           images,
         }),
       });
@@ -296,11 +366,11 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
         useAgentStore.getState().setLastIntent(data.intent);
         // 触发工作流执行
         executeAgentIntent(data.intent);
-        // Store follow-up suggestions if present
+        // Store follow-up suggestions to show after generation completes
         if (data.suggestions?.length > 0) {
-          setFollowUpSuggestions(data.suggestions);
+          pendingFollowUpRef.current = data.suggestions;
         } else {
-          setFollowUpSuggestions([]);
+          pendingFollowUpRef.current = [];
         }
       } else {
         // 纯文本回复
@@ -447,7 +517,7 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
             title="试试这些："
           />
         )}
-        {messages.map((msg, index) => (
+        {messages.filter(m => !m.hidden).map((msg, index, visibleMessages) => (
           <div key={msg.id}>
             <MessageBubble
               message={msg}
@@ -455,8 +525,9 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
               isTyping={!msg.isError && msg.role === 'assistant' && msg.id === typingMessageId}
               onTypingComplete={() => setTypingMessageId(null)}
               scrollRef={messagesEndRef as React.RefObject<HTMLDivElement>}
+              onNavigateToCard={navigateToCard}
             />
-            {(followUpSuggestions.length > 0 || suggestionsLoading) && !typingMessageId && index === messages.length - 1 && msg.role === 'assistant' && !msg.isError && (
+            {(followUpSuggestions.length > 0 || suggestionsLoading) && !typingMessageId && index === visibleMessages.length - 1 && msg.role === 'assistant' && !msg.isError && (
               <SuggestionsPanel
                 suggestions={followUpSuggestions}
                 loading={suggestionsLoading}
@@ -754,12 +825,13 @@ function TypewriterText({ text, speed = 20, onComplete, scrollRef }: {
   );
 }
 
-function MessageBubble({ message, onRetry, isTyping, onTypingComplete, scrollRef }: {
+function MessageBubble({ message, onRetry, isTyping, onTypingComplete, scrollRef, onNavigateToCard }: {
   message: ChatMessage;
   onRetry: (msg: ChatMessage) => void;
   isTyping?: boolean;
   onTypingComplete?: () => void;
   scrollRef?: React.RefObject<HTMLDivElement>;
+  onNavigateToCard?: (tabId: number, imageId: string) => void;
 }) {
   const isUser = message.role === 'user';
 
@@ -776,8 +848,8 @@ function MessageBubble({ message, onRetry, isTyping, onTypingComplete, scrollRef
       lineHeight: 1.5,
       wordBreak: 'break-word' as const,
     }}>
-      {/* Attached images */}
-      {message.images && message.images.length > 0 && (
+      {/* Attached images (user uploads only) */}
+      {isUser && message.images && message.images.length > 0 && (
         <div style={{ display: 'flex', gap: 4, marginBottom: 6, flexWrap: 'wrap' }}>
           {message.images.map((src, i) => (
             <img
@@ -799,6 +871,27 @@ function MessageBubble({ message, onRetry, isTyping, onTypingComplete, scrollRef
         <TypewriterText text={message.content} speed={20} onComplete={onTypingComplete} scrollRef={scrollRef} />
       ) : (
         message.content
+      )}
+      {/* 生成结果图片（assistant 消息且带 tabId/imageId） */}
+      {!isUser && message.images && message.images.length > 0 && message.tabId != null && message.imageId && (
+        <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+          {message.images.map((url, idx) => (
+            <img
+              key={idx}
+              src={url}
+              alt={`生成结果 ${idx + 1}`}
+              style={{
+                maxWidth: 200,
+                maxHeight: 200,
+                borderRadius: 8,
+                cursor: 'pointer',
+                objectFit: 'cover',
+              }}
+              onClick={() => onNavigateToCard?.(message.tabId!, message.imageId!)}
+              title="点击跳转到对应卡片"
+            />
+          ))}
+        </div>
       )}
       {/* Action button */}
       {message.actionButton && (

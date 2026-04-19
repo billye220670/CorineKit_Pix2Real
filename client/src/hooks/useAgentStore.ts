@@ -17,6 +17,9 @@ export interface ChatMessage {
     imageId: string;
   };
   isError?: boolean;
+  hidden?: boolean;      // UI 不渲染，仅作为 LLM 上下文
+  tabId?: number;        // 跳转目标 Tab
+  imageId?: string;      // 跳转目标卡片 ID
 }
 
 export interface UploadedImage {
@@ -94,6 +97,16 @@ interface AgentState {
     progress: number;
     outputs: Array<{ filename: string; url: string }>;
     error?: string;
+    // 生成参数上下文（用于多轮对话）
+    generationContext?: {
+      prompt: string;
+      negativePrompt?: string;
+      model: string;
+      loras: Array<{ model: string; strength: number }>;
+      workflowName: string;
+      width?: number;
+      height?: number;
+    };
   } | null;
 
   setAgentExecution: (exec: AgentState['agentExecution']) => void;

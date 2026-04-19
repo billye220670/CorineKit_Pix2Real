@@ -491,9 +491,10 @@ router.get('/user-profile', (req, res) => {
 // POST /api/agent/chat - AI 对话 + 意图解析
 router.post('/chat', async (req, res) => {
   try {
-    const { sessionId, message, images } = req.body as {
+    const { sessionId, message, messages: historyMessages, images } = req.body as {
       sessionId?: string;
       message?: string;
+      messages?: LLMMessage[];
       images?: string[];
     };
 
@@ -516,7 +517,18 @@ router.post('/chat', async (req, res) => {
       { role: 'system', content: systemPrompt },
     ];
 
-    // 如果有图片，用 vision content 格式
+    // 4a. 只取最后一条 assistant 消息作为上下文（最近的生成记录）
+    if (historyMessages && historyMessages.length > 0) {
+      const lastAssistantMsg = [...historyMessages]
+        .reverse()
+        .find(m => m.role === 'assistant' && typeof m.content === 'string' && m.content.includes('[生成完成]'));
+
+      if (lastAssistantMsg) {
+        messages.push(lastAssistantMsg);
+      }
+    }
+
+    // 4b. 添加当前用户消息
     if (images && images.length > 0) {
       messages.push({
         role: 'user',
@@ -535,12 +547,33 @@ router.post('/chat', async (req, res) => {
     // 5. 定义 Function Calling 工具
     const tools = getAgentTools();
 
-    // 6. 调用 LLM
-    const llmResponse = await callLLM({ messages, tools });
+    // 6. 调用 LLM（统一使用 required，LLM 通过 text_response 工具处理非生成请求）
+    const toolChoice = 'required';
+    const llmResponse = await callLLM({ messages, tools, toolChoice });
 
     // 7. 解析意图
     if (llmResponse.toolCalls && llmResponse.toolCalls.length > 0) {
-      const intent = parseToolCall(llmResponse.toolCalls[0], metadata, profile);
+      const toolCall = llmResponse.toolCalls[0];
+
+      // 7a. text_response 工具 — 纯文本回复，不触发生图
+      if (toolCall.function.name === 'text_response') {
+        try {
+          const args = JSON.parse(toolCall.function.arguments);
+          res.json({
+            type: 'text_response',
+            message: args.message || '有什么可以帮你的？',
+          });
+        } catch {
+          res.json({
+            type: 'text_response',
+            message: llmResponse.content || '有什么可以帮你的？',
+          });
+        }
+        return;
+      }
+
+      // 7b. generate_image / process_image — 触发生图工作流
+      const intent = parseToolCall(toolCall, metadata, profile);
       const suggestions = await generateFollowUpSuggestions(intent, profile, metadata);
       res.json({
         type: 'tool_call',
@@ -551,7 +584,7 @@ router.post('/chat', async (req, res) => {
       return;
     }
 
-    // 8. 纯文本回复（没有 tool call）
+    // 8. 纯文本回复（没有 tool call，理论上不会到达，因为 tool_choice=required）
     res.json({
       type: 'text',
       message: llmResponse.content || '我没有理解您的需求，请再说详细一些。',

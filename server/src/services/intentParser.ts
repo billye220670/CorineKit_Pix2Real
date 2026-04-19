@@ -268,6 +268,65 @@ function normalizeModelFamily(family: string): string | null {
   return null;
 }
 
+// ── 基础模型模糊匹配 ───────────────────────────────────────────────────────────
+
+/**
+ * 根据用户提供的模糊名称，在 metadata 中查找匹配的 checkpoint 模型
+ * 支持 nickname、文件名、关键词模糊匹配（不区分大小写）
+ */
+function findCheckpointByName(name: string, metadata: any): string | undefined {
+  if (!name) return undefined;
+  const nameLower = name.toLowerCase();
+
+  // 精确匹配：直接用 name 作为 key 查找
+  if (metadata[name]) {
+    const m = metadata[name] as Record<string, any>;
+    if (m.category === '光辉' || m.category === 'PONY') return name;
+  }
+
+  // 模糊匹配：遍历所有 checkpoint，匹配 nickname / key / keywords
+  let bestMatch: string | undefined;
+  let bestScore = 0;
+
+  for (const [filePath, meta] of Object.entries(metadata)) {
+    if (!meta || typeof meta !== 'object') continue;
+    const m = meta as Record<string, any>;
+    if (m.category !== '光辉' && m.category !== 'PONY') continue;
+
+    let score = 0;
+    const nickname = String(m.nickname || '').toLowerCase();
+    const fileNameLower = filePath.toLowerCase();
+
+    // nickname 匹配
+    if (nickname === nameLower) {
+      score += 100; // 完全匹配
+    } else if (nickname.includes(nameLower) || nameLower.includes(nickname)) {
+      score += 50;
+    }
+
+    // 文件名匹配
+    if (fileNameLower.includes(nameLower)) {
+      score += 30;
+    }
+
+    // 关键词匹配
+    const keywords = Array.isArray(m.keywords) ? m.keywords : [];
+    for (const kw of keywords) {
+      const kwLower = String(kw).toLowerCase();
+      if (kwLower.includes(nameLower) || nameLower.includes(kwLower)) {
+        score += 20;
+      }
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestMatch = filePath;
+    }
+  }
+
+  return bestMatch;
+}
+
 // ── 基础模型推荐 ─────────────────────────────────────────────────────────────
 
 /**
@@ -424,8 +483,16 @@ function parseGenerateImage(
     ? { width: 768, height: 1152, steps: 20, cfg: 7 }
     : { width: 1024, height: 1536, steps: 35, cfg: 7 };
 
-  // 根据 LoRA 兼容性 + 用户偏好推荐基础模型
-  const recommendedModel = recommendBaseModel(recommendedLoras, metadata, userProfile);
+  // 如果 LLM 传了 model 参数（用户明确指定），优先使用
+  let recommendedModel: string | undefined;
+  if (args.model) {
+    recommendedModel = findCheckpointByName(String(args.model), metadata);
+  }
+
+  // 否则走 recommendBaseModel 自动推荐
+  if (!recommendedModel) {
+    recommendedModel = recommendBaseModel(recommendedLoras, metadata, userProfile);
+  }
 
   return {
     taskType: 'generate',
