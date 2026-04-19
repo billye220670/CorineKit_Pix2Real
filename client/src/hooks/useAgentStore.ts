@@ -87,6 +87,10 @@ interface AgentState {
   lastIntent: ParsedIntent | null;
   setLastIntent: (intent: ParsedIntent | null) => void;
 
+  // 最近一次生成的输出图片 URL 数组（供链式工作流引用）
+  lastOutputImages: string[];
+  setLastOutputImages: (images: string[]) => void;
+
   // Agent 执行状态（Task 9）
   agentExecution: {
     promptId: string;
@@ -106,6 +110,7 @@ interface AgentState {
       workflowName: string;
       width?: number;
       height?: number;
+      imageName?: string;
     };
   } | null;
 
@@ -191,6 +196,10 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   // Last parsed intent
   lastIntent: null,
   setLastIntent: (intent) => set({ lastIntent: intent }),
+
+  // Last output images
+  lastOutputImages: [],
+  setLastOutputImages: (images) => set({ lastOutputImages: images }),
 
   // Agent execution state
   agentExecution: null,

@@ -158,21 +158,21 @@ export function getAgentTools(): Tool[] {
       type: 'function',
       function: {
         name: 'process_image',
-        description: '对用户上传的图片进行处理，如放大、精修、风格转换等。',
+        description: '处理用户上传的图片。支持：二次元转真人（anime_to_real）、精修放大（upscale）、真人转二次元（real_to_anime）。用户必须已上传图片才能调用此工具。',
         parameters: {
           type: 'object',
           properties: {
-            operation: {
+            action: {
               type: 'string',
-              enum: ['upscale', 'enhance', 'style_transfer', 'remove_clothes'],
-              description: '处理操作类型',
+              enum: ['anime_to_real', 'upscale', 'real_to_anime'],
+              description: '处理动作：anime_to_real=二次元转真人, upscale=精修放大, real_to_anime=真人转二次元',
             },
             prompt: {
               type: 'string',
-              description: '可选的描述性提示词',
+              description: '补充提示词（可选）。二次元转真人和真人转二次元可用，精修放大不需要。',
             },
           },
-          required: ['operation'],
+          required: ['action'],
         },
       },
     },
@@ -288,10 +288,17 @@ export function buildSystemPrompt(profile: UserPreferenceProfile, metadata: any)
   return `## 工具选择指南
 你有三个工具，每次必须选择一个调用：
 - **generate_image**：用户要求生成、创建、修改、调整图片时调用
-- **process_image**：用户要求对已有图片进行放大、精修、风格转换等处理时调用
+- **process_image**：用户要求对已有图片进行放大、精修、风格转换等处理时调用（用户必须已上传图片）
 - **text_response**：用户询问功能、闲聊、提问、打招呼等非生成场景时调用
 
 ⚠️ 判断规则：如果用户的消息不涉及生成或处理图片，必须使用 text_response 工具回复，不要调用 generate_image。
+
+## 图片处理
+当用户上传了图片并要求处理时，使用 process_image 工具：
+- "转成真人"/"二次元转真人" → action: anime_to_real
+- "放大"/"精修"/"高清化" → action: upscale
+- "转成二次元"/"转成动漫风" → action: real_to_anime
+- 用户未上传图片时不要调用 process_image，提示用户先上传图片
 
 ## 重要约束
 你是 CorineKit Pix2Real 的 AI 图像生成助手。用户会用自然语言描述想要生成的图片，你需要理解意图并调用对应的工具。

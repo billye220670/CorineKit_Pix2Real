@@ -514,35 +514,21 @@ function parseProcessImage(
   args: Record<string, any>,
   metadata: any,
 ): ParsedIntent {
-  const operation: string = args.operation ?? 'enhance';
+  const action: string = args.action ?? 'upscale';
   const prompt: string = args.prompt ?? '';
 
-  // 映射 operation 到工作流
-  let workflowId = 2;
-  let workflowName = '精修放大';
-  switch (operation) {
-    case 'upscale':
-      workflowId = 2;
-      workflowName = '精修放大';
-      break;
-    case 'enhance':
-      workflowId = 1;
-      workflowName = '真人精修';
-      break;
-    case 'style_transfer':
-      workflowId = 0;
-      workflowName = '二次元转真人';
-      break;
-    case 'remove_clothes':
-      workflowId = 5;
-      workflowName = '解除装备';
-      break;
-  }
+  const actionMap: Record<string, { workflowId: number; workflowName: string }> = {
+    'anime_to_real': { workflowId: 0, workflowName: '二次元转真人' },
+    'upscale': { workflowId: 2, workflowName: '精修放大' },
+    'real_to_anime': { workflowId: 6, workflowName: '真人转二次元' },
+  };
+
+  const mapped = actionMap[action] || actionMap['upscale'];
 
   return {
     taskType: 'process',
-    workflowId,
-    workflowName,
+    workflowId: mapped.workflowId,
+    workflowName: mapped.workflowName,
     prompt,
     quality: 'high',
     recommendedLoras: [],

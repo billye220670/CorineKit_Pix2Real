@@ -6,7 +6,8 @@ import { readGenerationLog, appendGenerationLog, readFavorites, writeFavorite, u
 import { buildUserProfile } from '../services/profileService.js';
 import { callLLM, buildSystemPrompt, getAgentTools } from '../services/llmService.js';
 import { parseToolCall } from '../services/intentParser.js';
-import { queuePrompt } from '../services/comfyui.js';
+import { queuePrompt, uploadImage } from '../services/comfyui.js';
+import { getAdapter } from '../adapters/index.js';
 import type { ParsedIntent } from '../services/intentParser.js';
 import type { GenerationRecord } from '../services/agentService.js';
 import type { LLMMessage } from '../services/llmService.js';
@@ -491,11 +492,12 @@ router.get('/user-profile', (req, res) => {
 // POST /api/agent/chat - AI 对话 + 意图解析
 router.post('/chat', async (req, res) => {
   try {
-    const { sessionId, message, messages: historyMessages, images } = req.body as {
+    const { sessionId, message, messages: historyMessages, images, hasImage } = req.body as {
       sessionId?: string;
       message?: string;
       messages?: LLMMessage[];
       images?: string[];
+      hasImage?: boolean;
     };
 
     if (!sessionId || !message) {
@@ -529,11 +531,15 @@ router.post('/chat', async (req, res) => {
     }
 
     // 4b. 添加当前用户消息
+    const userText = hasImage && !(images && images.length > 0)
+      ? `${message}\n[用户已上传一张图片]`
+      : message;
+
     if (images && images.length > 0) {
       messages.push({
         role: 'user',
         content: [
-          { type: 'text', text: message },
+          { type: 'text', text: userText },
           ...images.map((img: string) => ({
             type: 'image_url',
             image_url: { url: img },
@@ -541,7 +547,7 @@ router.post('/chat', async (req, res) => {
         ],
       });
     } else {
-      messages.push({ role: 'user', content: message });
+      messages.push({ role: 'user', content: userText });
     }
 
     // 5. 定义 Function Calling 工具
@@ -637,7 +643,7 @@ router.post('/execute', express.json(), async (req, res) => {
       return;
     }
 
-    const workflowId = intent.workflowId || 7;
+    const workflowId = intent.workflowId ?? 7;
     const tabId = workflowId;
     const ts = generateTimestamp();
 
@@ -845,6 +851,51 @@ router.post('/execute', express.json(), async (req, res) => {
           scheduler,
           shiftEnabled,
           shift,
+        },
+      });
+
+    } else if ([0, 2, 6].includes(workflowId)) {
+      // ── Tab 0/2/6 图片处理工作流 ─────────────────────────────────────────────
+      const { imageData, imageFilename } = req.body as {
+        imageData?: string;
+        imageFilename?: string;
+        intent: ParsedIntent;
+        clientId: string;
+        sessionId: string;
+      };
+
+      if (!imageData) {
+        res.status(400).json({ error: '图片处理工作流需要图片数据' });
+        return;
+      }
+
+      // 1. 解码 base64 图片并上传到 ComfyUI
+      const imageBuffer = Buffer.from(imageData, 'base64');
+      const filename = imageFilename || `agent_upload_${Date.now()}.png`;
+      const comfyFilename = await uploadImage(imageBuffer, filename);
+
+      // 2. 使用适配器构建工作流
+      const adapter = getAdapter(workflowId);
+      if (!adapter) {
+        res.status(400).json({ error: `No adapter for workflowId: ${workflowId}` });
+        return;
+      }
+
+      const workflow = adapter.buildPrompt(comfyFilename, intent.prompt);
+
+      // 3. 提交到 ComfyUI 队列
+      const result = await queuePrompt(workflow, clientId);
+
+      // 4. 返回结果
+      res.json({
+        promptId: result.prompt_id,
+        workflowId,
+        workflowName: intent.workflowName,
+        tabId,
+        resolvedConfig: {
+          workflowName: intent.workflowName,
+          prompt: intent.prompt || '',
+          imageName: comfyFilename,
         },
       });
 

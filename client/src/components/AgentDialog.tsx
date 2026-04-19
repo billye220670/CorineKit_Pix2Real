@@ -55,8 +55,9 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
       completionHandledRef.current = agentExecution.promptId;
       const ctx = agentExecution.generationContext;
       // 精简LoRA名称：去掉路径和.safetensors后缀，只保留名称
-      const loraNames = ctx.loras.length > 0
-        ? ctx.loras.map(l => {
+      const loras = ctx.loras || [];
+      const loraNames = loras.length > 0
+        ? loras.map(l => {
             const name = l.model.replace(/\\/g, '/').split('/').pop() || l.model;
             return name.replace(/\.safetensors$/i, '');
           }).join(', ')
@@ -66,13 +67,16 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
       // 隐藏的上下文消息（仅作为 LLM 上下文，UI 不显示）
       addMessage({
         role: 'assistant',
-        content: `[生成完成] 提示词: ${shortPrompt} | LoRA: ${loraNames}`,
+        content: `[生成完成] 工作流: ${ctx.workflowName} | 提示词: ${shortPrompt} | LoRA: ${loraNames} | 有输出图片可供后续处理`,
         hidden: true,
       });
 
       // 可见的图片结果消息
       const execution = agentExecution;
       if (execution.outputs.length > 0) {
+        // 保存输出图片供后续工作流链式引用
+        useAgentStore.getState().setLastOutputImages(execution.outputs.map(o => o.url));
+
         addMessage({
           role: 'assistant',
           content: `✅ 生成完成！共 ${execution.outputs.length} 张图片`,
@@ -159,11 +163,14 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
     const { clientId, sessionId } = useWorkflowStore.getState();
     const { setAgentExecution } = useAgentStore.getState();
 
+    // 判断是否为图片处理工作流 (Tab 0/2/6)
+    const isImageWorkflow = [0, 2, 6].includes(intent.workflowId);
+
     // 设置初始状态
     setAgentExecution({
       promptId: '',
-      workflowId: intent.workflowId || 7,
-      tabId: intent.workflowId || 7,
+      workflowId: intent.workflowId ?? 7,
+      tabId: intent.workflowId ?? 7,
       imageId: '',
       status: 'preparing',
       progress: 0,
@@ -171,11 +178,82 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
     });
 
     try {
+      // 图片处理工作流：按优先级获取图片
+      // 优先级1：用户在最新消息中上传了新图片
+      // 优先级2：上一步工作流的输出图片（lastOutputImages）
+      // 优先级3：历史消息中最后一条带图的 user 消息
+      let imageData: string | undefined;
+      let imageFilename: string | undefined;
+
+      if (isImageWorkflow) {
+        let imageDataUrl: string | null = null;
+
+        // 优先级1：检查最新用户消息是否上传了新图片
+        const agentMessages = useAgentStore.getState().messages;
+        const lastUserMsg = agentMessages[agentMessages.length - 1];
+        if (lastUserMsg?.role === 'user' && lastUserMsg.images?.length) {
+          imageDataUrl = lastUserMsg.images[0];
+        }
+
+        // 优先级2：使用上一步的输出图片
+        if (!imageDataUrl) {
+          const lastOutputs = useAgentStore.getState().lastOutputImages;
+          if (lastOutputs?.length) {
+            // lastOutputs 是 URL 路径（如 /api/output/...），需要 fetch 转为 data URL
+            try {
+              const response = await fetch(lastOutputs[0]);
+              const blob = await response.blob();
+              imageDataUrl = await new Promise<string>((resolve) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result as string);
+                reader.readAsDataURL(blob);
+              });
+            } catch (e) {
+              console.error('Failed to fetch last output image:', e);
+            }
+          }
+        }
+
+        // 优先级3：历史消息中最后一条带图的 user 消息（兼容旧逻辑）
+        if (!imageDataUrl) {
+          const lastUserMsgWithImage = [...agentMessages].reverse().find(
+            m => m.role === 'user' && m.images?.length
+          );
+          if (lastUserMsgWithImage?.images?.[0]) {
+            imageDataUrl = lastUserMsgWithImage.images[0];
+          }
+        }
+
+        // 都没有 → 报错
+        if (!imageDataUrl) {
+          useAgentStore.getState().addMessage({
+            role: 'assistant',
+            content: '请先上传一张图片，或先进行一次图片生成。',
+          });
+          useAgentStore.getState().clearAgentExecution();
+          return;
+        }
+
+        // 从 data URL 提取 base64
+        const commaIdx = imageDataUrl.indexOf(',');
+        if (commaIdx >= 0) {
+          imageData = imageDataUrl.substring(commaIdx + 1);
+        }
+        imageFilename = `agent_upload_${Date.now()}.png`;
+      }
+
+      // 构建 execute 请求体
+      const executeBody: Record<string, unknown> = { intent, clientId, sessionId };
+      if (imageData) {
+        executeBody.imageData = imageData;
+        executeBody.imageFilename = imageFilename;
+      }
+
       // 调用后端执行
       const res = await fetch('/api/agent/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ intent, clientId, sessionId }),
+        body: JSON.stringify(executeBody),
       });
 
       if (!res.ok) {
@@ -192,9 +270,60 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
       const ts = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
       const itemName = `agent_${ts}`;
 
-      // addText2ImgCard / addZitCard 已硬编码写入 tab 7 / tab 9，不依赖 activeTab
       let imageId: string;
-      if (tabId === 9) {
+
+      if (isImageWorkflow) {
+        // 图片处理工作流：用之前确定的图片创建卡片
+        // imageData 已在上方优先级逻辑中确定
+        let file: File;
+        let previewUrl: string;
+
+        if (imageData) {
+          // 从 base64 还原为 Blob/File
+          const bytes = Uint8Array.from(atob(imageData), (c) => c.charCodeAt(0));
+          const blob = new Blob([bytes], { type: 'image/png' });
+          file = new File([blob], `${itemName}.png`, { type: 'image/png' });
+          previewUrl = URL.createObjectURL(blob);
+        } else {
+          // fallback: 1x1 白色占位图
+          const b64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQAABjE+ibYAAAAASUVORK5CYII=';
+          const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+          const blob = new Blob([bytes], { type: 'image/png' });
+          file = new File([blob], `${itemName}.png`, { type: 'image/png' });
+          previewUrl = URL.createObjectURL(blob);
+        }
+
+        imageId = `img_${Date.now()}_agent`;
+        // 直接向目标 tab 添加 ImageItem
+        const prev = store.tabData[tabId] || { images: [], prompts: {}, tasks: {}, imagePromptMap: {}, selectedOutputIndex: {}, backPoseToggles: {}, text2imgConfigs: {}, zitConfigs: {}, faceSwapZones: {} };
+        useWorkflowStore.setState((state) => ({
+          tabData: {
+            ...state.tabData,
+            [tabId]: {
+              ...prev,
+              images: [...prev.images, { id: imageId, file, previewUrl, originalName: `${itemName}.png` }],
+            },
+          },
+        }));
+
+        // 如果有 prompt，设置到 prompts 映射
+        if (resolvedConfig?.prompt || intent.prompt) {
+          useWorkflowStore.setState((state) => {
+            const tabPrev = state.tabData[tabId];
+            if (!tabPrev) return state;
+            return {
+              tabData: {
+                ...state.tabData,
+                [tabId]: {
+                  ...tabPrev,
+                  prompts: { ...tabPrev.prompts, [imageId]: resolvedConfig?.prompt || intent.prompt || '' },
+                },
+              },
+            };
+          });
+        }
+      } else if (tabId === 9) {
+        // addText2ImgCard / addZitCard 已硬编码写入 tab 7 / tab 9，不依赖 activeTab
         imageId = store.addZitCard({
           unetModel: resolvedConfig.unetModel,
           loras: resolvedConfig.loras,
@@ -236,15 +365,23 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
         status: 'executing',
         progress: 0,
         outputs: [],
-        generationContext: {
-          prompt: resolvedConfig.prompt || intent.prompt || '',
-          negativePrompt: resolvedConfig.negativePrompt,
-          model: resolvedConfig.model || resolvedConfig.unetModel || '默认模型',
-          loras: resolvedConfig.loras || intent.recommendedLoras || [],
-          workflowName: intent.workflowName || (tabId === 9 ? 'ZIT快出' : '快速出图'),
-          width: resolvedConfig.width,
-          height: resolvedConfig.height,
-        },
+        generationContext: isImageWorkflow
+          ? {
+              prompt: resolvedConfig?.prompt || intent.prompt || '',
+              model: '',
+              loras: [],
+              workflowName: intent.workflowName || resolvedConfig?.workflowName || '图片处理',
+              imageName: resolvedConfig?.imageName,
+            }
+          : {
+              prompt: resolvedConfig.prompt || intent.prompt || '',
+              negativePrompt: resolvedConfig.negativePrompt,
+              model: resolvedConfig.model || resolvedConfig.unetModel || '默认模型',
+              loras: resolvedConfig.loras || intent.recommendedLoras || [],
+              workflowName: intent.workflowName || (tabId === 9 ? 'ZIT快出' : '快速出图'),
+              width: resolvedConfig.width,
+              height: resolvedConfig.height,
+            },
       });
 
       // 注册 WebSocket 进度跟踪（promptId 已就绪，WS 事件可正确匹配）
@@ -342,6 +479,7 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
           message: content,
           messages: historyMessages,
           images,
+          hasImage: !!images?.length,
         }),
       });
 
