@@ -130,12 +130,28 @@ wss.on('connection', (clientWs) => {
     },
 
     async onComplete(promptId) {
-      console.log(`[WS] Prompt ${promptId} completed`);
+      console.log(`[WS] onComplete received for promptId ${promptId}`);
+
+      // Wait for register message if it hasn't arrived yet (race condition fix)
+      let retries = 0;
+      const maxRetries = 20; // 20 * 100ms = 2s
+      while (!promptWorkflowMap.has(promptId) && retries < maxRetries) {
+        await new Promise(r => setTimeout(r, 100));
+        retries++;
+      }
+      if (retries > 0) {
+        console.log(`[WS] Waited ${retries * 100}ms for promptId ${promptId} registration`);
+      }
 
       try {
         // Download outputs to session output directory
         const history = await getHistory(promptId);
         const outputs: Array<{ filename: string; url: string }> = [];
+        const info = promptWorkflowMap.get(promptId);
+
+        if (!info) {
+          console.warn(`[WS] No workflow mapping found for promptId ${promptId}, outputs will not be saved to session`);
+        }
 
         if (history && history.outputs) {
           for (const nodeOutput of Object.values(history.outputs)) {
@@ -145,10 +161,11 @@ wss.on('connection', (clientWs) => {
                 if (img.type !== 'output') continue;
                 try {
                   const buffer = await getImageBuffer(img.filename, img.subfolder, img.type);
-                  const info = promptWorkflowMap.get(promptId);
-                  if (info?.sessionId) {
+                  if (info && info.sessionId) {
                     const url = saveOutputFile(info.sessionId, info.tabId, img.filename, buffer);
                     outputs.push({ filename: img.filename, url });
+                  } else if (info && !info.sessionId) {
+                    console.warn(`[WS] Missing sessionId for promptId ${promptId}, output ${img.filename} not saved`);
                   }
                 } catch (err) {
                   console.error(`[WS] Failed to download output ${img.filename}:`, err);
@@ -161,10 +178,11 @@ wss.on('connection', (clientWs) => {
               for (const vid of nodeOutput.gifs) {
                 try {
                   const buffer = await getImageBuffer(vid.filename, vid.subfolder, vid.type);
-                  const info = promptWorkflowMap.get(promptId);
-                  if (info?.sessionId) {
+                  if (info && info.sessionId) {
                     const url = saveOutputFile(info.sessionId, info.tabId, vid.filename, buffer);
                     outputs.push({ filename: vid.filename, url });
+                  } else if (info && !info.sessionId) {
+                    console.warn(`[WS] Missing sessionId for promptId ${promptId}, video ${vid.filename} not saved`);
                   }
                 } catch (err) {
                   console.error(`[WS] Failed to download video ${vid.filename}:`, err);
