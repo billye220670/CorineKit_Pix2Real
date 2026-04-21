@@ -18,6 +18,7 @@
 
 ## 更新摘要
 **变更内容**
+- **代码格式化优化**：PhotoWall 组件进行了全面的代码格式化优化，提升代码可读性和维护性
 - **新增自动滚动功能**：当新图片生成时自动滚动到底部，提升用户体验
 - **重大布局重构**：从 CSS 多列布局迁移到 CSS Grid，使用 `repeat(auto-fill, minmax())` 实现响应式图像卡片布局
 - 改进了滚动行为和对齐方式，使用 `alignItems: 'start'` 和 `alignContent: 'start'` 确保卡片顶部对齐
@@ -39,7 +40,7 @@
 ## 简介
 PhotoWall 是一个高性能的图片瀑布流展示组件，支持响应式列宽、懒加载、多选模式、批量操作与拖拽删除等高级功能。**更新** 组件已从传统的 CSS 多列布局重构为现代的 CSS Grid 布局，使用 `repeat(auto-fill, minmax())` 实现更加灵活和响应式的图像卡片排列。通过 IntersectionObserver 与手动滚动补偿策略优化首屏渲染与滚动体验。组件与 ImageCard、ThumbnailStrip、拖拽存储、蒙版存储等模块深度协作，形成完整的图片工作流界面。
 
-**更新** 新增对工作流10（区域编辑）的功能支持，包括蒙版验证和表单数据准备。**新增** 自动滚动功能：当新图片生成时，组件会自动滚动到底部，确保用户能够立即看到最新生成的内容。
+**更新** 代码格式化优化提升了整体可读性和维护性，新增对工作流10（区域编辑）的功能支持，包括蒙版验证和表单数据准备。**新增** 自动滚动功能：当新图片生成时，组件会自动滚动到底部，确保用户能够立即看到最新生成的内容。
 
 ## 项目结构
 PhotoWall 位于客户端前端代码中，作为主界面的核心展示区域之一，负责组织与渲染当前工作区的图片卡片，并提供多选、批量执行、拖拽删除等交互能力。
@@ -653,3 +654,23 @@ PhotoWall 通过 LazyCard 的 IntersectionObserver 优化、**重构后的 CSS G
   - 确保 isFlashing 属性正确传递给 ImageCard 组件。
   - 验证 CSS 动画类名和样式定义。
   - 参考路径：[ImageCard.tsx:483-484](file://client/src/components/ImageCard.tsx#L483-L484)
+
+### 代码格式化优化详情
+**更新** PhotoWall 组件经过全面的代码格式化优化，主要改进包括：
+
+- **代码结构优化**：函数和变量的组织更加清晰，逻辑层次分明
+- **注释改进**：增加了更多详细的注释说明，特别是对关键算法和配置的解释
+- **代码块缩进和格式**：统一了代码缩进和格式风格，提升了整体可读性
+- **常量定义优化**：VIEW_CONFIG 等配置常量的定义更加规范，便于维护
+- **类型注解完善**：增强了 TypeScript 类型注解的完整性和准确性
+- **代码分组**：将相关的函数和逻辑按照功能模块进行分组，便于理解和修改
+
+这些优化使得 PhotoWall 组件的代码更加易于维护和扩展，为后续的功能开发奠定了良好的基础。
+
+**章节来源**
+- [PhotoWall.tsx:12-16](file://client/src/components/PhotoWall.tsx#L12-L16)
+- [PhotoWall.tsx:18-97](file://client/src/components/PhotoWall.tsx#L18-L97)
+- [PhotoWall.tsx:136-146](file://client/src/components/PhotoWall.tsx#L136-L146)
+- [PhotoWall.tsx:165-266](file://client/src/components/PhotoWall.tsx#L165-L266)
+- [PhotoWall.tsx:218-246](file://client/src/components/PhotoWall.tsx#L218-L246)
+- [PhotoWall.tsx:493-506](file://client/src/components/PhotoWall.tsx#L493-L506)

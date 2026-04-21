@@ -87,6 +87,11 @@ interface WorkflowStore {
   needsPrompt: () => boolean;
   isProcessing: () => boolean;
 
+  // Apply config to sidebar
+  pendingApplyConfig: Text2ImgConfig | ZitConfig | null;
+  applyConfigToSidebar: (config: Text2ImgConfig | ZitConfig) => void;
+  clearPendingApplyConfig: () => void;
+
   // Session restore
   restoreSession: (activeTab: number, tabData: Record<number, SerializedTabData>, restoredImages: Record<number, ImageItem[]>) => void;
 }
@@ -700,6 +705,10 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     }
     set({ activeTab, tabData: newTabData });
   },
+
+  pendingApplyConfig: null,
+  applyConfigToSidebar: (config) => set({ pendingApplyConfig: config }),
+  clearPendingApplyConfig: () => set({ pendingApplyConfig: null }),
 
   isProcessing: () => {
     const { activeTab, tabData } = get();

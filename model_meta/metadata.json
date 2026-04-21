@@ -16,8 +16,7 @@
     "keywords": [
       "光辉-Emerald"
     ],
-    "description": "基础模型 - 光辉-Emerald",
-    "styleTags": []
+    "description": "基础模型 - 光辉-Emerald"
   },
   "XL-漫画2.5D\\aMixIllustrious_aMix.safetensors": {
     "nickname": "光辉-AMix",
@@ -1606,5 +1605,11 @@
       "通用"
     ],
     "styleTags": []
+  },
+  "zit_yuz1n.safetensors": {
+    "recommendedStrength": 0.8
+  },
+  "z-uncensored_v1.1_ep12.safetensors": {
+    "recommendedStrength": 0.8
   }
 }

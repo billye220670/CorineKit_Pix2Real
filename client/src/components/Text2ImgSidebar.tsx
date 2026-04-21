@@ -116,6 +116,8 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
   const [prompt,     setPrompt]     = useState(() => readDraft().prompt    ?? '');
   const [negativePrompt, setNegativePrompt] = useState(() => readDraft().negativePrompt ?? '');
   const [ratio,      setRatio]      = useState(() => readDraft().ratio     ?? '3:4');
+  const [customWidth, setCustomWidth] = useState<number>(() => readDraft().width ?? 832);
+  const [customHeight, setCustomHeight] = useState<number>(() => readDraft().height ?? 1216);
   const [steps,      setSteps]      = useState(() => readDraft().steps     ?? 30);
   const [cfg,        setCfg]        = useState(() => readDraft().cfg       ?? 6);
   const [sampler,    setSampler]    = useState(() => readDraft().sampler   ?? 'euler_ancestral');
@@ -182,10 +184,39 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
     });
   }, [prompt, setPrompt]);
 
+  // Listen for pendingApplyConfig from useWorkflowStore
+  const pendingApplyConfig = useWorkflowStore((s) => s.pendingApplyConfig);
+  const clearPendingApplyConfig = useWorkflowStore((s) => s.clearPendingApplyConfig);
+  useEffect(() => {
+    if (!pendingApplyConfig) return;
+    // Only apply if it's a Text2ImgConfig (has 'model' field, no 'unetModel')
+    if ('model' in pendingApplyConfig && !('unetModel' in pendingApplyConfig)) {
+      const c = pendingApplyConfig as Text2ImgConfig;
+      setModel(c.model ?? '');
+      setLoras(c.loras ?? []);
+      setPrompt(c.prompt ?? '');
+      setNegativePrompt(c.negativePrompt ?? '');
+      setSteps(c.steps ?? 30);
+      setCfg(c.cfg ?? 6);
+      setSampler(c.sampler ?? 'euler_ancestral');
+      setScheduler(c.scheduler ?? 'normal');
+      // Match ratio preset or keep current
+      const matchedPreset = RATIO_PRESETS.find(p => p.width === c.width && p.height === c.height);
+      if (matchedPreset) {
+        setRatio(matchedPreset.label);
+      } else if (c.width && c.height) {
+        setRatio('custom');
+      }
+      setCustomWidth(c.width ?? 832);
+      setCustomHeight(c.height ?? 1216);
+      clearPendingApplyConfig();
+    }
+  }, [pendingApplyConfig, clearPendingApplyConfig]);
+
   // Persist config to localStorage whenever it changes
   useEffect(() => {
-    localStorage.setItem(DRAFT_KEY, JSON.stringify({ model, loras, prompt, negativePrompt, ratio, steps, cfg, sampler, scheduler, customName }));
-  }, [model, loras, prompt, negativePrompt, ratio, steps, cfg, sampler, scheduler, customName]);
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({ model, loras, prompt, negativePrompt, ratio, steps, cfg, sampler, scheduler, customName, width: customWidth, height: customHeight }));
+  }, [model, loras, prompt, negativePrompt, ratio, steps, cfg, sampler, scheduler, customName, customWidth, customHeight]);
 
   // Default model once loaded (only if none was saved or saved model not in list)
   useEffect(() => {
@@ -204,7 +235,7 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
     }
   }, [loraModels]);
 
-  const selectedPreset = RATIO_PRESETS.find((p) => p.label === ratio) ?? RATIO_PRESETS[1];
+  const selectedPreset = RATIO_PRESETS.find((p) => p.label === ratio);
 
   const handleGenerate = useCallback(async () => {
     if (!clientId || isGenerating) return;
@@ -214,8 +245,8 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
       loras,
       prompt,
       negativePrompt,
-      width:     selectedPreset.width,
-      height:    selectedPreset.height,
+      width:     selectedPreset ? selectedPreset.width : customWidth,
+      height:    selectedPreset ? selectedPreset.height : customHeight,
       steps,
       cfg,
       sampler,
@@ -255,7 +286,7 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
     } finally {
       setIsGenerating(false);
     }
-  }, [clientId, isGenerating, model, models, loras, loraModels, prompt, negativePrompt, selectedPreset, steps, cfg, sampler, scheduler, customName, batchCount, addText2ImgCard, startTask, sendMessage, sessionId]);
+  }, [clientId, isGenerating, model, models, loras, loraModels, prompt, negativePrompt, selectedPreset, customWidth, customHeight, steps, cfg, sampler, scheduler, customName, batchCount, addText2ImgCard, startTask, sendMessage, sessionId]);
 
   const handleQuickAction = useCallback(async (mode: 'naturalToTags' | 'tagsToNatural' | 'detailer') => {
     if (!prompt.trim()) return;
@@ -870,7 +901,7 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
                     height: 52,
                     padding: '4px 6px 7px',
                   }}
-                  onClick={() => setRatio(p.label)}
+                  onClick={() => { setRatio(p.label); setCustomWidth(p.width); setCustomHeight(p.height); }}
                 >
                   <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <div style={{

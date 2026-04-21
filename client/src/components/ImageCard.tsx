@@ -1322,11 +1322,37 @@ function ConfigPanel({ activeTab, text2imgConfig, zitConfig, onClose }: {
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <div style={{ fontSize: 15, fontWeight: 600, color: '#e0e0e0' }}>卡片配置详情</div>
-          <div
-            onClick={onClose}
-            style={{ cursor: 'pointer', color: '#888', display: 'flex', alignItems: 'center', padding: 4, borderRadius: 4 }}
-          >
-            <X size={16} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {config && (
+              <button
+                onClick={() => {
+                  const { applyConfigToSidebar } = useWorkflowStore.getState();
+                  applyConfigToSidebar(config);
+                  onClose();
+                }}
+                style={{
+                  padding: '4px 12px',
+                  fontSize: 12,
+                  fontWeight: 500,
+                  color: '#fff',
+                  backgroundColor: '#4a9eff',
+                  border: 'none',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#3a8eef'; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#4a9eff'; }}
+              >
+                使用配置
+              </button>
+            )}
+            <div
+              onClick={onClose}
+              style={{ cursor: 'pointer', color: '#888', display: 'flex', alignItems: 'center', padding: 4, borderRadius: 4 }}
+            >
+              <X size={16} />
+            </div>
           </div>
         </div>
 

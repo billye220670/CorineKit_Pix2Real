@@ -118,6 +118,8 @@ export function ZITSidebar({ width }: { width?: number }) {
   const [shift,         setShift]         = useState(() => readDraft().shift         ?? 3);
   const [prompt,        setPrompt]        = useState(() => readDraft().prompt        ?? '');
   const [ratio,       setRatio]       = useState(() => readDraft().ratio       ?? '3:4');
+  const [customWidth, setCustomWidth] = useState<number>(() => readDraft().width ?? 832);
+  const [customHeight, setCustomHeight] = useState<number>(() => readDraft().height ?? 1216);
   const [steps,       setSteps]       = useState(() => readDraft().steps       ?? 9);
   const [cfg,         setCfg]         = useState(() => readDraft().cfg         ?? 1);
   const [sampler,     setSampler]     = useState(() => readDraft().sampler     ?? 'euler');
@@ -181,12 +183,42 @@ export function ZITSidebar({ width }: { width?: number }) {
     });
   }, [prompt, setPrompt]);
 
+  // Listen for pendingApplyConfig from useWorkflowStore
+  const pendingApplyConfig = useWorkflowStore((s) => s.pendingApplyConfig);
+  const clearPendingApplyConfig = useWorkflowStore((s) => s.clearPendingApplyConfig);
+  useEffect(() => {
+    if (!pendingApplyConfig) return;
+    // Only apply if it's a ZitConfig (has 'unetModel' field)
+    if ('unetModel' in pendingApplyConfig) {
+      const c = pendingApplyConfig as ZitConfig;
+      setUnetModel(c.unetModel ?? '');
+      setLoras(c.loras ?? []);
+      setPrompt(c.prompt ?? '');
+      setShiftEnabled(c.shiftEnabled ?? false);
+      setShift(c.shift ?? 3);
+      setSteps(c.steps ?? 9);
+      setCfg(c.cfg ?? 1);
+      setSampler(c.sampler ?? 'euler');
+      setScheduler(c.scheduler ?? 'simple');
+      // Match ratio preset or keep current
+      const matchedPreset = RATIO_PRESETS.find(p => p.width === c.width && p.height === c.height);
+      if (matchedPreset) {
+        setRatio(matchedPreset.label);
+      } else if (c.width && c.height) {
+        setRatio('custom');
+      }
+      setCustomWidth(c.width ?? 832);
+      setCustomHeight(c.height ?? 1216);
+      clearPendingApplyConfig();
+    }
+  }, [pendingApplyConfig, clearPendingApplyConfig]);
+
   // Persist to localStorage
   useEffect(() => {
     localStorage.setItem(DRAFT_KEY, JSON.stringify({
-      unetModel, loras, shiftEnabled, shift, prompt, ratio, steps, cfg, sampler, scheduler, customName,
+      unetModel, loras, shiftEnabled, shift, prompt, ratio, steps, cfg, sampler, scheduler, customName, width: customWidth, height: customHeight,
     }));
-  }, [unetModel, loras, shiftEnabled, shift, prompt, ratio, steps, cfg, sampler, scheduler, customName]);
+  }, [unetModel, loras, shiftEnabled, shift, prompt, ratio, steps, cfg, sampler, scheduler, customName, customWidth, customHeight]);
 
   // Default model once loaded (or fallback if saved model not in list)
   useEffect(() => {
@@ -205,7 +237,7 @@ export function ZITSidebar({ width }: { width?: number }) {
     }
   }, [loraModels]);
 
-  const selectedPreset = RATIO_PRESETS.find((p) => p.label === ratio) ?? RATIO_PRESETS[1];
+  const selectedPreset = RATIO_PRESETS.find((p) => p.label === ratio);
 
   const handleGenerate = useCallback(async () => {
     if (!clientId || isGenerating) return;
@@ -216,8 +248,8 @@ export function ZITSidebar({ width }: { width?: number }) {
       shiftEnabled,
       shift,
       prompt,
-      width:     selectedPreset.width,
-      height:    selectedPreset.height,
+      width:     selectedPreset ? selectedPreset.width : customWidth,
+      height:    selectedPreset ? selectedPreset.height : customHeight,
       steps,
       cfg,
       sampler,
@@ -256,7 +288,7 @@ export function ZITSidebar({ width }: { width?: number }) {
     } finally {
       setIsGenerating(false);
     }
-  }, [clientId, isGenerating, unetModel, unetModels, loras, loraModels, shiftEnabled, shift, prompt, selectedPreset, steps, cfg, sampler, scheduler, customName, batchCount, addZitCard, startTask, sendMessage, sessionId]);
+  }, [clientId, isGenerating, unetModel, unetModels, loras, loraModels, shiftEnabled, shift, prompt, selectedPreset, customWidth, customHeight, steps, cfg, sampler, scheduler, customName, batchCount, addZitCard, startTask, sendMessage, sessionId]);
 
   const handleQuickAction = useCallback(async (mode: 'naturalToTags' | 'tagsToNatural' | 'detailer') => {
     if (!prompt.trim()) return;
@@ -699,7 +731,7 @@ export function ZITSidebar({ width }: { width?: number }) {
                     height: 52,
                     padding: '4px 6px 7px',
                   }}
-                  onClick={() => setRatio(p.label)}
+                  onClick={() => { setRatio(p.label); setCustomWidth(p.width); setCustomHeight(p.height); }}
                 >
                   <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <div style={{
