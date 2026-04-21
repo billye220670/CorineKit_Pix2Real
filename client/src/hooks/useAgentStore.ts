@@ -53,6 +53,22 @@ export interface ParsedIntent {
   };
 }
 
+export interface CardDropResult {
+  type: 'text2img' | 'img2img';
+  tabId: number;
+  imageId: string;
+  // text2img 时
+  config?: {
+    prompt: string;
+    model?: string;
+    loras?: Array<{ model: string; strength: number }>;
+    width?: number;
+    height?: number;
+  };
+  // img2img 时
+  imageUrl?: string;
+}
+
 interface AgentState {
   // Favorites
   favorites: Record<string, FavoriteEntry>;

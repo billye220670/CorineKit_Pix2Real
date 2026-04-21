@@ -1,5 +1,13 @@
 @import './variables.css';
 
+.image-preview-item .delete-btn {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.image-preview-item:hover .delete-btn {
+  opacity: 1;
+}
+
 *,
 *::before,
 *::after {

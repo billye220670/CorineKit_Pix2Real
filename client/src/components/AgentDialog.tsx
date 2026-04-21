@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Send, Paperclip, X, AlertCircle, RefreshCw, Loader2, ExternalLink } from 'lucide-react';
-import { useAgentStore, type ChatMessage } from '../hooks/useAgentStore.js';
+import { useAgentStore, type ChatMessage, type CardDropResult } from '../hooks/useAgentStore.js';
 import { useWorkflowStore } from '../hooks/useWorkflowStore.js';
 import { useWebSocket } from '../hooks/useWebSocket.js';
 
@@ -23,6 +23,8 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
   const { sendMessage: wsSendMessage } = useWebSocket();
 
   const [text, setText] = useState('');
+  const [isDragOver, setIsDragOver] = useState(false);
+
   const [closing, setClosing] = useState(false);
   const [typingMessageId, setTypingMessageId] = useState<string | null>(null);
   const [warmUpSuggestions, setWarmUpSuggestions] = useState<string[]>([]);
@@ -176,6 +178,8 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
     }
   }, [agentExecution?.status, agentExecution?.promptId, addMessage, updateMessage]);
 
+
+
   // ESC to close
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -185,27 +189,6 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen]);
-
-  // Click outside to close
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      // Don't close if clicking the FAB button
-      if (target.closest('button[style*="border-radius: 50%"]')) return;
-      if (dialogRef.current && !dialogRef.current.contains(target)) {
-        handleClose();
-      }
-    };
-    // Use setTimeout to avoid the current click event
-    const timer = setTimeout(() => {
-      document.addEventListener('mousedown', handleClickOutside);
-    }, 0);
-    return () => {
-      clearTimeout(timer);
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
   }, [isOpen]);
 
   // Reusable warm-up suggestions fetch
@@ -223,12 +206,12 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
     }
   }, []);
 
-  // Fetch warm-up suggestions when dialog opens with no messages
+  // Fetch warm-up suggestions when dialog opens with no messages (only once, reuse cache)
   useEffect(() => {
-    if (isOpen && messages.length === 0) {
+    if (isOpen && messages.length === 0 && warmUpSuggestions.length === 0 && !suggestionsLoading) {
       fetchWarmUpSuggestions();
     }
-  }, [isOpen, messages.length]);
+  }, [isOpen]);
 
   const handleClose = useCallback(() => {
     setClosing(true);
@@ -593,7 +576,6 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
     });
     setText('');
     clearUploadedImages();
-
     await sendMessage(content, images.length > 0 ? images : undefined);
   }, [text, uploadedImages, addMessage, clearUploadedImages, setIsExecuting, setExecutionStatus]);
 
@@ -619,6 +601,7 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
           messages: historyMessages,
           images,
           hasImage: !!images?.length,
+
         }),
       });
 
@@ -710,6 +693,108 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
     }
   }, []);
 
+  const handleCardDrop = useCallback((result: CardDropResult) => {
+    // 无论 text2img 还是 img2img，都把图片放到上传预览区
+    if (result.imageUrl) {
+      (async () => {
+        try {
+          const response = await fetch(result.imageUrl!);
+          const blob = await response.blob();
+          const file = new File([blob], `eyedropper_${Date.now()}.png`, { type: blob.type || 'image/png' });
+          const reader = new FileReader();
+          reader.onload = () => {
+            addUploadedImage({
+              id: crypto.randomUUID(),
+              dataUrl: reader.result as string,
+              file,
+            });
+          };
+          reader.readAsDataURL(blob);
+        } catch {
+          useAgentStore.getState().setLastOutputImages([result.imageUrl!]);
+        }
+      })();
+
+      useAgentStore.getState().setLastOutputImages([result.imageUrl]);
+    }
+
+    // text2img：额外添加隐藏的配置上下文消息给 LLM
+    if (result.type === 'text2img' && result.config) {
+      const loraInfo = result.config.loras?.map((l: any) => `${l.model}(${l.strength})`).join(', ') || '无';
+      addMessage({
+        role: 'assistant',
+        content: `[吸取配置] 模型: ${result.config.model || '默认'} | 提示词: ${result.config.prompt} | LoRA: ${loraInfo}`,
+        hidden: true,
+      });
+    }
+  }, [addMessage, addUploadedImage]);
+
+  const handleCardDropFromPhotoWall = useCallback((imageId: string) => {
+    const store = useWorkflowStore.getState();
+    const TEXT2IMG_TABS = [7, 9];
+
+    // 找到 imageId 所属的 tabId
+    let foundTabId: number | null = null;
+    for (const [tabIdStr, tabInfo] of Object.entries(store.tabData)) {
+      const tabId = parseInt(tabIdStr);
+      if (tabInfo.images?.some((img: any) => img.id === imageId)) {
+        foundTabId = tabId;
+        break;
+      }
+    }
+
+    // 如果找不到，使用 activeTab
+    if (foundTabId === null) {
+      foundTabId = store.activeTab;
+    }
+
+    const tabId = foundTabId;
+    const tabInfo = store.tabData[tabId];
+    if (!tabInfo) return;
+
+    if (TEXT2IMG_TABS.includes(tabId)) {
+      // 文生图：提取配置
+      const configs = tabId === 9 ? tabInfo.zitConfigs : tabInfo.text2imgConfigs;
+      const cardConfig = configs?.[imageId];
+      const prompt = (cardConfig as any)?.prompt || tabInfo.prompts?.[imageId] || '';
+
+      // 获取图片 URL
+      const task = tabInfo.tasks?.[imageId];
+      const selectedIdx = tabInfo.selectedOutputIndex?.[imageId] ?? 0;
+      const outputUrl = task?.outputs?.[selectedIdx]?.url || task?.outputs?.[0]?.url;
+      const img = tabInfo.images?.find((i: any) => i.id === imageId);
+      const imageUrl = outputUrl || img?.previewUrl || '';
+
+      handleCardDrop({
+        type: 'text2img',
+        tabId,
+        imageId,
+        config: {
+          prompt,
+          model: (cardConfig as any)?.model || (cardConfig as any)?.unetModel || '',
+          loras: ((cardConfig as any)?.loras ?? []).filter((l: any) => l.enabled !== false).map((l: any) => ({ model: l.model, strength: l.strength })),
+          width: (cardConfig as any)?.width,
+          height: (cardConfig as any)?.height,
+        },
+        imageUrl,
+      });
+    } else {
+      // 图生图：提取输出图片
+      const task = tabInfo.tasks?.[imageId];
+      const selectedIdx = tabInfo.selectedOutputIndex?.[imageId] ?? 0;
+      const outputUrl = task?.outputs?.[selectedIdx]?.url || task?.outputs?.[0]?.url;
+      const img = tabInfo.images?.find((i: any) => i.id === imageId);
+      const imageUrl = outputUrl || img?.previewUrl || '';
+
+      handleCardDrop({
+        type: 'img2img',
+        tabId,
+        imageId,
+        imageUrl,
+      });
+    }
+  }, [handleCardDrop]);
+
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -730,13 +815,29 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    setIsDragOver(false);
+
+    // 优先检查是否为应用内卡片拖拽
+    const imageId = e.dataTransfer.getData('application/x-workflow-image');
+    if (imageId) {
+      handleCardDropFromPhotoWall(imageId);
+      return;
+    }
+
+    // 否则走文件拖入逻辑
     const files = Array.from(e.dataTransfer.files);
     files.forEach(handleImageFile);
-  }, [handleImageFile]);
+  }, [handleImageFile, handleCardDropFromPhotoWall]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    setIsDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
   }, []);
 
   if (!isOpen && !closing) return null;
@@ -753,6 +854,7 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
         right: 16 + rightOffset,
         width: 360,
         maxHeight: '70vh',
+        minHeight: 360,
         zIndex: 100,
         borderRadius: 12,
         backgroundColor: 'var(--color-bg)',
@@ -937,7 +1039,7 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
           borderTop: '1px solid var(--color-border)',
         }}>
           {uploadedImages.map((img) => (
-            <div key={img.id} style={{ position: 'relative', width: 48, height: 48, flexShrink: 0 }}>
+            <div key={img.id} className="image-preview-item" style={{ position: 'relative', width: 48, height: 48, flexShrink: 0 }}>
               <img
                 src={img.dataUrl}
                 alt=""
@@ -950,6 +1052,7 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
                 }}
               />
               <button
+                className="delete-btn"
                 onClick={() => removeUploadedImage(img.id)}
                 style={{
                   position: 'absolute',
@@ -976,7 +1079,16 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
       )}
 
       {/* Input area */}
-      <div style={{ borderTop: '1px solid var(--color-border)', padding: '8px 12px' }}>
+      <div
+        style={{
+          padding: '8px 12px',
+          border: isDragOver ? '2px dashed #3b82f6' : undefined,
+          borderTop: isDragOver ? '2px dashed #3b82f6' : '1px solid var(--color-border)',
+          backgroundColor: isDragOver ? 'rgba(59, 130, 246, 0.06)' : undefined,
+          transition: 'border-color 0.15s, background-color 0.15s',
+        }}
+        onDragLeave={handleDragLeave}
+      >
         <textarea
           ref={textareaRef}
           value={text}
@@ -1005,23 +1117,25 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
           justifyContent: 'space-between',
           marginTop: 4,
         }}>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            title="上传图片"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: 4,
-              color: 'var(--color-text-secondary)',
-              border: 'none',
-              backgroundColor: 'transparent',
-              cursor: 'pointer',
-              borderRadius: 4,
-            }}
-          >
-            <Paperclip size={16} />
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              title="上传图片"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 8,
+                color: 'var(--color-text-secondary)',
+                border: 'none',
+                backgroundColor: 'transparent',
+                cursor: 'pointer',
+                borderRadius: 4,
+              }}
+            >
+              <Paperclip size={17} />
+            </button>
+          </div>
           <input
             ref={fileInputRef}
             type="file"
@@ -1042,7 +1156,7 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              padding: '4px 10px',
+              padding: '8px 14px',
               backgroundColor: (!text.trim() && uploadedImages.length === 0)
                 ? 'var(--color-border)'
                 : 'var(--color-primary)',
@@ -1053,7 +1167,7 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
               transition: 'background-color 0.2s',
             }}
           >
-            <Send size={14} />
+            <Send size={17} />
           </button>
         </div>
       </div>

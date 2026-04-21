@@ -538,7 +538,9 @@ export function PhotoWall({ viewSize }: PhotoWallProps) {
         >
           {images.map((img) => (
             <LazyCard key={img.id} estimatedHeight={VIEW_CONFIG[viewSize].estimatedCardHeight}>
-              <div id={`card-${img.id}`}>
+              <div
+                id={`card-${img.id}`}
+              >
                 <ImageCard
                   image={img}
                   isMultiSelectMode={isMultiSelectMode}
