@@ -9,6 +9,7 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
   const closeDialog = useAgentStore((s) => s.closeDialog);
   const messages = useAgentStore((s) => s.messages);
   const addMessage = useAgentStore((s) => s.addMessage);
+  const updateMessage = useAgentStore((s) => s.updateMessage);
   const isExecuting = useAgentStore((s) => s.isExecuting);
   const executionStatus = useAgentStore((s) => s.executionStatus);
   const setIsExecuting = useAgentStore((s) => s.setIsExecuting);
@@ -41,7 +42,49 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
   // Auto-scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isExecuting]);
+  }, [messages, isExecuting, agentExecution?.batchOutputs?.length]);
+
+  // 批量模式：监听 batchOutputs 变化，逐张追加结果图到同一条消息
+  const batchMsgHandledCountRef = useRef<number>(0);
+  useEffect(() => {
+    const exec = agentExecution;
+    if (!exec || !exec.batchTotal || exec.batchTotal <= 1) return;
+
+    const outputs = exec.batchOutputs || [];
+    if (outputs.length === 0 || outputs.length <= batchMsgHandledCountRef.current) return;
+    batchMsgHandledCountRef.current = outputs.length;
+
+    const batchId = exec.promptId;
+    const existingMsg = messages.find(m => m.batchResultId === batchId);
+
+    // 保存输出图片供后续工作流链式引用（逐张更新）
+    useAgentStore.getState().setLastOutputImages(outputs);
+
+    if (existingMsg) {
+      // 更新现有消息的 images
+      updateMessage(existingMsg.id, {
+        images: outputs,
+        imageIds: exec.allImageIds,
+        content: `✅ 生成中... ${outputs.length}/${exec.batchTotal} 张变体`,
+      });
+    } else {
+      // 创建新的批量图片消息
+      addMessage({
+        role: 'assistant',
+        content: `✅ 生成中... ${outputs.length}/${exec.batchTotal} 张变体`,
+        images: outputs,
+        imageIds: exec.allImageIds,
+        batchResultId: batchId,
+        tabId: exec.tabId,
+        imageId: exec.imageId,
+      });
+    }
+
+    // DOM 更新后延迟触发滚动
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+  }, [agentExecution?.batchOutputs?.length]);
 
   // 生成完成后追加上下文消息到对话历史，并显示后续建议
   const completionHandledRef = useRef<string | null>(null);
@@ -64,30 +107,66 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
         : '无';
       const shortPrompt = ctx.prompt.length > 200 ? ctx.prompt.substring(0, 200) + '...' : ctx.prompt;
 
+      const execution = agentExecution;
+      const isBatchMode = (execution.batchTotal ?? 1) > 1;
+
       // 隐藏的上下文消息（仅作为 LLM 上下文，UI 不显示）
+      const loraInfo = loraNames !== '无' ? ` | LoRA: ${loraNames}` : '';
+      const contextContent = isBatchMode
+        ? `[生成完成] 共生成 ${execution.batchTotal} 张变体 | 提示词: ${shortPrompt}${loraInfo} | 有输出图片可供后续处理`
+        : `[生成完成] 工作流: ${ctx.workflowName} | 提示词: ${shortPrompt} | LoRA: ${loraNames} | 有输出图片可供后续处理`;
+
       addMessage({
         role: 'assistant',
-        content: `[生成完成] 工作流: ${ctx.workflowName} | 提示词: ${shortPrompt} | LoRA: ${loraNames} | 有输出图片可供后续处理`,
+        content: contextContent,
         hidden: true,
       });
 
-      // 可见的图片结果消息
-      const execution = agentExecution;
-      if (execution.outputs.length > 0) {
-        // 保存输出图片供后续工作流链式引用
-        useAgentStore.getState().setLastOutputImages(execution.outputs.map(o => o.url));
+      if (isBatchMode) {
+        // 批量模式：更新已有的批量消息为最终状态
+        const outputUrls = execution.batchOutputs ?? [];
+        const existingMsg = messages.find(m => m.batchResultId === execution.promptId);
+        if (existingMsg && outputUrls.length > 0) {
+          updateMessage(existingMsg.id, {
+            images: outputUrls,
+            imageIds: execution.allImageIds,
+            content: `✅ 生成完成！共生成 ${outputUrls.length} 张变体`,
+          });
+          useAgentStore.getState().setLastOutputImages(outputUrls);
+        } else if (outputUrls.length > 0) {
+          // 兜底：如果没有找到已有消息（不应发生），创建新消息
+          useAgentStore.getState().setLastOutputImages(outputUrls);
+          addMessage({
+            role: 'assistant',
+            content: `✅ 生成完成！共生成 ${outputUrls.length} 张变体`,
+            images: outputUrls,
+            imageIds: execution.allImageIds,
+            batchResultId: execution.promptId,
+            tabId: execution.tabId,
+            imageId: execution.imageId,
+          });
+        }
+      } else {
+        // 单次模式：原有逻辑
+        const outputUrls = execution.outputs.map(o => o.url);
 
-        addMessage({
-          role: 'assistant',
-          content: `✅ 生成完成！共 ${execution.outputs.length} 张图片`,
-          images: execution.outputs.map(o => o.url),
-          tabId: execution.tabId,
-          imageId: execution.imageId,
-        });
+        if (outputUrls.length > 0) {
+          useAgentStore.getState().setLastOutputImages(outputUrls);
+
+          addMessage({
+            role: 'assistant',
+            content: `✅ 生成完成！共 ${outputUrls.length} 张图片`,
+            images: outputUrls,
+            tabId: execution.tabId,
+            imageId: execution.imageId,
+          });
+        }
       }
 
       // 清除执行状态卡片（图片已在消息气泡中展示，无需重复）
       useAgentStore.getState().clearAgentExecution();
+      // 重置批量消息计数
+      batchMsgHandledCountRef.current = 0;
 
       // 生成完成后才显示后续建议
       if (pendingFollowUpRef.current.length > 0) {
@@ -95,7 +174,7 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
         pendingFollowUpRef.current = [];
       }
     }
-  }, [agentExecution?.status, agentExecution?.promptId, addMessage]);
+  }, [agentExecution?.status, agentExecution?.promptId, addMessage, updateMessage]);
 
   // ESC to close
   useEffect(() => {
@@ -262,7 +341,7 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
       }
 
       const data = await res.json();
-      const { promptId, workflowId, tabId, resolvedConfig } = data;
+      const { promptId, workflowId, tabId, resolvedConfig, allPromptIds, batchTotal } = data;
 
       // 在目标 Tab 创建卡片（先创建卡片，再切换 Tab，避免竞态）
       const store = useWorkflowStore.getState();
@@ -270,93 +349,145 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
       const ts = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
       const itemName = `agent_${ts}`;
 
+      // 判断是否为批量模式（多个 promptId）
+      const isBatchMode = allPromptIds && allPromptIds.length > 1;
+      const idsToRegister = allPromptIds || [promptId];
+
       let imageId: string;
+      let batchImageIds: string[] | undefined;
 
-      if (isImageWorkflow) {
-        // 图片处理工作流：用之前确定的图片创建卡片
-        // imageData 已在上方优先级逻辑中确定
-        let file: File;
-        let previewUrl: string;
+      if (isBatchMode && !isImageWorkflow) {
+        // ── 批量模式：为每个变体创建独立卡片 ──
+        const imageIds: string[] = [];
+        const allConfigs = data.allResolvedConfigs || [];
 
-        if (imageData) {
-          // 从 base64 还原为 Blob/File
-          const bytes = Uint8Array.from(atob(imageData), (c) => c.charCodeAt(0));
-          const blob = new Blob([bytes], { type: 'image/png' });
-          file = new File([blob], `${itemName}.png`, { type: 'image/png' });
-          previewUrl = URL.createObjectURL(blob);
-        } else {
-          // fallback: 1x1 白色占位图
-          const b64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQAABjE+ibYAAAAASUVORK5CYII=';
-          const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-          const blob = new Blob([bytes], { type: 'image/png' });
-          file = new File([blob], `${itemName}.png`, { type: 'image/png' });
-          previewUrl = URL.createObjectURL(blob);
+        for (let i = 0; i < allPromptIds.length; i++) {
+          const variantConfig = allConfigs[i] || resolvedConfig;
+          const variantName = `${itemName}_v${i}`;
+
+          let vid: string;
+          if (tabId === 9) {
+            vid = store.addZitCard({
+              unetModel: variantConfig.unetModel,
+              loras: variantConfig.loras,
+              prompt: variantConfig.prompt,
+              width: variantConfig.width,
+              height: variantConfig.height,
+              steps: variantConfig.steps,
+              cfg: variantConfig.cfg,
+              sampler: variantConfig.sampler,
+              scheduler: variantConfig.scheduler,
+              shiftEnabled: variantConfig.shiftEnabled,
+              shift: variantConfig.shift,
+            }, variantName);
+          } else {
+            vid = store.addText2ImgCard({
+              model: variantConfig.model,
+              loras: variantConfig.loras,
+              prompt: variantConfig.prompt,
+              negativePrompt: variantConfig.negativePrompt,
+              width: variantConfig.width,
+              height: variantConfig.height,
+              steps: variantConfig.steps,
+              cfg: variantConfig.cfg,
+              sampler: variantConfig.sampler,
+              scheduler: variantConfig.scheduler,
+            }, variantName);
+          }
+
+          imageIds.push(vid);
+          // 每个变体独立绑定 promptId
+          store.startTaskInTab(tabId, vid, allPromptIds[i]);
         }
 
-        imageId = `img_${Date.now()}_agent`;
-        // 直接向目标 tab 添加 ImageItem
-        const prev = store.tabData[tabId] || { images: [], prompts: {}, tasks: {}, imagePromptMap: {}, selectedOutputIndex: {}, backPoseToggles: {}, text2imgConfigs: {}, zitConfigs: {}, faceSwapZones: {} };
-        useWorkflowStore.setState((state) => ({
-          tabData: {
-            ...state.tabData,
-            [tabId]: {
-              ...prev,
-              images: [...prev.images, { id: imageId, file, previewUrl, originalName: `${itemName}.png` }],
-            },
-          },
-        }));
-
-        // 如果有 prompt，设置到 prompts 映射
-        if (resolvedConfig?.prompt || intent.prompt) {
-          useWorkflowStore.setState((state) => {
-            const tabPrev = state.tabData[tabId];
-            if (!tabPrev) return state;
-            return {
-              tabData: {
-                ...state.tabData,
-                [tabId]: {
-                  ...tabPrev,
-                  prompts: { ...tabPrev.prompts, [imageId]: resolvedConfig?.prompt || intent.prompt || '' },
-                },
-              },
-            };
-          });
-        }
-      } else if (tabId === 9) {
-        // addText2ImgCard / addZitCard 已硬编码写入 tab 7 / tab 9，不依赖 activeTab
-        imageId = store.addZitCard({
-          unetModel: resolvedConfig.unetModel,
-          loras: resolvedConfig.loras,
-          prompt: resolvedConfig.prompt,
-          width: resolvedConfig.width,
-          height: resolvedConfig.height,
-          steps: resolvedConfig.steps,
-          cfg: resolvedConfig.cfg,
-          sampler: resolvedConfig.sampler,
-          scheduler: resolvedConfig.scheduler,
-          shiftEnabled: resolvedConfig.shiftEnabled,
-          shift: resolvedConfig.shift,
-        }, itemName);
+        // 第一张卡片用于跳转定位
+        imageId = imageIds[0];
+        batchImageIds = imageIds;
       } else {
-        imageId = store.addText2ImgCard({
-          model: resolvedConfig.model,
-          loras: resolvedConfig.loras,
-          prompt: resolvedConfig.prompt,
-          negativePrompt: resolvedConfig.negativePrompt,
-          width: resolvedConfig.width,
-          height: resolvedConfig.height,
-          steps: resolvedConfig.steps,
-          cfg: resolvedConfig.cfg,
-          sampler: resolvedConfig.sampler,
-          scheduler: resolvedConfig.scheduler,
-        }, itemName);
-      }
+        // ── 单次模式（或图片处理工作流）：现有逻辑 ──
+        if (isImageWorkflow) {
+          // 图片处理工作流：用之前确定的图片创建卡片
+          let file: File;
+          let previewUrl: string;
 
-      // 使用 startTaskInTab 在目标 tab 下关联 promptId（不依赖 activeTab）
-      store.startTaskInTab(tabId, imageId, promptId);
+          if (imageData) {
+            const bytes = Uint8Array.from(atob(imageData), (c) => c.charCodeAt(0));
+            const blob = new Blob([bytes], { type: 'image/png' });
+            file = new File([blob], `${itemName}.png`, { type: 'image/png' });
+            previewUrl = URL.createObjectURL(blob);
+          } else {
+            const b64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQAABjE+ibYAAAAASUVORK5CYII=';
+            const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+            const blob = new Blob([bytes], { type: 'image/png' });
+            file = new File([blob], `${itemName}.png`, { type: 'image/png' });
+            previewUrl = URL.createObjectURL(blob);
+          }
+
+          imageId = `img_${Date.now()}_agent`;
+          const prev = store.tabData[tabId] || { images: [], prompts: {}, tasks: {}, imagePromptMap: {}, selectedOutputIndex: {}, backPoseToggles: {}, text2imgConfigs: {}, zitConfigs: {}, faceSwapZones: {} };
+          useWorkflowStore.setState((state) => ({
+            tabData: {
+              ...state.tabData,
+              [tabId]: {
+                ...prev,
+                images: [...prev.images, { id: imageId, file, previewUrl, originalName: `${itemName}.png` }],
+              },
+            },
+          }));
+
+          if (resolvedConfig?.prompt || intent.prompt) {
+            useWorkflowStore.setState((state) => {
+              const tabPrev = state.tabData[tabId];
+              if (!tabPrev) return state;
+              return {
+                tabData: {
+                  ...state.tabData,
+                  [tabId]: {
+                    ...tabPrev,
+                    prompts: { ...tabPrev.prompts, [imageId]: resolvedConfig?.prompt || intent.prompt || '' },
+                  },
+                },
+              };
+            });
+          }
+        } else if (tabId === 9) {
+          imageId = store.addZitCard({
+            unetModel: resolvedConfig.unetModel,
+            loras: resolvedConfig.loras,
+            prompt: resolvedConfig.prompt,
+            width: resolvedConfig.width,
+            height: resolvedConfig.height,
+            steps: resolvedConfig.steps,
+            cfg: resolvedConfig.cfg,
+            sampler: resolvedConfig.sampler,
+            scheduler: resolvedConfig.scheduler,
+            shiftEnabled: resolvedConfig.shiftEnabled,
+            shift: resolvedConfig.shift,
+          }, itemName);
+        } else {
+          imageId = store.addText2ImgCard({
+            model: resolvedConfig.model,
+            loras: resolvedConfig.loras,
+            prompt: resolvedConfig.prompt,
+            negativePrompt: resolvedConfig.negativePrompt,
+            width: resolvedConfig.width,
+            height: resolvedConfig.height,
+            steps: resolvedConfig.steps,
+            cfg: resolvedConfig.cfg,
+            sampler: resolvedConfig.sampler,
+            scheduler: resolvedConfig.scheduler,
+          }, itemName);
+        }
+
+        // 单次模式：绑定唯一的 promptId
+        store.startTaskInTab(tabId, imageId, promptId);
+      }
 
       // 先更新 agent execution 状态（含真实 promptId），再注册 WebSocket，
       // 避免 WS 事件到达时 promptId 仍为空导致进度匹配失败的竞态条件
+      // 批量模式下收集所有卡片 ID（从上面 batch loop 中已构建的 imageIds 数组）
+      const allImageIds = batchImageIds;
+
       useAgentStore.getState().setAgentExecution({
         promptId,
         workflowId,
@@ -365,6 +496,12 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
         status: 'executing',
         progress: 0,
         outputs: [],
+        // 批量字段
+        batchTotal: batchTotal || 1,
+        batchCompleted: 0,
+        allPromptIds: idsToRegister,
+        batchOutputs: [],
+        allImageIds,
         generationContext: isImageWorkflow
           ? {
               prompt: resolvedConfig?.prompt || intent.prompt || '',
@@ -384,8 +521,10 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
             },
       });
 
-      // 注册 WebSocket 进度跟踪（promptId 已就绪，WS 事件可正确匹配）
-      wsSendMessage({ type: 'register', promptId, workflowId: tabId, sessionId, tabId });
+      // 注册 WebSocket 进度跟踪（为每个 promptId 注册）
+      for (const pid of idsToRegister) {
+        wsSendMessage({ type: 'register', promptId: pid, workflowId: tabId, sessionId, tabId });
+      }
 
     } catch (err: any) {
       useAgentStore.getState().failAgentExecution(err.message || '执行失败');
@@ -623,6 +762,7 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
         flexDirection: 'column',
         overflow: 'hidden',
         userSelect: 'none',
+        WebkitUserSelect: 'none',
       }}
     >
       {/* Messages area */}
@@ -630,6 +770,7 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
         flex: 1,
         minHeight: 0,
         overflowY: 'auto',
+        overflowX: 'hidden',
         padding: 12,
         display: 'flex',
         flexDirection: 'column',
@@ -724,7 +865,12 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#93c5fd', marginBottom: 8 }}>
                   <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
-                  <span>正在生成图片... {agentExecution.progress}%</span>
+                  <span>
+                    {(agentExecution.batchTotal ?? 1) > 1
+                      ? `正在生成 ${(agentExecution.batchCompleted ?? 0) + 1}/${agentExecution.batchTotal}...`
+                      : `正在生成图片... ${agentExecution.progress}%`
+                    }
+                  </span>
                 </div>
                 <div style={{
                   height: 4,
@@ -972,6 +1118,10 @@ function MessageBubble({ message, onRetry, isTyping, onTypingComplete, scrollRef
   onNavigateToCard?: (tabId: number, imageId: string) => void;
 }) {
   const isUser = message.role === 'user';
+  const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
+
+  // 批量模式：多张图片且有 batchResultId
+  const isBatchResult = !isUser && !!message.batchResultId && (message.images?.length ?? 0) > 0;
 
   const bubble = (
     <div style={{
@@ -985,6 +1135,8 @@ function MessageBubble({ message, onRetry, isTyping, onTypingComplete, scrollRef
       fontSize: 13,
       lineHeight: 1.5,
       wordBreak: 'break-word' as const,
+      userSelect: 'text',
+      WebkitUserSelect: 'text',
     }}>
       {/* Attached images (user uploads only) */}
       {isUser && message.images && message.images.length > 0 && (
@@ -1024,8 +1176,27 @@ function MessageBubble({ message, onRetry, isTyping, onTypingComplete, scrollRef
                 borderRadius: 8,
                 cursor: 'pointer',
                 objectFit: 'cover',
+                border: isBatchResult && selectedImageIndex === idx
+                  ? '2px solid #3b82f6'
+                  : '2px solid transparent',
+                transition: 'border-color 0.15s',
               }}
-              onClick={() => onNavigateToCard?.(message.tabId!, message.imageId!)}
+              onClick={() => {
+                // 设为编辑目标
+                useAgentStore.getState().setLastOutputImages([url]);
+                setSelectedImageIndex(idx);
+
+                if (isBatchResult) {
+                  // 批量模式：用 imageIds 跳转到对应卡片
+                  const targetImageId = message.imageIds?.[idx];
+                  if (targetImageId && message.tabId != null) {
+                    onNavigateToCard?.(message.tabId, targetImageId);
+                  }
+                } else {
+                  // 单张模式：跳转定位
+                  onNavigateToCard?.(message.tabId!, message.imageId!);
+                }
+              }}
               title="点击跳转到对应卡片"
             />
           ))}

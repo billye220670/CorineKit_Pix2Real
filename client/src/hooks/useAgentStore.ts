@@ -20,6 +20,8 @@ export interface ChatMessage {
   hidden?: boolean;      // UI 不渲染，仅作为 LLM 上下文
   tabId?: number;        // 跳转目标 Tab
   imageId?: string;      // 跳转目标卡片 ID
+  imageIds?: string[];   // 批量模式下每张图片对应的卡片 ID（与 images 一一对应）
+  batchResultId?: string; // 批量生成结果消息标识（用于逐张追加更新）
 }
 
 export interface UploadedImage {
@@ -68,6 +70,7 @@ interface AgentState {
   // Messages
   messages: ChatMessage[];
   addMessage: (msg: Omit<ChatMessage, 'id' | 'timestamp'>) => void;
+  updateMessage: (id: string, updates: Partial<ChatMessage>) => void;
   removeMessage: (id: string) => void;
   clearMessages: () => void;
 
@@ -101,6 +104,12 @@ interface AgentState {
     progress: number;
     outputs: Array<{ filename: string; url: string }>;
     error?: string;
+    // 批量生成字段
+    batchTotal?: number;        // 批量总数
+    batchCompleted?: number;    // 已完成数
+    allPromptIds?: string[];    // 所有 promptId
+    batchOutputs?: string[];    // 逐张收集的输出图片 URL
+    allImageIds?: string[];     // 批量模式下所有卡片 ID（与 batchOutputs 一一对应）
     // 生成参数上下文（用于多轮对话）
     generationContext?: {
       prompt: string;
@@ -117,6 +126,7 @@ interface AgentState {
   setAgentExecution: (exec: AgentState['agentExecution']) => void;
   updateAgentProgress: (percentage: number) => void;
   completeAgentExecution: (outputs: Array<{ filename: string; url: string }>) => void;
+  incrementBatchCompleted: (outputs: string[]) => void;
   failAgentExecution: (error: string) => void;
   clearAgentExecution: () => void;
 }
@@ -172,6 +182,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       timestamp: Date.now(),
     }],
   })),
+  updateMessage: (id, updates) => set((s) => ({
+    messages: s.messages.map((m) => m.id === id ? { ...m, ...updates } : m),
+  })),
   removeMessage: (id) => set((s) => ({
     messages: s.messages.filter((m) => m.id !== id),
   })),
@@ -214,6 +227,22 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   completeAgentExecution: (outputs) => set((s) => {
     if (!s.agentExecution) return s;
     return { agentExecution: { ...s.agentExecution, status: 'complete', progress: 100, outputs } };
+  }),
+
+  incrementBatchCompleted: (outputs) => set((s) => {
+    if (!s.agentExecution) return s;
+    const newCompleted = (s.agentExecution.batchCompleted ?? 0) + 1;
+    const newBatchOutputs = [...(s.agentExecution.batchOutputs ?? []), ...outputs];
+    const total = s.agentExecution.batchTotal ?? 1;
+    const isAllDone = newCompleted >= total;
+    return {
+      agentExecution: {
+        ...s.agentExecution,
+        batchCompleted: newCompleted,
+        batchOutputs: newBatchOutputs,
+        ...(isAllDone ? { status: 'complete' as const, progress: 100 } : {}),
+      },
+    };
   }),
 
   failAgentExecution: (error) => set((s) => {

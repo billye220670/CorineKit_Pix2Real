@@ -2,6 +2,13 @@
 
 import type { UserPreferenceProfile } from './profileService.js';
 
+export interface ParsedVariant {
+  prompt: string;
+  recommendedLoras?: Array<{ model: string; strength: number }>;
+  recommendedModel?: string;
+  parameters?: { width?: number; height?: number; steps?: number; cfg?: number };
+}
+
 export interface ParsedIntent {
   taskType: 'generate' | 'process';
   workflowId: number;
@@ -23,6 +30,7 @@ export interface ParsedIntent {
     steps?: number;
     cfg?: number;
   };
+  variants?: ParsedVariant[];
 }
 
 // ── LoRA 匹配 ──────────────────────────────────────────────────────────────
@@ -255,6 +263,59 @@ export function findMatchingLorasFromPrompt(
   // 按分数排序后进行分类去重
   matches.sort((a, b) => b.score - a.score);
   return deduplicateByCategory(matches);
+}
+
+// ── LoRA 名称模糊匹配 ────────────────────────────────────────────────────────
+
+/**
+ * 根据模糊名称在 metadata 中查找匹配的 LoRA 文件路径
+ * 支持 nickname、文件名、关键词模糊匹配（不区分大小写）
+ */
+function findLoraByName(name: string, metadata: any): string | undefined {
+  if (!name) return undefined;
+  const nameLower = name.toLowerCase();
+
+  let bestMatch: string | undefined;
+  let bestScore = 0;
+
+  for (const [filePath, meta] of Object.entries(metadata)) {
+    if (!meta || typeof meta !== 'object') continue;
+    const m = meta as Record<string, any>;
+    // 跳过 checkpoint 模型
+    if (m.category === '光辉' || m.category === 'PONY') continue;
+
+    let score = 0;
+    const nickname = String(m.nickname || '').toLowerCase();
+    const fileNameLower = filePath.toLowerCase();
+
+    // nickname 匹配
+    if (nickname === nameLower) {
+      score += 100;
+    } else if (nickname.includes(nameLower) || nameLower.includes(nickname)) {
+      score += 50;
+    }
+
+    // 文件名匹配
+    if (fileNameLower.includes(nameLower)) {
+      score += 30;
+    }
+
+    // 关键词匹配
+    const keywords = Array.isArray(m.keywords) ? m.keywords : [];
+    for (const kw of keywords) {
+      const kwLower = String(kw).toLowerCase();
+      if (kwLower.includes(nameLower) || nameLower.includes(kwLower)) {
+        score += 20;
+      }
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestMatch = filePath;
+    }
+  }
+
+  return bestMatch;
 }
 
 // ── 模型系列标准化 ─────────────────────────────────────────────────────────────
@@ -494,7 +555,7 @@ function parseGenerateImage(
     recommendedModel = recommendBaseModel(recommendedLoras, metadata, userProfile);
   }
 
-  return {
+  const intent: ParsedIntent = {
     taskType: 'generate',
     workflowId: 7,       // 快速出图
     workflowName: '快速出图',
@@ -508,6 +569,49 @@ function parseGenerateImage(
     recommendedModel,
     parameters,
   };
+
+  // 如果有 variants，为每个变体独立解析
+  if (args.variants && Array.isArray(args.variants) && args.variants.length > 0) {
+    const parsedVariants: ParsedVariant[] = [];
+
+    for (const v of args.variants) {
+      const variantPrompt = v.prompt || intent.prompt;
+
+      // 解析该变体的 LoRA
+      let variantLoras = intent.recommendedLoras || [];
+      if (v.loras && Array.isArray(v.loras)) {
+        variantLoras = v.loras.map((l: any) => {
+          const matched = findLoraByName(l.name, metadata);
+          return matched ? { model: matched, strength: l.strength || 0.8 } : null;
+        }).filter(Boolean) as Array<{ model: string; strength: number }>;
+      }
+
+      // 独立推荐模型
+      let variantModel = intent.recommendedModel;
+      if (v.model) {
+        const found = findCheckpointByName(v.model, metadata);
+        if (found) variantModel = found;
+      } else if (variantLoras.length > 0) {
+        variantModel = recommendBaseModel(variantLoras, metadata, userProfile);
+      }
+
+      // 尺寸参数
+      const variantParams: { width?: number; height?: number } = {};
+      if (v.width) variantParams.width = v.width;
+      if (v.height) variantParams.height = v.height;
+
+      parsedVariants.push({
+        prompt: variantPrompt,
+        recommendedLoras: variantLoras,
+        recommendedModel: variantModel,
+        parameters: Object.keys(variantParams).length > 0 ? variantParams : intent.parameters,
+      });
+    }
+
+    intent.variants = parsedVariants;
+  }
+
+  return intent;
 }
 
 function parseProcessImage(

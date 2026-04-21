@@ -132,20 +132,43 @@ function getOrCreateConnection(): WebSocket {
     try {
       const msg: WSMessage = JSON.parse(event.data);
       const agentExec = useAgentStore.getState().agentExecution;
-      if (agentExec && agentExec.promptId && msg.type !== 'connected' && agentExec.promptId === msg.promptId) {
-        switch (msg.type) {
-          case 'execution_start':
-            useAgentStore.getState().setAgentExecution({ ...agentExec, status: 'executing' });
-            break;
-          case 'progress':
-            useAgentStore.getState().updateAgentProgress(msg.percentage);
-            break;
-          case 'complete':
-            useAgentStore.getState().completeAgentExecution(msg.outputs);
-            break;
-          case 'error':
-            useAgentStore.getState().failAgentExecution(msg.message || 'Unknown error');
-            break;
+      if (agentExec && agentExec.promptId && msg.type !== 'connected') {
+        // 支持多 promptId 匹配（批量生成模式）
+        const isAgentPrompt = agentExec.promptId === msg.promptId ||
+          agentExec.allPromptIds?.includes(msg.promptId);
+
+        if (isAgentPrompt) {
+          const agentStore = useAgentStore.getState();
+          switch (msg.type) {
+            case 'execution_start':
+              agentStore.setAgentExecution({ ...agentExec, status: 'executing' });
+              break;
+            case 'progress':
+              agentStore.updateAgentProgress(msg.percentage);
+              break;
+            case 'complete': {
+              const isBatch = (agentExec.batchTotal ?? 1) > 1;
+              if (isBatch) {
+                // 批量模式：通过 incrementBatchCompleted 逐张收集，自动判断全部完成
+                const outputUrls = (msg.outputs || []).map((o: { url: string }) => o.url);
+                agentStore.incrementBatchCompleted(outputUrls);
+                // 同时仍然记录 outputs 以保持兼容
+                const currentExec = useAgentStore.getState().agentExecution;
+                if (currentExec && currentExec.status === 'complete') {
+                  // 全部完成，将所有 batchOutputs 转为 outputs 格式
+                  const allOutputs = (currentExec.batchOutputs ?? []).map(url => ({ filename: url.split('/').pop() || '', url }));
+                  agentStore.setAgentExecution({ ...currentExec, outputs: allOutputs });
+                }
+              } else {
+                // 单次生成：沿用现有逻辑
+                agentStore.completeAgentExecution(msg.outputs);
+              }
+              break;
+            }
+            case 'error':
+              agentStore.failAgentExecution(msg.message || 'Unknown error');
+              break;
+          }
         }
       }
     } catch {

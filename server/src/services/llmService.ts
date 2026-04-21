@@ -149,6 +149,32 @@ export function getAgentTools(): Tool[] {
               type: 'string',
               description: '基础模型名称（如用户明确要求使用特定模型时传入）。留空则根据LoRA兼容性自动选择。可用模型见系统提示词中的"可用基础模型"列表。',
             },
+            variants: {
+              type: 'array',
+              description: '批量变体列表。当用户要求生成多个变体（如不同角色、不同发型、不同姿势）时使用。每个变体可独立配置 prompt/loras/model/width/height。不传则为单次生成。',
+              items: {
+                type: 'object',
+                properties: {
+                  prompt: { type: 'string', description: '该变体的完整提示词' },
+                  loras: {
+                    type: 'array',
+                    description: '该变体使用的LoRA列表',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        name: { type: 'string', description: 'LoRA名称' },
+                        strength: { type: 'number', description: 'LoRA权重 0-1' },
+                      },
+                      required: ['name'],
+                    },
+                  },
+                  model: { type: 'string', description: '该变体使用的基础模型（可选）' },
+                  width: { type: 'number', description: '图片宽度（可选）' },
+                  height: { type: 'number', description: '图片高度（可选）' },
+                },
+                required: ['prompt'],
+              },
+            },
           },
           required: ['prompt'],
         },
@@ -320,6 +346,13 @@ ${checkpointList}
 
 ## 可用的 LoRA 模型
 ${loraList}
+
+## 批量变体生成
+当用户要求生成多个变体时（如"不同发型"、"不同角色"、"不同姿势"），使用 generate_image 的 variants 参数：
+- 每个变体是独立完整的配置（prompt + loras + model + width/height）
+- 不同角色可能需要不同的 LoRA，请为每个变体选择合适的 LoRA
+- 不传 variants 则为单次生成（向后兼容）
+- 通常生成 3-5 个变体即可，不要超过 6 个
 
 ## 注意事项
 1. 根据用户描述选择合适的工作流和参数

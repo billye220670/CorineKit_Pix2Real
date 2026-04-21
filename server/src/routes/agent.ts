@@ -8,7 +8,7 @@ import { callLLM, buildSystemPrompt, getAgentTools } from '../services/llmServic
 import { parseToolCall } from '../services/intentParser.js';
 import { queuePrompt, uploadImage } from '../services/comfyui.js';
 import { getAdapter } from '../adapters/index.js';
-import type { ParsedIntent } from '../services/intentParser.js';
+import type { ParsedIntent, ParsedVariant } from '../services/intentParser.js';
 import type { GenerationRecord } from '../services/agentService.js';
 import type { LLMMessage } from '../services/llmService.js';
 
@@ -647,52 +647,33 @@ router.post('/execute', express.json(), async (req, res) => {
     const tabId = workflowId;
     const ts = generateTimestamp();
 
-    if (workflowId === 7) {
-      // ── Tab 7 快速出图 ──────────────────────────────────────────────────────
-      const model = intent.recommendedModel || TAB7_DEFAULTS.model;
-      const prompt = intent.prompt || '';
-      const negativePrompt = intent.negativePrompt || '';
-      const width = intent.parameters?.width || TAB7_DEFAULTS.width;
-      const height = intent.parameters?.height || TAB7_DEFAULTS.height;
-      const steps = intent.parameters?.steps || TAB7_DEFAULTS.steps;
-      const cfg = intent.parameters?.cfg || TAB7_DEFAULTS.cfg;
-      const sampler = (intent.parameters as any)?.sampler || TAB7_DEFAULTS.sampler;
-      const scheduler = (intent.parameters as any)?.scheduler || TAB7_DEFAULTS.scheduler;
-
-      const loras = (intent.recommendedLoras || []).map(l => ({
-        model: l.model,
-        enabled: true,
-        strength: l.strength || 0.8,
-      }));
-
+    // ── 内部辅助：构建 Tab 7 workflow 模板 ─────────────────────────────────────
+    function buildTab7Workflow(opts: {
+      model: string; prompt: string; negativePrompt: string;
+      width: number; height: number; steps: number; cfg: number;
+      sampler: string; scheduler: string;
+      loras: Array<{ model: string; enabled: boolean; strength: number }>;
+      filenamePrefix: string;
+    }) {
       const template = JSON.parse(fs.readFileSync(text2imgTemplatePath, 'utf-8'));
-
-      // Node 4: checkpoint model
-      template['4'].inputs.ckpt_name = model;
-      // Node 5: image dimensions
-      template['5'].inputs.width = width;
-      template['5'].inputs.height = height;
-      // Node 3: sampler settings + random seed
+      template['4'].inputs.ckpt_name = opts.model;
+      template['5'].inputs.width = opts.width;
+      template['5'].inputs.height = opts.height;
       template['3'].inputs.seed = Math.floor(Math.random() * 1125899906842624);
-      template['3'].inputs.steps = steps;
-      template['3'].inputs.cfg = cfg;
-      template['3'].inputs.sampler_name = sampler;
-      template['3'].inputs.scheduler = scheduler;
-      // Node 39: user prompt
-      if (prompt) {
-        template['39'].inputs.prompt = prompt;
+      template['3'].inputs.steps = opts.steps;
+      template['3'].inputs.cfg = opts.cfg;
+      template['3'].inputs.sampler_name = opts.sampler;
+      template['3'].inputs.scheduler = opts.scheduler;
+      if (opts.prompt) {
+        template['39'].inputs.prompt = opts.prompt;
       }
-      // Node 7: negative prompt (prepend user negative to default)
-      if (negativePrompt && negativePrompt.trim()) {
-        template['7'].inputs.text = negativePrompt.trim() + ', ' + template['7'].inputs.text;
+      if (opts.negativePrompt && opts.negativePrompt.trim()) {
+        template['7'].inputs.text = opts.negativePrompt.trim() + ', ' + template['7'].inputs.text;
       }
-      // Node 45: output filename prefix
-      template['45'].inputs.filename_prefix = `agent_${ts}`;
+      template['45'].inputs.filename_prefix = opts.filenamePrefix;
 
-      // LoRA handling: nodes 50, 51, 52, 53, 54 chained from Checkpoint #4
       const tab7LoraNodeIds = ['50', '51', '52', '53', '54'];
-
-      loras.forEach((lora, i) => {
+      opts.loras.forEach((lora, i) => {
         if (i < tab7LoraNodeIds.length) {
           template[tab7LoraNodeIds[i]].inputs.lora_name = lora.model;
           template[tab7LoraNodeIds[i]].inputs.strength_model = lora.strength;
@@ -700,10 +681,9 @@ router.post('/execute', express.json(), async (req, res) => {
         }
       });
 
-      // Dynamic reconnection: bypass disabled LoRAs
       const tab7ModelSource: [string, number] = ['4', 0];
       const tab7ClipSource: [string, number] = ['4', 1];
-      const tab7EnabledIndices = loras.map((l, i) => l.enabled ? i : -1).filter(i => i >= 0 && i < tab7LoraNodeIds.length);
+      const tab7EnabledIndices = opts.loras.map((l, i) => l.enabled ? i : -1).filter(i => i >= 0 && i < tab7LoraNodeIds.length);
 
       if (tab7EnabledIndices.length === 0) {
         template['3'].inputs.model = tab7ModelSource;
@@ -726,6 +706,142 @@ router.post('/execute', express.json(), async (req, res) => {
         template['6'].inputs.clip = [tab7LoraNodeIds[lastIdx], 1];
         template['7'].inputs.clip = [tab7LoraNodeIds[lastIdx], 1];
       }
+
+      return template;
+    }
+
+    // ── 内部辅助：构建 Tab 9 workflow 模板 ─────────────────────────────────────
+    function buildTab9Workflow(opts: {
+      unetModel: string; prompt: string;
+      width: number; height: number; steps: number; cfg: number;
+      sampler: string; scheduler: string; shiftEnabled: boolean; shift: number;
+      loras: Array<{ model: string; enabled: boolean; strength: number }>;
+      filenamePrefix: string;
+    }) {
+      const template = JSON.parse(fs.readFileSync(zitTemplatePath, 'utf-8'));
+      template['25'].inputs.unet_name = opts.unetModel;
+      template['45'].inputs.shift = opts.shift;
+      template['7'].inputs.width = opts.width;
+      template['7'].inputs.height = opts.height;
+      template['4'].inputs.seed = Math.floor(Math.random() * 1125899906842624);
+      template['4'].inputs.steps = opts.steps;
+      template['4'].inputs.cfg = opts.cfg;
+      template['4'].inputs.sampler_name = opts.sampler;
+      template['4'].inputs.scheduler = opts.scheduler;
+      if (opts.prompt) {
+        template['5'].inputs.text = opts.prompt;
+      }
+      template['47'].inputs.boolean = opts.shiftEnabled;
+
+      const tab9LoraNodeIds = ['36', '50', '51', '52', '53'];
+      opts.loras.forEach((lora, i) => {
+        if (i < tab9LoraNodeIds.length) {
+          template[tab9LoraNodeIds[i]].inputs.lora_name = lora.model;
+          template[tab9LoraNodeIds[i]].inputs.strength_model = lora.strength;
+          template[tab9LoraNodeIds[i]].inputs.strength_clip = lora.strength;
+        }
+      });
+
+      const tab9ModelSource: [string, number] = ['25', 0];
+      const tab9ClipSource: [string, number] = ['26', 0];
+      const tab9EnabledIndices = opts.loras.map((l, i) => l.enabled ? i : -1).filter(i => i >= 0 && i < tab9LoraNodeIds.length);
+
+      if (tab9EnabledIndices.length === 0) {
+        template['45'].inputs.model = tab9ModelSource;
+        template['5'].inputs.clip = tab9ClipSource;
+        template['47'].inputs.on_false = tab9ModelSource;
+      } else {
+        const firstIdx = tab9EnabledIndices[0];
+        template[tab9LoraNodeIds[firstIdx]].inputs.model = tab9ModelSource;
+        template[tab9LoraNodeIds[firstIdx]].inputs.clip = tab9ClipSource;
+
+        for (let k = 1; k < tab9EnabledIndices.length; k++) {
+          const curr = tab9EnabledIndices[k];
+          const prev = tab9EnabledIndices[k - 1];
+          template[tab9LoraNodeIds[curr]].inputs.model = [tab9LoraNodeIds[prev], 0];
+          template[tab9LoraNodeIds[curr]].inputs.clip = [tab9LoraNodeIds[prev], 1];
+        }
+
+        const lastIdx = tab9EnabledIndices[tab9EnabledIndices.length - 1];
+        template['45'].inputs.model = [tab9LoraNodeIds[lastIdx], 0];
+        template['5'].inputs.clip = [tab9LoraNodeIds[lastIdx], 1];
+        template['47'].inputs.on_false = [tab9LoraNodeIds[lastIdx], 0];
+      }
+
+      template['24'].inputs.filename_prefix = opts.filenamePrefix;
+      return template;
+    }
+
+    if (workflowId === 7) {
+      // ── Tab 7 快速出图 ──────────────────────────────────────────────────────
+      const model = intent.recommendedModel || TAB7_DEFAULTS.model;
+      const prompt = intent.prompt || '';
+      const negativePrompt = intent.negativePrompt || '';
+      const width = intent.parameters?.width || TAB7_DEFAULTS.width;
+      const height = intent.parameters?.height || TAB7_DEFAULTS.height;
+      const steps = intent.parameters?.steps || TAB7_DEFAULTS.steps;
+      const cfg = intent.parameters?.cfg || TAB7_DEFAULTS.cfg;
+      const sampler = (intent.parameters as any)?.sampler || TAB7_DEFAULTS.sampler;
+      const scheduler = (intent.parameters as any)?.scheduler || TAB7_DEFAULTS.scheduler;
+
+      const loras = (intent.recommendedLoras || []).map(l => ({
+        model: l.model,
+        enabled: true,
+        strength: l.strength || 0.8,
+      }));
+
+      // ── 批量变体模式 ──────────────────────────────────────────────────────
+      if (intent.variants && intent.variants.length > 0) {
+        const allPromptIds: string[] = [];
+        const allResolvedConfigs: any[] = [];
+
+        for (let vi = 0; vi < intent.variants.length; vi++) {
+          const variant = intent.variants[vi];
+          const vModel = variant.recommendedModel || model;
+          const vPrompt = variant.prompt || prompt;
+          const vWidth = variant.parameters?.width || width;
+          const vHeight = variant.parameters?.height || height;
+          const vSteps = variant.parameters?.steps || steps;
+          const vCfg = variant.parameters?.cfg || cfg;
+          const vLoras = (variant.recommendedLoras || []).length > 0
+            ? variant.recommendedLoras!.map(l => ({ model: l.model, enabled: true, strength: l.strength || 0.8 }))
+            : loras;
+
+          const variantWorkflow = buildTab7Workflow({
+            model: vModel, prompt: vPrompt, negativePrompt,
+            width: vWidth, height: vHeight, steps: vSteps, cfg: vCfg,
+            sampler, scheduler, loras: vLoras,
+            filenamePrefix: `agent_${ts}_v${vi}`,
+          });
+
+          const variantResult = await queuePrompt(variantWorkflow, clientId);
+          allPromptIds.push(variantResult.prompt_id);
+          allResolvedConfigs.push({
+            model: vModel, loras: vLoras, prompt: vPrompt,
+            negativePrompt, width: vWidth, height: vHeight,
+            steps: vSteps, cfg: vCfg, sampler, scheduler,
+          });
+        }
+
+        res.json({
+          promptId: allPromptIds[0],
+          allPromptIds,
+          batchTotal: intent.variants.length,
+          workflowId: 7,
+          workflowName: '快速出图',
+          tabId,
+          resolvedConfig: allResolvedConfigs[0],
+          allResolvedConfigs,
+        });
+        return;
+      }
+
+      // ── 单次生成（原有逻辑） ──────────────────────────────────────────────
+      const template = buildTab7Workflow({
+        model, prompt, negativePrompt,
+        width, height, steps, cfg, sampler, scheduler, loras,
+        filenamePrefix: `agent_${ts}`,
+      });
 
       const result = await queuePrompt(template, clientId);
 
@@ -767,68 +883,57 @@ router.post('/execute', express.json(), async (req, res) => {
         strength: l.strength || 0.8,
       }));
 
-      const template = JSON.parse(fs.readFileSync(zitTemplatePath, 'utf-8'));
+      // ── 批量变体模式 ──────────────────────────────────────────────────────
+      if (intent.variants && intent.variants.length > 0) {
+        const allPromptIds: string[] = [];
+        const allResolvedConfigs: any[] = [];
 
-      // Node 25: UNET model
-      template['25'].inputs.unet_name = unetModel;
-      // Node 45: AuraFlow shift value
-      template['45'].inputs.shift = shift;
-      // Node 7: image dimensions
-      template['7'].inputs.width = width;
-      template['7'].inputs.height = height;
-      // Node 4: sampler settings + random seed
-      template['4'].inputs.seed = Math.floor(Math.random() * 1125899906842624);
-      template['4'].inputs.steps = steps;
-      template['4'].inputs.cfg = cfg;
-      template['4'].inputs.sampler_name = sampler;
-      template['4'].inputs.scheduler = scheduler;
-      // Node 5: prompt text
-      if (prompt) {
-        template['5'].inputs.text = prompt;
-      }
-      // #47(ifElse) 控制 shift 开关
-      template['47'].inputs.boolean = shiftEnabled;
+        for (let vi = 0; vi < intent.variants.length; vi++) {
+          const variant = intent.variants[vi];
+          const vPrompt = variant.prompt || prompt;
+          const vWidth = variant.parameters?.width || width;
+          const vHeight = variant.parameters?.height || height;
+          const vSteps = variant.parameters?.steps || steps;
+          const vCfg = variant.parameters?.cfg || cfg;
+          const vLoras = (variant.recommendedLoras || []).length > 0
+            ? variant.recommendedLoras!.map(l => ({ model: l.model, enabled: true, strength: l.strength || 0.8 }))
+            : loras;
 
-      // LoRA handling: nodes 36, 50, 51, 52, 53 chained from UNet #25 (model) and CLIP #26 (clip)
-      const tab9LoraNodeIds = ['36', '50', '51', '52', '53'];
+          const variantWorkflow = buildTab9Workflow({
+            unetModel, prompt: vPrompt,
+            width: vWidth, height: vHeight, steps: vSteps, cfg: vCfg,
+            sampler, scheduler, shiftEnabled, shift, loras: vLoras,
+            filenamePrefix: `agent_${ts}_v${vi}`,
+          });
 
-      loras.forEach((lora, i) => {
-        if (i < tab9LoraNodeIds.length) {
-          template[tab9LoraNodeIds[i]].inputs.lora_name = lora.model;
-          template[tab9LoraNodeIds[i]].inputs.strength_model = lora.strength;
-          template[tab9LoraNodeIds[i]].inputs.strength_clip = lora.strength;
+          const variantResult = await queuePrompt(variantWorkflow, clientId);
+          allPromptIds.push(variantResult.prompt_id);
+          allResolvedConfigs.push({
+            unetModel, model: '', loras: vLoras, prompt: vPrompt,
+            negativePrompt: '', width: vWidth, height: vHeight,
+            steps: vSteps, cfg: vCfg, sampler, scheduler, shiftEnabled, shift,
+          });
         }
+
+        res.json({
+          promptId: allPromptIds[0],
+          allPromptIds,
+          batchTotal: intent.variants.length,
+          workflowId: 9,
+          workflowName: 'ZIT快出',
+          tabId,
+          resolvedConfig: allResolvedConfigs[0],
+          allResolvedConfigs,
+        });
+        return;
+      }
+
+      // ── 单次生成（原有逻辑） ──────────────────────────────────────────────
+      const template = buildTab9Workflow({
+        unetModel, prompt, width, height, steps, cfg,
+        sampler, scheduler, shiftEnabled, shift, loras,
+        filenamePrefix: `agent_${ts}`,
       });
-
-      // Dynamic reconnection: bypass disabled LoRAs
-      const tab9ModelSource: [string, number] = ['25', 0];
-      const tab9ClipSource: [string, number] = ['26', 0];
-      const tab9EnabledIndices = loras.map((l, i) => l.enabled ? i : -1).filter(i => i >= 0 && i < tab9LoraNodeIds.length);
-
-      if (tab9EnabledIndices.length === 0) {
-        template['45'].inputs.model = tab9ModelSource;
-        template['5'].inputs.clip = tab9ClipSource;
-        template['47'].inputs.on_false = tab9ModelSource;
-      } else {
-        const firstIdx = tab9EnabledIndices[0];
-        template[tab9LoraNodeIds[firstIdx]].inputs.model = tab9ModelSource;
-        template[tab9LoraNodeIds[firstIdx]].inputs.clip = tab9ClipSource;
-
-        for (let k = 1; k < tab9EnabledIndices.length; k++) {
-          const curr = tab9EnabledIndices[k];
-          const prev = tab9EnabledIndices[k - 1];
-          template[tab9LoraNodeIds[curr]].inputs.model = [tab9LoraNodeIds[prev], 0];
-          template[tab9LoraNodeIds[curr]].inputs.clip = [tab9LoraNodeIds[prev], 1];
-        }
-
-        const lastIdx = tab9EnabledIndices[tab9EnabledIndices.length - 1];
-        template['45'].inputs.model = [tab9LoraNodeIds[lastIdx], 0];
-        template['5'].inputs.clip = [tab9LoraNodeIds[lastIdx], 1];
-        template['47'].inputs.on_false = [tab9LoraNodeIds[lastIdx], 0];
-      }
-
-      // Node 24: output filename prefix
-      template['24'].inputs.filename_prefix = `agent_${ts}`;
 
       const result = await queuePrompt(template, clientId);
 
