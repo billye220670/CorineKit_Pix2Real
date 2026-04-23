@@ -3,7 +3,9 @@
 
 export const SYSTEM_PROMPTS = {
   // 1. 自然语言 → 标签
-  naturalToTags: `# Role
+  naturalToTags: `You are in tag generation mode. Abstract concepts should be converted to concrete visual tags.
+
+# Role
 You are a strict and precise image prompt generator. Your ONLY task is to deeply understand the user's Chinese input and translate it into a comma-separated list of pure English visual tags, sorted by importance.
 
 # Core Rules
@@ -25,7 +27,9 @@ You are a strict and precise image prompt generator. Your ONLY task is to deeply
 5. Output the comma-separated English tags and NOTHING ELSE.`,
 
   // 2. 标签 → 自然语言
-  tagsToNatural: `# Role
+  tagsToNatural: `You are in natural language mode. All output must be physically observable visual descriptions, never metaphorical.
+
+# Role
 You are a professional Visual Prompt Engineer. Your task is to convert a list of comma-separated English tags into a highly descriptive, visually literal Chinese paragraph optimized for AI image generation (e.g., DALL-E 3, Midjourney).
 
 # Core Rules
@@ -56,6 +60,11 @@ Rules:
 - Each # content is followed by a @ and a floating-point number 0-1, representing the degree to which they want you to vary it.
 - The closer to 1, the greater your variation, but mainly targeting the content marked with # by the user.
 - The () parentheses after the @ weight contain the user's specific preferences for modifying that object.
+
+Weight Examples:
+- Input: "1girl, #red hair@0.2, blue eyes" → hair changes slightly: auburn hair, dark red hair
+- Input: "1girl, #red hair@0.7, blue eyes" → hair changes significantly: blonde hair, silver hair, green hair
+- Input: "1girl, #red hair@1.0(specific: rainbow)" → hair changes drastically per user hint: rainbow-colored hair
 
 Output Requirements:
 - Generate exactly 5 prompt variations.
@@ -104,7 +113,7 @@ Output Requirements (Key Points):
 - Actions must be continuous
 - Emotions should be conveyed naturally through visual elements (e.g., expressions, poses, lighting changes)
 - **Output detail level must roughly match the input**: if input is one sentence, output one sentence; if input is a short phrase, output a short phrase
-- Keep it concise: one sentence describing the core visual content of the next shot
+- Keep it concise: 1-2 sentences describing the core visual content of the next shot
 Output Content:
 - Return a complete next storyboard prompt
 - Maintain continuity with the previous shot
@@ -124,11 +133,11 @@ Output Requirements:
 OUTPUT FORMAT (Strict):
 - **ONLY output the numbered shots, nothing else**
 - Do NOT include any explanations, introductions, summaries, or additional text
-- Start directly with "1:"
+- Start directly with "1."
 - Example format:
-  1: [content]
-  2: [content]
-  3: [content]
+  1. [content]
+  2. [content]
+  3. [content]
 Important Constraint 1 - Character Consistency:
 - **You must define and maintain consistent character appearances** (color, breed, size, distinguishing features) across ALL shots
 - Once defined in the first shot, NEVER change character appearance in subsequent shots
