@@ -10,6 +10,7 @@ import {
   listSessions,
   deleteSession,
   pruneOldSessions,
+  saveCover,
 } from '../services/sessionManager.js';
 
 const router = Router();
@@ -82,6 +83,24 @@ router.get('/:sessionId', (req, res) => {
 router.get('/', (_req, res) => {
   const sessions = listSessions();
   res.json(sessions);
+});
+
+// POST /api/session/:sessionId/cover
+// Body: JSON { sourceUrl: string }
+router.post('/:sessionId/cover', (req, res) => {
+  const sessionId = String(req.params.sessionId);
+  const { sourceUrl } = req.body as { sourceUrl: string };
+  if (!sourceUrl) {
+    res.status(400).json({ error: 'Missing sourceUrl' });
+    return;
+  }
+  try {
+    const result = saveCover(sessionId, sourceUrl);
+    res.json(result);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    res.status(400).json({ error: msg });
+  }
 });
 
 // DELETE /api/session/:sessionId

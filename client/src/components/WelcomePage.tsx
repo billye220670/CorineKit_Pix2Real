@@ -32,8 +32,25 @@ function formatRelativeTime(iso: string): string {
   return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
 }
 
-async function resolveSessionInfo(sessionId: string): Promise<{ previewUrl: string | null; imageCount: number }> {
+async function resolveSessionInfo(sessionId: string, meta?: SessionMeta): Promise<{ previewUrl: string | null; imageCount: number }> {
   try {
+    // If the user has manually set a cover, use it directly
+    if (meta?.manualCover && meta.coverExt) {
+      const coverUrl = `/api/session-files/${sessionId}/cover${meta.coverExt}`;
+      const session = await getSession(sessionId);
+      let imageCount = 0;
+      if (session) {
+        for (let tab = 0; tab <= 9; tab++) {
+          const td = session.tabData[tab];
+          if (!td) continue;
+          imageCount += td.images.length;
+          for (const task of Object.values(td.tasks)) {
+            imageCount += task.outputs.length;
+          }
+        }
+      }
+      return { previewUrl: coverUrl, imageCount };
+    }
     const session = await getSession(sessionId);
     if (!session) return { previewUrl: null, imageCount: 0 };
     let previewUrl: string | null = null;
@@ -84,7 +101,7 @@ export function WelcomePage({ onNewSession, onEnterApp }: WelcomePageProps) {
         const names = JSON.parse(localStorage.getItem(NAMES_KEY) ?? '{}') as Record<string, string>;
         const loaded: SessionCard[] = await Promise.all(
           metas.map(async (meta) => {
-            const info = await resolveSessionInfo(meta.sessionId);
+            const info = await resolveSessionInfo(meta.sessionId, meta);
             return {
               meta,
               name: names[meta.sessionId] ?? formatRelativeTime(meta.updatedAt),
@@ -320,8 +337,8 @@ export function WelcomePage({ onNewSession, onEnterApp }: WelcomePageProps) {
                   onMouseLeave={() => setHoveredId(null)}
                   style={{
                     position: 'relative',
-                    width: 180,
-                    height: 220,
+                    width: 220,
+                    height: 280,
                     display: 'flex',
                     flexDirection: 'column',
                     backgroundColor: 'var(--color-surface)',
@@ -334,10 +351,10 @@ export function WelcomePage({ onNewSession, onEnterApp }: WelcomePageProps) {
                     flexShrink: 0,
                   }}
                 >
-                  {/* Image area */}
+                  {/* Image area — 1:1 square, cover-fill */}
                   <div style={{
                     width: '100%',
-                    height: 140,
+                    aspectRatio: '1 / 1',
                     flexShrink: 0,
                     overflow: 'hidden',
                     backgroundColor: 'var(--color-surface-hover)',

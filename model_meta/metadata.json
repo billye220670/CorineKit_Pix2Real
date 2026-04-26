@@ -1330,7 +1330,6 @@
     "thumbnail": "01a63eb7-7754-4f5d-ae32-2dbce9504e2c.png",
     "nickname": "PONY多视角",
     "triggerWords": "MULTI_CHAN,   multiple panels",
-    "category": "姿势",
     "description": "PONY多视角 (姿势)",
     "keywords": [
       "多视角"
@@ -1612,24 +1611,115 @@
   "z-uncensored_v1.1_ep12.safetensors": {
     "recommendedStrength": 0.8
   },
-  "姿势\\【IL】【姿势】一步到胃.safetensors": {
+  "姿势\\【IL】【姿势】滴蜡.safetensors": {
+    "nickname": "滴蜡",
     "category": "姿势",
-    "recommendedStrength": 0.8
+    "thumbnail": "816f8fc1-c8b9-47c6-9ca9-c26604e9cc8b.png",
+    "triggerWords": "candle torture,candle,bdsm,bound,bondage,torture"
   },
-  "姿势\\【IL】【姿势】抱着口.safetensors": {
+  "姿势\\【IL】【姿势】熊式.safetensors": {
+    "nickname": "熊式",
     "category": "姿势",
-    "recommendedStrength": 0.8
+    "triggerWords": "all fours, standing",
+    "thumbnail": "7b68b301-7e0a-4511-a559-98dd97d445e1.png"
   },
-  "姿势\\【IL】【姿势】直播.safetensors": {
+  "姿势\\【IL】【姿势】狗链.safetensors": {
+    "thumbnail": "326cdabb-8ad8-4171-bfad-af7a44e4f62a.png",
     "category": "姿势",
-    "recommendedStrength": 0.8
+    "nickname": "狗链"
   },
-  "姿势\\【IL】【姿势】被提起.safetensors": {
+  "姿势\\【IL】【姿势】肉轮.safetensors": {
+    "thumbnail": "99dc06d3-3036-44eb-934d-bc636aaa24b6.png",
     "category": "姿势",
-    "recommendedStrength": 0.8
+    "nickname": "肉轮",
+    "triggerWords": "silicone circular saw, silicone chainsaw"
   },
-  "姿势\\【IL】【姿势】踩脸.safetensors": {
+  "姿势\\【IL】【姿势】裸絞.safetensors": {
+    "thumbnail": "9994734b-500d-4cfb-bc3c-13cba285eed7.png",
+    "triggerWords": "choke hold \\(rnc\\)",
+    "nickname": "裸絞",
+    "category": "姿势"
+  },
+  "姿势\\【IL】【姿势】拉扯内裤.safetensors": {
+    "nickname": "拉扯内裤",
+    "triggerWords": "giving wedgie,",
+    "thumbnail": "5ffb4264-307f-475d-b665-d21b5c19601e.png",
+    "category": "姿势"
+  },
+  "姿势\\【IL】【姿势】子宫按摩.safetensors": {
+    "triggerWords": "womb massage \\(vibrator\\), womb massage \\(hand\\)",
+    "nickname": "子宫按摩",
+    "thumbnail": "8da3f2c7-87a5-4d88-8fdf-bd18408916c7.png",
+    "category": "姿势"
+  },
+  "姿势\\【IL】【姿势】后方锁乳.safetensors": {
+    "triggerWords": "hug from behind, strangling / grabbing another's breast",
     "category": "姿势",
-    "recommendedStrength": 0.8
+    "nickname": "后方锁乳",
+    "thumbnail": "64bf74f6-12a3-4762-a9d6-6086a404683e.png"
+  },
+  "姿势\\【IL】【姿势】手押し車.safetensors": {
+    "triggerWords": "wheelbarrow pose, sex,sex from behind",
+    "nickname": "手押し車",
+    "thumbnail": "8d7675c2-7957-4193-8960-ce2d7aa703c1.png",
+    "category": "姿势"
+  },
+  "姿势\\【IL】【姿势】小腹填充.safetensors": {
+    "thumbnail": "63feba50-143d-4d45-9e78-8c26009cf681.png",
+    "category": "姿势",
+    "nickname": "小腹填充",
+    "triggerWords": "stomach bulge"
+  },
+  "姿势\\【IL】【姿势】偷摸自慰.safetensors": {
+    "triggerWords": "voyeurism masturbation, doorway",
+    "nickname": "偷摸自慰"
+  },
+  "姿势\\【IL】【姿势】乳首責.safetensors": {
+    "thumbnail": "01e7ee64-e841-42ea-baf9-11361ae40327.png",
+    "nickname": "乳首責",
+    "category": "姿势",
+    "triggerWords": "nipple pull"
+  },
+  "姿势\\【IL】【姿势】逆向足交.safetensors": {
+    "thumbnail": "7cf2c3bf-6b1b-4ca7-87cb-b3bbab957253.png",
+    "triggerWords": "reverse footjob, foot focus, from behind",
+    "nickname": "逆向足交",
+    "category": "姿势"
+  },
+  "姿势\\【IL】【姿势】髪掴.safetensors": {
+    "triggerWords": "grabbing another's hair, grabbing another's bangs",
+    "thumbnail": "89e1f497-5593-4d9a-a234-b7ce8c227df3.png",
+    "nickname": "髪掴",
+    "category": "姿势"
+  },
+  "姿势\\【IL】【姿势】水乐园.safetensors": {
+    "thumbnail": "2ed4272c-070f-415f-a65e-1cb1f775f14a.png",
+    "triggerWords": "splashqueen_pose, swim_ring, pool, water, partially_submerged, waterpark, water bubbles, floating, legs_up, spread_legs,",
+    "nickname": "水乐园",
+    "category": "姿势"
+  },
+  "姿势\\【IL】【姿势】伏臥後背位.safetensors": {
+    "thumbnail": "5888b2fe-19af-4fb4-8123-126406c41019.png",
+    "nickname": "伏臥後背位",
+    "triggerWords": "on stomach sex",
+    "category": "姿势"
+  },
+  "姿势\\【IL】【姿势】蝎式.safetensors": {
+    "triggerWords": "SKRPN_P0S3, scorpion_pose, top-down bottom-up, ass, wide spread legs,,jack-o' challenge",
+    "nickname": "蝎式",
+    "thumbnail": "d3f26951-0f2b-4967-a279-c731e888b5ab.png",
+    "category": "姿势"
+  },
+  "姿势\\【IL】【姿势】装箱.safetensors": {
+    "thumbnail": "64a7c9c7-3bc4-4ce2-a30f-c2e9bba2ec57.png",
+    "triggerWords": "in box, bondage",
+    "nickname": "装箱",
+    "category": "姿势"
+  },
+  "服饰\\【IL】【外观】内裤下的阴唇.safetensors": {
+    "thumbnail": "a646de3e-f217-47fc-a475-deda0102fba5.png",
+    "triggerWords": "long labia, pussy peek",
+    "nickname": "内裤下的阴唇",
+    "category": "姿势"
   }
 }

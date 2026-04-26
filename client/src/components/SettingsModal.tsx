@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
-import { useSettingsStore, type ReversePromptModel, type StartupBehavior } from '../hooks/useSettingsStore.js';
+import { useSettingsStore, type ReversePromptModel, type StartupBehavior, type DropdownMenuStyle } from '../hooks/useSettingsStore.js';
 import { SegmentedControl } from './SegmentedControl.js';
 
 const REVERSE_PROMPT_MODELS: { value: ReversePromptModel; label: string }[] = [
@@ -16,11 +16,62 @@ const STARTUP_BEHAVIOR_OPTIONS: { value: StartupBehavior; label: string }[] = [
   { value: 'welcome', label: '欢迎页' },
 ];
 
+const DROPDOWN_MENU_STYLE_OPTIONS: { value: DropdownMenuStyle; label: string }[] = [
+  { value: 'classic', label: '经典' },
+  { value: 'fast', label: '快速' },
+];
+
 const CATEGORIES = [
   { id: 'workflow', label: '工作流' },
   { id: 'session', label: '会话' },
   { id: 'prompt', label: '提示词管理' },
 ];
+
+// ── 统一样式常量 ─────────────────────────────────────────────────────────
+
+const sectionTitleStyle: React.CSSProperties = {
+  fontSize: 11,
+  fontWeight: 600,
+  color: 'var(--color-text-secondary)',
+  textTransform: 'uppercase',
+  letterSpacing: '0.08em',
+  marginBottom: 18,
+};
+
+const sectionGapStyle: React.CSSProperties = { height: 36 };
+
+const settingRowStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  padding: '15px 0',
+  borderBottom: '1px solid var(--color-border)',
+};
+
+const settingLabelStyle: React.CSSProperties = {
+  fontSize: 13,
+  fontWeight: 500,
+  color: 'var(--color-text)',
+  marginBottom: 4,
+};
+
+const settingDescStyle: React.CSSProperties = {
+  fontSize: 12,
+  color: 'var(--color-text-secondary)',
+  lineHeight: '17px',
+};
+
+const actionBtnStyle: React.CSSProperties = {
+  padding: '6px 16px',
+  fontSize: 12,
+  fontWeight: 500,
+  border: '1px solid var(--color-border)',
+  borderRadius: 6,
+  background: 'var(--color-bg)',
+  color: 'var(--color-text)',
+  cursor: 'pointer',
+  transition: 'background 0.15s',
+};
 
 export function SettingsModal() {
   const settingsOpen = useSettingsStore((s) => s.settingsOpen);
@@ -29,6 +80,8 @@ export function SettingsModal() {
   const setReversePromptModel = useSettingsStore((s) => s.setReversePromptModel);
   const startupBehavior = useSettingsStore((s) => s.startupBehavior);
   const setStartupBehavior = useSettingsStore((s) => s.setStartupBehavior);
+  const dropdownMenuStyle = useSettingsStore((s) => s.dropdownMenuStyle);
+  const setDropdownMenuStyle = useSettingsStore((s) => s.setDropdownMenuStyle);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -161,32 +214,20 @@ export function SettingsModal() {
           </nav>
 
           {/* Right scrolling content */}
-          <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '28px 32px' }}>
+          <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '28px 36px' }}>
 
             {/* ── Section: 工作流 ── */}
             <div
               ref={(el) => { sectionRefs.current['workflow'] = el; }}
               data-section="workflow"
             >
-              <div style={{
-                fontSize: 11, fontWeight: 600, color: 'var(--color-text-secondary)',
-                textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 16,
-              }}>
-                工作流
-              </div>
+              <div style={sectionTitleStyle}>工作流</div>
 
               {/* Row: 反推模型 */}
-              <div style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '14px 0', borderBottom: '1px solid var(--color-border)',
-              }}>
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--color-text)', marginBottom: 3 }}>
-                    反推模型
-                  </div>
-                  <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
-                    用于图像提示词反推的 AI 模型
-                  </div>
+              <div style={settingRowStyle}>
+                <div style={{ marginRight: 24 }}>
+                  <div style={settingLabelStyle}>反推模型</div>
+                  <div style={settingDescStyle}>用于图像提示词反推的 AI 模型</div>
                 </div>
                 <SegmentedControl
                   options={REVERSE_PROMPT_MODELS}
@@ -194,34 +235,35 @@ export function SettingsModal() {
                   onChange={(v) => setReversePromptModel(v as ReversePromptModel)}
                 />
               </div>
+
+              {/* Row: 下拉菜单样式 */}
+              <div style={settingRowStyle}>
+                <div style={{ marginRight: 24 }}>
+                  <div style={settingLabelStyle}>下拉菜单样式</div>
+                  <div style={settingDescStyle}>快速模式仅显示有缩略图的模型，以宫格方式排列</div>
+                </div>
+                <SegmentedControl
+                  options={DROPDOWN_MENU_STYLE_OPTIONS}
+                  value={dropdownMenuStyle}
+                  onChange={(v) => setDropdownMenuStyle(v as DropdownMenuStyle)}
+                />
+              </div>
             </div>
 
-            <div style={{ height: 40 }} />
+            <div style={sectionGapStyle} />
 
             {/* ── Section: 会话 ── */}
             <div
               ref={(el) => { sectionRefs.current['session'] = el; }}
               data-section="session"
             >
-              <div style={{
-                fontSize: 11, fontWeight: 600, color: 'var(--color-text-secondary)',
-                textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 16,
-              }}>
-                会话
-              </div>
+              <div style={sectionTitleStyle}>会话</div>
 
               {/* Row: 启动时行为 */}
-              <div style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '14px 0', borderBottom: '1px solid var(--color-border)',
-              }}>
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--color-text)', marginBottom: 3 }}>
-                    启动时行为
-                  </div>
-                  <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
-                    打开应用时对上次会话的处理方式
-                  </div>
+              <div style={settingRowStyle}>
+                <div style={{ marginRight: 24 }}>
+                  <div style={settingLabelStyle}>启动时行为</div>
+                  <div style={settingDescStyle}>打开应用时对上次会话的处理方式</div>
                 </div>
                 <SegmentedControl
                   options={STARTUP_BEHAVIOR_OPTIONS}
@@ -231,32 +273,20 @@ export function SettingsModal() {
               </div>
             </div>
 
-            <div style={{ height: 40 }} />
+            <div style={sectionGapStyle} />
 
             {/* ── Section: 提示词管理 ── */}
             <div
               ref={(el) => { sectionRefs.current['prompt'] = el; }}
               data-section="prompt"
             >
-              <div style={{
-                fontSize: 11, fontWeight: 600, color: 'var(--color-text-secondary)',
-                textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 16,
-              }}>
-                提示词管理
-              </div>
+              <div style={sectionTitleStyle}>提示词管理</div>
 
               {/* Row: 提示词数据库 */}
-              <div style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '14px 0', borderBottom: '1px solid var(--color-border)',
-              }}>
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--color-text)', marginBottom: 3 }}>
-                    提示词数据库
-                  </div>
-                  <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
-                    管理标签合成器使用的标签分类数据
-                  </div>
+              <div style={settingRowStyle}>
+                <div style={{ marginRight: 24 }}>
+                  <div style={settingLabelStyle}>提示词数据库</div>
+                  <div style={settingDescStyle}>管理标签合成器使用的标签分类数据</div>
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   {/* 导出按钮 */}
@@ -286,17 +316,7 @@ export function SettingsModal() {
                       a.click();
                       URL.revokeObjectURL(url);
                     }}
-                    style={{
-                      padding: '6px 16px',
-                      fontSize: 12,
-                      fontWeight: 500,
-                      border: '1px solid var(--color-border)',
-                      borderRadius: 6,
-                      background: 'var(--color-bg)',
-                      color: 'var(--color-text)',
-                      cursor: 'pointer',
-                      transition: 'background 0.15s',
-                    }}
+                    style={actionBtnStyle}
                     onMouseEnter={(e) => e.currentTarget.style.background = 'var(--color-surface-hover)'}
                     onMouseLeave={(e) => e.currentTarget.style.background = 'var(--color-bg)'}
                   >
@@ -331,17 +351,7 @@ export function SettingsModal() {
                       };
                       input.click();
                     }}
-                    style={{
-                      padding: '6px 16px',
-                      fontSize: 12,
-                      fontWeight: 500,
-                      border: '1px solid var(--color-border)',
-                      borderRadius: 6,
-                      background: 'var(--color-bg)',
-                      color: 'var(--color-text)',
-                      cursor: 'pointer',
-                      transition: 'background 0.15s',
-                    }}
+                    style={actionBtnStyle}
                     onMouseEnter={(e) => e.currentTarget.style.background = 'var(--color-surface-hover)'}
                     onMouseLeave={(e) => e.currentTarget.style.background = 'var(--color-bg)'}
                   >

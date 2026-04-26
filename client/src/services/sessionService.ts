@@ -38,6 +38,8 @@ export interface SessionMeta {
   sessionId: string;
   createdAt: string;
   updatedAt: string;
+  manualCover?: boolean;
+  coverExt?: string;
 }
 
 export interface SerializedImage {
@@ -137,4 +139,18 @@ export async function listSessions(): Promise<SessionMeta[]> {
 // Delete a session.
 export async function deleteSession(sessionId: string): Promise<void> {
   await fetch(`/api/session/${sessionId}`, { method: 'DELETE' });
+}
+
+// Set a session cover image by copying from sourceUrl.
+export async function setSessionCover(
+  sessionId: string,
+  sourceUrl: string,
+): Promise<{ coverUrl: string }> {
+  const res = await fetch(`/api/session/${sessionId}/cover`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sourceUrl }),
+  });
+  if (!res.ok) throw new Error(`Failed to set session cover: ${res.status}`);
+  return res.json() as Promise<{ coverUrl: string }>;
 }

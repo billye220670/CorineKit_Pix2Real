@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { ChevronDown, Star, Loader, Check, ImagePlus, PencilLine, Tag, ChevronRight, Plus, Trash2, Settings } from 'lucide-react';
 import { MetadataEditorModal } from './MetadataEditorModal.js';
 import type { ModelMetadata } from '../hooks/useModelMetadata.js';
+import { useSettingsStore } from '../hooks/useSettingsStore.js';
 
 // ─── 分类颜色系统 ──────────────────────────────────────────────────────────────
 
@@ -117,8 +118,11 @@ export function ModelSelect({
   const [open, setOpen] = useState(false);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const selectedItemRef = useRef<HTMLDivElement>(null);
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null);
   const [uploadTargetModel, setUploadTargetModel] = useState<string | null>(null);
   const [editingModel, setEditingModel] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -139,11 +143,33 @@ export function ModelSelect({
   const submenuRef = useRef<HTMLDivElement>(null);
   const newCategoryInputRef = useRef<HTMLInputElement>(null);
 
+  // 读取下拉菜单样式设置
+  const dropdownMenuStyle = useSettingsStore((s) => s.dropdownMenuStyle);
+  const isFastMode = dropdownMenuStyle === 'fast';
+
+  // 计算下拉面板位置（基于触发器按钮）
+  useEffect(() => {
+    if (!open || !triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const panelWidth = isFastMode ? Math.max(rect.width, 460) : rect.width;
+    // 右对齐：面板右边缘对齐触发器右边缘
+    const left = rect.right - panelWidth;
+    setDropdownPos({
+      top: rect.bottom + 4,
+      left: Math.max(0, left),  // 确保不超出窗口左侧
+      width: panelWidth,
+    });
+  }, [open, isFastMode]);
+
   // 点击外部关闭
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (
+        containerRef.current && !containerRef.current.contains(target) &&
+        dropdownRef.current && !dropdownRef.current.contains(target)
+      ) {
         setOpen(false);
         setEditingModel(null);
         setEditingTriggerModel(null);
@@ -229,9 +255,15 @@ export function ModelSelect({
     return models.filter((m) => metadata?.[m]?.category === selectedCategory);
   }, [models, metadata, selectedCategory]);
 
+  // 快速模式：仅保留有缩略图的模型
+  const displayModels = useMemo(() => {
+    if (!isFastMode || !metadata) return filteredModels;
+    return filteredModels.filter((m) => metadata[m]?.thumbnail);
+  }, [filteredModels, isFastMode, metadata]);
+
   // 分离收藏项和非收藏项
-  const favoriteModels = filteredModels.filter((m) => favorites.has(m));
-  const otherModels = filteredModels.filter((m) => !favorites.has(m));
+  const favoriteModels = displayModels.filter((m) => favorites.has(m));
+  const otherModels = displayModels.filter((m) => !favorites.has(m));
 
   const getModelDisplayName = useCallback((model: string) => {
     const nick = metadata?.[model]?.nickname;
@@ -318,13 +350,12 @@ export function ModelSelect({
   };
 
   const dropdownStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: '100%',
-    left: 0,
-    width: '100%',
-    marginTop: 4,
-    zIndex: 1000,
-    maxHeight: 300,
+    position: 'fixed',
+    top: dropdownPos?.top ?? 0,
+    left: dropdownPos?.left ?? 0,
+    width: dropdownPos?.width ?? 'auto',
+    zIndex: 10000,
+    maxHeight: isFastMode ? 520 : 300,
     backgroundColor: 'var(--color-surface)',
     border: '1px solid var(--color-border)',
     borderRadius: 6,
@@ -540,6 +571,89 @@ export function ModelSelect({
     );
   };
 
+  // ─── 快速模式：宫格项渲染 ─────────────────────────────────────────────────
+  const renderGridItem = (model: string, index: number, _isFavorite: boolean) => {
+    const isSelected = model === value;
+    const isHovered = hoveredIndex === index;
+    const thumbUrl = getThumbnailUrl?.(model);
+
+    return (
+      <div
+        key={model}
+        ref={isSelected ? selectedItemRef : undefined}
+        style={{
+          position: 'relative',
+          cursor: 'pointer',
+          borderRadius: 6,
+          padding: 2,
+          border: isSelected ? '2px solid var(--color-primary)' : '2px solid transparent',
+          transition: 'border-color 0.15s',
+          overflow: 'hidden',
+        }}
+        onClick={() => {
+          onChange(model);
+          setOpen(false);
+        }}
+        onMouseEnter={() => setHoveredIndex(index)}
+        onMouseLeave={() => setHoveredIndex(null)}
+      >
+        {/* 缩略图 */}
+        {thumbUrl && (
+          <div style={{
+            width: '100%',
+            aspectRatio: '1',
+            borderRadius: 4,
+            overflow: 'hidden',
+            backgroundColor: 'var(--color-bg)',
+            position: 'relative',
+          }}>
+            <img
+              src={thumbUrl}
+              alt=""
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                display: 'block',
+                filter: isHovered ? 'brightness(1.1)' : 'none',
+                transition: 'filter 0.15s',
+              }}
+            />
+            {/* 底部渐变遮罩 + 标题 overlay */}
+            <div style={{
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'linear-gradient(to top, rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.35) 55%, transparent 100%)',
+              padding: '16px 5px 5px',
+              display: 'flex',
+              alignItems: 'flex-end',
+              justifyContent: 'center',
+            }}>
+              <span
+                title={model}
+                style={{
+                  fontSize: 11,
+                  color: '#fff',
+                  textAlign: 'center',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  width: '100%',
+                  lineHeight: '14px',
+                  textShadow: '0 1px 3px rgba(0,0,0,0.5)',
+                }}
+              >
+                {getModelDisplayName(model)}
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // 为每个模型分配唯一 index（用于 hover 状态管理）
   let itemIndex = 0;
 
@@ -559,6 +673,7 @@ export function ModelSelect({
 
       {/* 触发器按钮 */}
       <div
+        ref={triggerRef}
         style={triggerStyle}
         onClick={() => {
           if (models.length > 0) setOpen((v) => !v);
@@ -585,9 +700,9 @@ export function ModelSelect({
         />
       </div>
 
-      {/* 下拉面板 */}
-      {open && models.length > 0 && (
-        <div style={dropdownStyle}>
+      {/* 下拉面板 (Portal) */}
+      {open && models.length > 0 && dropdownPos && createPortal(
+        <div ref={dropdownRef} style={dropdownStyle} onMouseDown={(e) => e.stopPropagation()}>
           {/* 顶部工具栏：Settings 按钮 + 分类筛选 */}
           <div style={{ flexShrink: 0, borderBottom: '1px solid var(--color-border)' }}>
             {/* Settings 按钮行：独占一行，右对齐 */}
@@ -644,32 +759,55 @@ export function ModelSelect({
           </div>
           {/* 模型列表（可滚动） */}
           <div style={{ overflowY: 'auto', flex: 1 }}>
-            {/* 收藏区 */}
-            {favoriteModels.length > 0 && (
-              <>
+            {isFastMode ? (
+              /* ── 快速模式：宫格布局 ── */
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
+                gap: 8,
+                padding: 8,
+              }}>
                 {favoriteModels.map((m) => {
                   const idx = itemIndex++;
-                  return renderModelItem(m, idx, true);
+                  return renderGridItem(m, idx, true);
                 })}
-                {/* 分割线 */}
-                {otherModels.length > 0 && (
-                  <div
-                    style={{
-                      height: 1,
-                      backgroundColor: 'var(--color-border)',
-                      margin: '4px 0',
-                    }}
-                  />
+                {otherModels.map((m) => {
+                  const idx = itemIndex++;
+                  return renderGridItem(m, idx, false);
+                })}
+              </div>
+            ) : (
+              /* ── 经典模式：列表布局 ── */
+              <>
+                {/* 收藏区 */}
+                {favoriteModels.length > 0 && (
+                  <>
+                    {favoriteModels.map((m) => {
+                      const idx = itemIndex++;
+                      return renderModelItem(m, idx, true);
+                    })}
+                    {/* 分割线 */}
+                    {otherModels.length > 0 && (
+                      <div
+                        style={{
+                          height: 1,
+                          backgroundColor: 'var(--color-border)',
+                          margin: '4px 0',
+                        }}
+                      />
+                    )}
+                  </>
                 )}
+                {/* 全部剩余区 */}
+                {otherModels.map((m) => {
+                  const idx = itemIndex++;
+                  return renderModelItem(m, idx, false);
+                })}
               </>
             )}
-            {/* 全部剩余区 */}
-            {otherModels.map((m) => {
-              const idx = itemIndex++;
-              return renderModelItem(m, idx, false);
-            })}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
       {/* Thumbnail tooltip */}

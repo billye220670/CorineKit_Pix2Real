@@ -1,5 +1,5 @@
 import { useCallback, useState, useRef, useEffect, memo } from 'react';
-import { X, Play, RotateCcw, Check, AlertCircle, Layers, ChevronDown, Flower, Sparkles, Copy, BookText, Hash, AlignLeft, Wand2, Loader2, Heart, FileText } from 'lucide-react';
+import { X, Play, RotateCcw, Check, AlertCircle, Layers, ChevronDown, Flower, Sparkles, Copy, BookText, Hash, AlignLeft, Wand2, Loader2, Heart, FileText, ImagePlus } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useShallow } from 'zustand/react/shallow';
 import { SYSTEM_PROMPTS } from './prompt-assistant/systemPrompts.js';
@@ -15,6 +15,7 @@ import { useDragStore } from '../hooks/useDragStore.js';
 import { useSettingsStore } from '../hooks/useSettingsStore.js';
 import { useAgentStore } from '../hooks/useAgentStore.js';
 import type { ImageItem } from '../types/index.js';
+import { setSessionCover } from '../services/sessionService.js';
 
 interface ImageCardProps {
   image: ImageItem;
@@ -1158,6 +1159,24 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
           x={ctxMenu.x}
           y={ctxMenu.y}
           onViewConfig={() => { setCtxMenu(null); setShowConfigPanel(true); }}
+          onSetCover={async () => {
+            setCtxMenu(null);
+            // Determine which image URL to use as cover: prefer currently displayed output, fallback to input sessionUrl
+            let sourceUrl = image.sessionUrl;
+            if (displayOutput?.url) {
+              sourceUrl = displayOutput.url;
+            }
+            if (!sourceUrl || !sessionId) {
+              showToast('无法设为封面：图片尚未保存到会话');
+              return;
+            }
+            try {
+              await setSessionCover(sessionId, sourceUrl);
+              showToast('已设为会话封面');
+            } catch {
+              showToast('设为封面失败');
+            }
+          }}
           onClose={() => setCtxMenu(null)}
         />,
         document.body,
@@ -1179,9 +1198,10 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
 
 // ─── CardContextMenu ──────────────────────────────────────────────────
 
-function CardContextMenu({ x, y, onViewConfig, onClose }: {
+function CardContextMenu({ x, y, onViewConfig, onSetCover, onClose }: {
   x: number; y: number;
   onViewConfig: () => void;
+  onSetCover: () => void;
   onClose: () => void;
 }) {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -1207,6 +1227,11 @@ function CardContextMenu({ x, y, onViewConfig, onClose }: {
     return () => { document.removeEventListener('keydown', handleKey); document.removeEventListener('mousedown', handleClick); };
   }, [onClose]);
 
+  const items = [
+    { icon: <FileText size={14} />, label: '查看配置', onClick: onViewConfig },
+    { icon: <ImagePlus size={14} />, label: '设为会话封面', onClick: onSetCover },
+  ];
+
   return (
     <div
       ref={menuRef}
@@ -1223,24 +1248,27 @@ function CardContextMenu({ x, y, onViewConfig, onClose }: {
         zIndex: 9999,
       }}
     >
-      <div
-        style={{
-          padding: '8px 12px',
-          fontSize: 13,
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          color: '#e0e0e0',
-          background: hoverIdx === 0 ? 'rgba(128, 128, 128, 0.08)' : undefined,
-        }}
-        onMouseEnter={() => setHoverIdx(0)}
-        onMouseLeave={() => setHoverIdx(-1)}
-        onClick={onViewConfig}
-      >
-        <FileText size={14} />
-        查看配置
-      </div>
+      {items.map((item, idx) => (
+        <div
+          key={idx}
+          style={{
+            padding: '8px 12px',
+            fontSize: 13,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            color: '#e0e0e0',
+            background: hoverIdx === idx ? 'rgba(128, 128, 128, 0.08)' : undefined,
+          }}
+          onMouseEnter={() => setHoverIdx(idx)}
+          onMouseLeave={() => setHoverIdx(-1)}
+          onClick={item.onClick}
+        >
+          {item.icon}
+          {item.label}
+        </div>
+      ))}
     </div>
   );
 }

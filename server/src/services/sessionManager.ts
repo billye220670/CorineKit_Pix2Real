@@ -64,6 +64,8 @@ export interface SessionState {
   updatedAt: string;
   activeTab: number;
   tabData: Record<number, SerializedTabData>;
+  manualCover?: boolean;
+  coverExt?: string;
 }
 
 export interface SerializedTabData {
@@ -125,6 +127,8 @@ export interface SessionMeta {
   sessionId: string;
   createdAt: string;
   updatedAt: string;
+  manualCover?: boolean;
+  coverExt?: string;
 }
 
 export function listSessions(): SessionMeta[] {
@@ -140,7 +144,7 @@ export function listSessions(): SessionMeta[] {
     if (!fs.existsSync(stateFile)) continue;
     try {
       const s = JSON.parse(fs.readFileSync(stateFile, 'utf-8')) as SessionState;
-      metas.push({ sessionId: s.sessionId, createdAt: s.createdAt, updatedAt: s.updatedAt });
+      metas.push({ sessionId: s.sessionId, createdAt: s.createdAt, updatedAt: s.updatedAt, manualCover: s.manualCover, coverExt: s.coverExt });
     } catch { /* skip corrupt sessions */ }
   }
 
@@ -152,6 +156,51 @@ export function deleteSession(sessionId: string): void {
   if (fs.existsSync(sessionDir)) {
     fs.rmSync(sessionDir, { recursive: true, force: true });
   }
+}
+
+/**
+ * Copy an image from a session-relative URL path to sessions/{sessionId}/cover{ext}.
+ * Marks manualCover = true in session.json so auto-cover is disabled.
+ */
+export function saveCover(sessionId: string, sourceUrl: string): { coverUrl: string } {
+  // sourceUrl like /api/session-files/{sessionId}/tab-0/output/xxx.png
+  // or /api/session-files/{sessionId}/tab-0/input/xxx.jpg
+  const prefix = `/api/session-files/`;
+  if (!sourceUrl.startsWith(prefix)) {
+    throw new Error('Invalid source URL for cover');
+  }
+  const relativePath = decodeURIComponent(sourceUrl.slice(prefix.length));
+  const srcFile = path.join(sessionsBase, relativePath);
+  if (!fs.existsSync(srcFile)) {
+    throw new Error('Source file not found');
+  }
+  const ext = path.extname(srcFile).toLowerCase() || '.png';
+  const coverFile = path.join(sessionsBase, sessionId, `cover${ext}`);
+
+  // Remove any existing cover files with different extensions
+  const sessionDir = path.join(sessionsBase, sessionId);
+  if (fs.existsSync(sessionDir)) {
+    for (const f of fs.readdirSync(sessionDir)) {
+      if (f.startsWith('cover.')) {
+        fs.unlinkSync(path.join(sessionDir, f));
+      }
+    }
+  }
+
+  fs.copyFileSync(srcFile, coverFile);
+
+  // Update session.json to mark manualCover
+  const stateFile = path.join(sessionsBase, sessionId, 'session.json');
+  if (fs.existsSync(stateFile)) {
+    try {
+      const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8')) as SessionState;
+      state.manualCover = true;
+      state.coverExt = ext;
+      fs.writeFileSync(stateFile, JSON.stringify(state, null, 2), 'utf-8');
+    } catch { /* ignore */ }
+  }
+
+  return { coverUrl: `/api/session-files/${sessionId}/cover${ext}` };
 }
 
 export function pruneOldSessions(keep = 5): void {
