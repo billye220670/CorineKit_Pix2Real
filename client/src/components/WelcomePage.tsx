@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { Plus, X, Pencil, Check } from 'lucide-react';
+import { Plus, X, Pencil, Check, Image } from 'lucide-react';
 import {
   listSessions,
   getSession,
@@ -14,6 +14,7 @@ interface SessionCard {
   meta: SessionMeta;
   name: string;
   previewUrl: string | null;
+  imageCount: number;
 }
 
 interface WelcomePageProps {
@@ -31,28 +32,37 @@ function formatRelativeTime(iso: string): string {
   return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
 }
 
-async function resolvePreviewUrl(sessionId: string): Promise<string | null> {
+async function resolveSessionInfo(sessionId: string): Promise<{ previewUrl: string | null; imageCount: number }> {
   try {
     const session = await getSession(sessionId);
-    if (!session) return null;
-    // Prefer output images
+    if (!session) return { previewUrl: null, imageCount: 0 };
+    let previewUrl: string | null = null;
+    let imageCount = 0;
+    // Count all images and find preview
     for (let tab = 0; tab <= 9; tab++) {
       const td = session.tabData[tab];
       if (!td) continue;
+      // Count input images
+      imageCount += td.images.length;
+      // Count output images & find first output as preview
       for (const task of Object.values(td.tasks)) {
-        if (task.outputs.length > 0) return task.outputs[0].url;
+        imageCount += task.outputs.length;
+        if (!previewUrl && task.outputs.length > 0) previewUrl = task.outputs[0].url;
       }
     }
-    // Fall back to input images
-    for (let tab = 0; tab <= 9; tab++) {
-      const td = session.tabData[tab];
-      if (!td || td.images.length === 0) continue;
-      const img = td.images[0];
-      return `/api/session-files/${sessionId}/tab-${tab}/input/${img.id}${img.ext}`;
+    // Fall back preview to first input image
+    if (!previewUrl) {
+      for (let tab = 0; tab <= 9; tab++) {
+        const td = session.tabData[tab];
+        if (!td || td.images.length === 0) continue;
+        const img = td.images[0];
+        previewUrl = `/api/session-files/${sessionId}/tab-${tab}/input/${img.id}${img.ext}`;
+        break;
+      }
     }
-    return null;
+    return { previewUrl, imageCount };
   } catch {
-    return null;
+    return { previewUrl: null, imageCount: 0 };
   }
 }
 
@@ -73,11 +83,15 @@ export function WelcomePage({ onNewSession, onEnterApp }: WelcomePageProps) {
         const metas = await listSessions();
         const names = JSON.parse(localStorage.getItem(NAMES_KEY) ?? '{}') as Record<string, string>;
         const loaded: SessionCard[] = await Promise.all(
-          metas.map(async (meta) => ({
-            meta,
-            name: names[meta.sessionId] ?? formatRelativeTime(meta.updatedAt),
-            previewUrl: await resolvePreviewUrl(meta.sessionId),
-          }))
+          metas.map(async (meta) => {
+            const info = await resolveSessionInfo(meta.sessionId);
+            return {
+              meta,
+              name: names[meta.sessionId] ?? formatRelativeTime(meta.updatedAt),
+              previewUrl: info.previewUrl,
+              imageCount: info.imageCount,
+            };
+          })
         );
         setCards(loaded);
       } catch (err) {
@@ -428,8 +442,17 @@ export function WelcomePage({ onNewSession, onEnterApp }: WelcomePageProps) {
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
                     }}>
-                      {formatRelativeTime(card.meta.updatedAt)}
+                      <span>{formatRelativeTime(card.meta.updatedAt)}</span>
+                      {card.imageCount > 0 && (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                          <Image size={10} />
+                          {card.imageCount}
+                        </span>
+                      )}
                     </div>
                   </div>
 
