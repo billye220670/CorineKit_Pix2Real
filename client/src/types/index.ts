@@ -20,6 +20,12 @@ export interface TaskInfo {
   promptId: string;
   status: TaskStatus;
   progress: number;
+  /** 当前阶段的中文名，如「加载主模型」「采样中」「VAE 解码」 */
+  stage?: string;
+  /** 当前是第几个节点（1-based） */
+  stepIndex?: number;
+  /** 工作流总节点数 */
+  stepTotal?: number;
   outputs: Array<{ filename: string; url: string }>;
   error?: string;
 }
@@ -35,6 +41,12 @@ export interface WSProgressMessage {
   value: number;
   max: number;
   percentage: number;
+  /** 当前阶段中文名（服务端根据节点 class_type 映射） */
+  stage?: string;
+  /** 当前是第几个节点（1-based） */
+  stepIndex?: number;
+  /** 工作流总节点数 */
+  stepTotal?: number;
 }
 
 export interface WSCompleteMessage {

@@ -70,7 +70,7 @@ interface WorkflowStore {
   startTask: (imageId: string, promptId: string) => void;
   startTaskInTab: (tabId: number, imageId: string, promptId: string) => void;
   markTaskStarted: (promptId: string) => void;
-  updateProgress: (promptId: string, percentage: number) => void;
+  updateProgress: (promptId: string, percentage: number, stage?: string, stepIndex?: number, stepTotal?: number) => void;
   completeTask: (promptId: string, outputs: Array<{ filename: string; url: string }>) => void;
   failTask: (promptId: string, error: string) => void;
   resetTask: (imageId: string) => void;
@@ -450,7 +450,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     });
   },
 
-  updateProgress: (promptId, percentage) => {
+  updateProgress: (promptId, percentage, stage, stepIndex, stepTotal) => {
     set((state) => {
       const newTabData = { ...state.tabData };
       // Search all tabs for the promptId since progress can arrive on any tab
@@ -462,7 +462,9 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         const newTasks = { ...prev.tasks };
         for (const [imageId, task] of Object.entries(newTasks)) {
           if (task.promptId === promptId) {
-            newTasks[imageId] = { ...task, progress: percentage };
+            // 兑底：收到进度就意味着已经开始执行，强制从 queued 推进为 processing
+            const nextStatus: TaskStatus = task.status === 'queued' ? 'processing' : task.status;
+            newTasks[imageId] = { ...task, status: nextStatus, progress: percentage, stage, stepIndex, stepTotal };
             changed = true;
           }
         }

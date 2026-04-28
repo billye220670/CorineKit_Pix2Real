@@ -3,12 +3,16 @@ import { X } from 'lucide-react';
 interface ProgressOverlayProps {
   status: 'queued' | 'processing';
   progress: number;
+  stage?: string;
+  stepIndex?: number;
+  stepTotal?: number;
   onCancel?: () => void;
 }
 
-export function ProgressOverlay({ status, progress, onCancel }: ProgressOverlayProps) {
+export function ProgressOverlay({ status, progress, stage, stepIndex, stepTotal, onCancel }: ProgressOverlayProps) {
   const isQueued = status === 'queued';
-  const isLoading = status === 'processing' && progress === 0;
+  // 还没有进入第一个节点时展示“准备中…”动画
+  const noStageYet = status === 'processing' && !stage;
 
   return (
     <div style={{
@@ -52,9 +56,9 @@ export function ProgressOverlay({ status, progress, onCancel }: ProgressOverlayP
         </div>
       )}
 
-      {isLoading && (
+      {noStageYet && (
         <div style={{ color: '#ffffff', fontSize: '16px', fontWeight: 600, display: 'flex', alignItems: 'flex-end', gap: '1px' }}>
-          <span>加载中</span>
+          <span>准备中</span>
           {[0, 1, 2].map((i) => (
             <span
               key={i}
@@ -69,7 +73,28 @@ export function ProgressOverlay({ status, progress, onCancel }: ProgressOverlayP
         </div>
       )}
 
-      {!isQueued && !isLoading && (
+      {/* Stage label — small text above the percentage */}
+      {!isQueued && stage && (
+        <div style={{
+          color: 'rgba(255,255,255,0.88)',
+          fontSize: '12px',
+          fontWeight: 500,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 4,
+          lineHeight: 1.1,
+        }}>
+          <span>{stage}</span>
+          {stepIndex && stepTotal ? (
+            <span style={{ fontSize: '10px', opacity: 0.65, fontVariantNumeric: 'tabular-nums' }}>
+              {stepIndex}/{stepTotal}
+            </span>
+          ) : null}
+        </div>
+      )}
+
+      {/* Percentage number */}
+      {!isQueued && stage && (
         <div style={{
           color: '#ffffff',
           fontSize: '24px',
@@ -80,8 +105,8 @@ export function ProgressOverlay({ status, progress, onCancel }: ProgressOverlayP
         </div>
       )}
 
-      {/* Progress bar — only during active sampling */}
-      {!isQueued && !isLoading && (
+      {/* Progress bar */}
+      {!isQueued && stage && (
         <div style={{
           width: '60%',
           height: '4px',

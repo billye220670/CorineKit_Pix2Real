@@ -38,7 +38,7 @@ function getOrCreateConnection(): WebSocket {
           store.markTaskStarted(msg.promptId);
           break;
         case 'progress':
-          store.updateProgress(msg.promptId, msg.percentage);
+          store.updateProgress(msg.promptId, msg.percentage, msg.stage, msg.stepIndex, msg.stepTotal);
           break;
         case 'complete':
           store.completeTask(msg.promptId, msg.outputs);

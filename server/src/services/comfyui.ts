@@ -44,6 +44,112 @@ export async function uploadVideo(buffer: Buffer, filename: string): Promise<str
   return data.name;
 }
 
+// ── 阶段化进度追踪所需：prompt_id → 节点 ID → 节点信息 ───────────────────────
+// 由 queuePrompt 在任务入队时登记每个节点的 class_type、_meta.title 和 weight，
+// WebSocket 中继依此生成友好的阶段名与权重化的全局百分比，
+// complete/error 时清理。
+export interface PromptNodeInfo {
+  classType: string;
+  title: string;
+  weight: number;
+}
+
+// 节点权重表：基于时间开销的相对值（1 权重 ≈ 1 个采样步的耗时）
+const STATIC_NODE_WEIGHTS: Record<string, number> = {
+  // 模型加载（磁盘 I/O，较慢）
+  'CheckpointLoaderSimple': 15,
+  'CheckpointLoader': 15,
+  'UNETLoader': 15,
+  'UNETLoaderGGUF': 15,
+  'VAELoader': 5,
+  'CLIPLoader': 5,
+  'DualCLIPLoader': 8,
+  'ControlNetLoader': 8,
+  'UpscaleModelLoader': 5,
+  'CLIPVisionLoader': 5,
+  // LoRA 加载
+  'LoraLoader': 5,
+  'LoraLoaderModelOnly': 5,
+  'LoraLoader|pysssss': 5,
+  // 文本编码
+  'CLIPTextEncode': 2,
+  'BNK_CLIPTextEncodeAdvanced': 2,
+  'CLIPTextEncodeSDXL': 2,
+  // VAE
+  'VAEEncode': 3,
+  'VAEEncodeForInpaint': 3,
+  'VAEDecode': 3,
+  'VAEDecodeTiled': 4,
+  // 放大
+  'ImageUpscaleWithModel': 8,
+  'NNLatentUpscale': 3,
+  'LatentUpscale': 3,
+  'LatentUpscaleBy': 3,
+  // 视频
+  'VHS_VideoCombine': 5,
+  'VHS_LoadVideo': 3,
+  // IO（快速）
+  'SaveImage': 1,
+  'PreviewImage': 1,
+  'LoadImage': 1,
+  'EmptyLatentImage': 1,
+  // 换脸
+  'ReActorFaceSwap': 10,
+  'ReActorFaceSwapOpt': 10,
+  'FaceSwapNode': 10,
+  // 分割/识别
+  'GroundingDinoSAMSegment (segment anything)': 8,
+  'CLIPSeg': 5,
+  // 反推
+  'Florence2Run': 10,
+  'WD14Tagger|pysssss': 8,
+};
+
+// 采样器类型：权重由 inputs.steps 动态决定
+const SAMPLER_NODE_TYPES = new Set([
+  'KSampler',
+  'KSamplerAdvanced',
+  'SamplerCustom',
+  'SamplerCustomAdvanced',
+  'KSampler (Efficient)',
+]);
+
+// 采样每步的权重系数：采样是整个工作流中 GPU 耗时最大的阶段，放大让其在进度条上占更大比重；
+// 多采样器工作流（高清重绘/精修/二次元转真人）会自然按采样次数累加，总占比进一步放大。
+const SAMPLER_STEP_WEIGHT = 2.5;
+const SAMPLER_DEFAULT_STEPS = 20; // 缺失 steps 时的夹保底
+
+function getNodeWeight(classType: string, inputs?: Record<string, unknown>): number {
+  if (SAMPLER_NODE_TYPES.has(classType)) {
+    const steps = inputs?.steps;
+    const base = typeof steps === 'number' && steps > 0 ? steps : SAMPLER_DEFAULT_STEPS;
+    return base * SAMPLER_STEP_WEIGHT;
+  }
+  return STATIC_NODE_WEIGHTS[classType] ?? 1;
+}
+
+const promptNodeInfo = new Map<string, Map<string, PromptNodeInfo>>();
+
+export function getPromptNodeInfo(promptId: string, nodeId: string): PromptNodeInfo | undefined {
+  return promptNodeInfo.get(promptId)?.get(nodeId);
+}
+
+export function getPromptTotalNodes(promptId: string): number {
+  return promptNodeInfo.get(promptId)?.size ?? 0;
+}
+
+export function getPromptTotalWeight(promptId: string): number {
+  const m = promptNodeInfo.get(promptId);
+  if (!m) return 0;
+  let total = 0;
+  for (const info of m.values()) total += info.weight;
+  return total;
+}
+
+export function clearPromptNodeInfo(promptId: string): void {
+  promptNodeInfo.delete(promptId);
+}
+
 export async function queuePrompt(prompt: object, clientId: string): Promise<QueueResponse> {
   const res = await fetch(`${COMFYUI_URL}/prompt`, {
     method: 'POST',
@@ -56,7 +162,21 @@ export async function queuePrompt(prompt: object, clientId: string): Promise<Que
     throw new Error(`Queue prompt failed: ${res.status} ${text}`);
   }
 
-  return (await res.json()) as QueueResponse;
+  const data = (await res.json()) as QueueResponse;
+  // 登记每个节点的 class_type、可读标题、权重，供阶段化进度展示使用
+  if (data?.prompt_id) {
+    const nodeMap = new Map<string, PromptNodeInfo>();
+    for (const [nodeId, node] of Object.entries(prompt as Record<string, { class_type?: string; _meta?: { title?: string }; inputs?: Record<string, unknown> }>)) {
+      const classType = node?.class_type ?? '';
+      nodeMap.set(nodeId, {
+        classType,
+        title: node?._meta?.title ?? '',
+        weight: getNodeWeight(classType, node?.inputs),
+      });
+    }
+    promptNodeInfo.set(data.prompt_id, nodeMap);
+  }
+  return data;
 }
 
 export async function getHistory(promptId: string): Promise<HistoryEntry> {
@@ -85,6 +205,8 @@ export async function getImageBuffer(filename: string, subfolder: string, type: 
 export interface ComfyUIProgress {
   value: number;
   max: number;
+  /** 产生此进度消息的节点 ID（ComfyUI 新版本中 progress 消息带此字段） */
+  node?: string;
 }
 
 export async function deleteQueueItem(promptId: string): Promise<void> {
@@ -129,6 +251,10 @@ export function connectWebSocket(
   callbacks: {
     onProgress?: (promptId: string, progress: ComfyUIProgress) => void;
     onExecutionStart?: (promptId: string) => void;
+    /** 某个节点开始执行（data.node 非空时触发），用于全局进度追踪 */
+    onExecutingNode?: (promptId: string, nodeId: string) => void;
+    /** 被缓存跳过的节点列表（这些节点视为已完成），用于全局进度追踪 */
+    onExecutionCached?: (promptId: string, cachedNodes: string[]) => void;
     onComplete?: (promptId: string) => void;
     onError?: (promptId: string, message: string) => void;
   }
@@ -149,14 +275,28 @@ export function connectWebSocket(
         callbacks.onProgress(data.prompt_id, {
           value: data.value,
           max: data.max,
+          node: data.node != null ? String(data.node) : undefined,
         });
+      }
+
+      // 被缓存跳过的节点（这些节点直接计为已完成，用于全局进度累计）
+      if (type === 'execution_cached' && callbacks.onExecutionCached) {
+        const cachedNodes: string[] = Array.isArray(data?.nodes)
+          ? data.nodes.map((n: unknown) => String(n))
+          : [];
+        callbacks.onExecutionCached(data.prompt_id, cachedNodes);
       }
 
       if (type === 'executing') {
         // Use loose equality so both null and undefined (missing key) are treated as "done"
-        if (data.node != null && !startedPrompts.has(data.prompt_id)) {
-          startedPrompts.add(data.prompt_id);
-          callbacks.onExecutionStart?.(data.prompt_id);
+        if (data.node != null) {
+          // 先触发 workflow 开始（只触发一次），确保前端先收到 execution_start
+          // 再触发节点切换（伴随 progress 消息）
+          if (!startedPrompts.has(data.prompt_id)) {
+            startedPrompts.add(data.prompt_id);
+            callbacks.onExecutionStart?.(data.prompt_id);
+          }
+          callbacks.onExecutingNode?.(data.prompt_id, String(data.node));
         }
         if (data.node == null && !completedPrompts.has(data.prompt_id)) {
           completedPrompts.add(data.prompt_id);

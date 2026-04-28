@@ -630,6 +630,9 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
           <ProgressOverlay
             status={status}
             progress={progress}
+            stage={task?.stage}
+            stepIndex={task?.stepIndex}
+            stepTotal={task?.stepTotal}
             onCancel={status === 'queued' ? handleCancelQueue : undefined}
           />
         )}

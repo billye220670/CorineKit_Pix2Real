@@ -10,9 +10,66 @@ import outputRouter from './routes/output.js';
 import sessionRouter from './routes/session.js';
 import modelMetaRouter from './routes/modelMeta.js';
 import agentRouter from './routes/agent.js';
-import { connectWebSocket, getHistory, getImageBuffer } from './services/comfyui.js';
+import { connectWebSocket, getHistory, getImageBuffer, getPromptNodeInfo, getPromptTotalNodes, getPromptTotalWeight, clearPromptNodeInfo } from './services/comfyui.js';
 import { sessionsBase, saveOutputFile } from './services/sessionManager.js';
 import { ensureComfyUI, isComfyUIRunning } from './services/comfyuiLauncher.js';
+
+// ── 节点 class_type → 中文阶段名映射 ───────────────────────────────
+// 未映射的节点将回退到用户在 ComfyUI 中的节点标题（_meta.title）
+const STAGE_NAMES: Record<string, string> = {
+  // 模型加载
+  'CheckpointLoaderSimple': '加载主模型',
+  'CheckpointLoader': '加载主模型',
+  'UNETLoader': '加载 UNET',
+  'UNETLoaderGGUF': '加载 UNET',
+  'VAELoader': '加载 VAE',
+  'CLIPLoader': '加载 CLIP',
+  'DualCLIPLoader': '加载 CLIP',
+  'ControlNetLoader': '加载 ControlNet',
+  'UpscaleModelLoader': '加载放大模型',
+  'CLIPVisionLoader': '加载 CLIP Vision',
+  // LoRA 加载
+  'LoraLoader': '加载 LoRA',
+  'LoraLoaderModelOnly': '加载 LoRA',
+  'LoraLoader|pysssss': '加载 LoRA',
+  // 文本编码
+  'CLIPTextEncode': '编码提示词',
+  'BNK_CLIPTextEncodeAdvanced': '编码提示词',
+  'CLIPTextEncodeSDXL': '编码提示词',
+  // VAE 编解
+  'VAEEncode': 'VAE 编码',
+  'VAEEncodeForInpaint': 'VAE 编码',
+  'VAEDecode': 'VAE 解码',
+  'VAEDecodeTiled': 'VAE 解码',
+  // 采样
+  'KSampler': '采样中',
+  'KSamplerAdvanced': '采样中',
+  'SamplerCustom': '采样中',
+  'SamplerCustomAdvanced': '采样中',
+  'KSampler (Efficient)': '采样中',
+  // 放大
+  'ImageUpscaleWithModel': '放大图像',
+  'NNLatentUpscale': '放大潜空间',
+  'LatentUpscale': '放大潜空间',
+  'LatentUpscaleBy': '放大潜空间',
+  // 视频
+  'VHS_VideoCombine': '合成视频',
+  'VHS_LoadVideo': '加载视频',
+  // IO
+  'SaveImage': '保存图像',
+  'PreviewImage': '预览图像',
+  'LoadImage': '加载图像',
+  'EmptyLatentImage': '准备潜空间',
+  // 换脸 / 识别
+  'ReActorFaceSwap': '面部交换',
+  'ReActorFaceSwapOpt': '面部交换',
+  'FaceSwapNode': '面部交换',
+  'GroundingDinoSAMSegment (segment anything)': '智能分割',
+  'CLIPSeg': '智能分割',
+  // 提示词反推
+  'Florence2Run': '反推提示词',
+  'WD14Tagger|pysssss': '反推提示词',
+};
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const outputBase = path.resolve(__dirname, '../../output');
@@ -112,21 +169,121 @@ wss.on('connection', (clientWs) => {
     }
   }
 
+  // ── 全局进度追踪状态 ──────────────────────────────────────────────────────
+  // 全局进度 = (已完成权重 + 当前节点权重 × 当前节点内部进度) / 总权重
+  // 阶段化 + 权重化：权重基于节点时间开销（采样节点权重 = steps，模型加载权重 15，编码/VAE 权重 2-3）
+  interface PromptProgressState {
+    totalNodes: number;
+    totalWeight: number;
+    completedWeight: number;
+    stepIndex: number;
+    currentNode: string | null;
+    currentStage: string;
+    currentNodeWeight: number;
+    currentValue: number;
+    currentMax: number;
+  }
+  const promptProgressMap = new Map<string, PromptProgressState>();
+
+  function getOrInitProgress(promptId: string): PromptProgressState {
+    let p = promptProgressMap.get(promptId);
+    if (!p) {
+      p = {
+        totalNodes: getPromptTotalNodes(promptId),
+        totalWeight: getPromptTotalWeight(promptId),
+        completedWeight: 0,
+        stepIndex: 0,
+        currentNode: null,
+        currentStage: '',
+        currentNodeWeight: 0,
+        currentValue: 0,
+        currentMax: 0,
+      };
+      promptProgressMap.set(promptId, p);
+    }
+    return p;
+  }
+
+  function getStageName(promptId: string, nodeId: string): string {
+    const info = getPromptNodeInfo(promptId, nodeId);
+    if (!info) return '处理中';
+    const mapped = STAGE_NAMES[info.classType];
+    if (mapped) return mapped;
+    if (info.title && info.title.trim()) return info.title.trim();
+    return info.classType || '处理中';
+  }
+
+  function emitProgress(promptId: string, p: PromptProgressState) {
+    // 权重化全局百分比，封顶 99%，100% 留给 complete 确认
+    let percentage: number;
+    if (p.totalWeight > 0) {
+      const nodeProgress = p.currentMax > 0 ? p.currentValue / p.currentMax : 0;
+      const pct = ((p.completedWeight + p.currentNodeWeight * nodeProgress) / p.totalWeight) * 100;
+      percentage = Math.min(99, Math.max(0, Math.round(pct)));
+    } else {
+      percentage = p.currentMax > 0 ? Math.round((p.currentValue / p.currentMax) * 100) : 0;
+    }
+    bufferAndSend(promptId, {
+      type: 'progress',
+      promptId,
+      value: p.currentValue,
+      max: p.currentMax,
+      percentage,
+      stage: p.currentStage,
+      stepIndex: p.stepIndex,
+      stepTotal: p.totalNodes,
+    });
+  }
   // Connect to ComfyUI WebSocket with this clientId
   const comfyWs = connectWebSocket(clientId, {
     onExecutionStart(promptId) {
+      getOrInitProgress(promptId);
       bufferAndSend(promptId, { type: 'execution_start', promptId });
     },
 
+    onExecutionCached(promptId, cachedNodes) {
+      // 缓存命中的节点直接跳过，将其权重计入 completedWeight（进度条会顺势推进）
+      const p = getOrInitProgress(promptId);
+      for (const nodeId of cachedNodes) {
+        const info = getPromptNodeInfo(promptId, nodeId);
+        p.completedWeight += info?.weight ?? 0;
+      }
+      p.stepIndex = Math.min(p.totalNodes || Number.MAX_SAFE_INTEGER, p.stepIndex + cachedNodes.length);
+    },
+
+    onExecutingNode(promptId, nodeId) {
+      const p = getOrInitProgress(promptId);
+      // 节点切换：将上一节点的完整权重计入 completedWeight，再切换到新节点
+      if (p.currentNode !== nodeId) {
+        if (p.currentNode !== null) {
+          p.completedWeight += p.currentNodeWeight;
+        }
+        p.stepIndex = Math.min(p.totalNodes || Number.MAX_SAFE_INTEGER, p.stepIndex + 1);
+        p.currentNode = nodeId;
+        p.currentStage = getStageName(promptId, nodeId);
+        const info = getPromptNodeInfo(promptId, nodeId);
+        p.currentNodeWeight = info?.weight ?? 1;
+        p.currentValue = 0;
+        p.currentMax = 0;
+      }
+      emitProgress(promptId, p);
+    },
+
     onProgress(promptId, progress) {
-      const percentage = Math.round((progress.value / progress.max) * 100);
-      bufferAndSend(promptId, {
-        type: 'progress',
-        promptId,
-        value: progress.value,
-        max: progress.max,
-        percentage,
-      });
+      const p = getOrInitProgress(promptId);
+      // 若 progress 带了 node 字段且与当前不一致，同步刷新阶段与权重
+      if (progress.node && progress.node !== p.currentNode) {
+        if (p.currentNode !== null) {
+          p.completedWeight += p.currentNodeWeight;
+        }
+        p.currentNode = progress.node;
+        p.currentStage = getStageName(promptId, progress.node);
+        const info = getPromptNodeInfo(promptId, progress.node);
+        p.currentNodeWeight = info?.weight ?? 1;
+      }
+      p.currentValue = progress.value;
+      p.currentMax = progress.max;
+      emitProgress(promptId, p);
     },
 
     async onComplete(promptId) {
@@ -203,6 +360,8 @@ wss.on('connection', (clientWs) => {
         // Cleanup
         promptWorkflowMap.delete(promptId);
         eventBuffer.delete(promptId);
+        promptProgressMap.delete(promptId);
+        clearPromptNodeInfo(promptId);
       } catch (err) {
         console.error(`[WS] Error processing completion for ${promptId}:`, err);
         if (clientWs.readyState === WebSocket.OPEN) {
@@ -212,6 +371,8 @@ wss.on('connection', (clientWs) => {
             outputs: [],
           }));
         }
+        promptProgressMap.delete(promptId);
+        clearPromptNodeInfo(promptId);
       }
     },
 
@@ -226,6 +387,8 @@ wss.on('connection', (clientWs) => {
         }));
       }
       promptWorkflowMap.delete(promptId);
+      promptProgressMap.delete(promptId);
+      clearPromptNodeInfo(promptId);
     },
   });
 
