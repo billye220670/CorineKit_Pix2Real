@@ -18,6 +18,7 @@ const text2imgTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2R
 const promptAssistantTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-提示词助手.json');
 const faceSwapTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-换面.json');
 const kleinTemplatePath    = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-高清重绘.json');
+const kleinProTemplatePath  = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-Klein重绘Pro.json');
 const sdUpscaleTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-SD放大.json');
 const zitTemplatePath      = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-ZIT文生图NEW2.json');
 
@@ -510,6 +511,11 @@ router.post('/2/execute', upload.single('image'), async (req, res) => {
       template['46'].inputs.image = comfyFilename;
       template['304'].inputs.prompt = kleinDefaultPrompt;
       template['370'].inputs.seed = Math.floor(Math.random() * 4294967295);
+      promptJson = template;
+    } else if (model === 'kleinpro') {
+      const template = JSON.parse(fs.readFileSync(kleinProTemplatePath, 'utf-8'));
+      template['31'].inputs.image = comfyFilename;
+      template['13'].inputs.seed = Math.floor(Math.random() * 4294967295);
       promptJson = template;
     } else if (model === 'sd') {
       const template = JSON.parse(fs.readFileSync(sdUpscaleTemplatePath, 'utf-8'));

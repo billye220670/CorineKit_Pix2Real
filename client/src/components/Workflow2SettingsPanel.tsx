@@ -7,7 +7,7 @@ function readSettings() {
 }
 
 export function Workflow2SettingsPanel({ width }: { width?: number }) {
-  const [upscaleModel, setUpscaleModel] = useState<'seedvr2' | 'klein' | 'sd' | 'remacri'>(() => readSettings().upscaleModel ?? 'seedvr2');
+  const [upscaleModel, setUpscaleModel] = useState<'seedvr2' | 'klein' | 'sd' | 'remacri' | 'kleinpro'>(() => readSettings().upscaleModel ?? 'seedvr2');
 
   useEffect(() => {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify({ upscaleModel }));
@@ -49,6 +49,7 @@ export function Workflow2SettingsPanel({ width }: { width?: number }) {
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             <button style={pillBtn(upscaleModel === 'seedvr2')} onClick={() => setUpscaleModel('seedvr2')}>SeedVR2</button>
             <button style={pillBtn(upscaleModel === 'klein')} onClick={() => setUpscaleModel('klein')}>Klein</button>
+            <button style={pillBtn(upscaleModel === 'kleinpro')} onClick={() => setUpscaleModel('kleinpro')}>KleinPro</button>
             <button style={pillBtn(upscaleModel === 'sd')} onClick={() => setUpscaleModel('sd')}>4xUltraSharp</button>
             <button style={pillBtn(upscaleModel === 'remacri')} onClick={() => setUpscaleModel('remacri')}>Remacri</button>
           </div>
