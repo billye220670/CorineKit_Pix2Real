@@ -1,12 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
+import { useWorkflowStore } from '../hooks/useWorkflowStore.js';
 
-type OverlayState = 'CHECKING' | 'WAITING' | 'READY' | 'HIDDEN';
+type OverlayState = 'CHECKING' | 'WAITING' | 'CONNECTING' | 'READY' | 'HIDDEN';
 
 export function StartupOverlay() {
   const [state, setState] = useState<OverlayState>('CHECKING');
   const [seconds, setSeconds] = useState(0);
   const [fadeOut, setFadeOut] = useState(false);
-  
+  const [comfyReady, setComfyReady] = useState(false);
+  const clientId = useWorkflowStore((s) => s.clientId);
+
   const pollIntervalRef = useRef<number | null>(null);
   const timerIntervalRef = useRef<number | null>(null);
   const fadeTimeoutRef = useRef<number | null>(null);
@@ -22,8 +25,8 @@ export function StartupOverlay() {
     }
   };
 
-  // Cleanup all timers
-  const cleanup = () => {
+  // Cleanup polling / countdown timers (keep fadeTimeout separate)
+  const cleanupPollTimers = () => {
     if (pollIntervalRef.current) {
       clearInterval(pollIntervalRef.current);
       pollIntervalRef.current = null;
@@ -32,28 +35,17 @@ export function StartupOverlay() {
       clearInterval(timerIntervalRef.current);
       timerIntervalRef.current = null;
     }
+  };
+
+  const cleanupAll = () => {
+    cleanupPollTimers();
     if (fadeTimeoutRef.current) {
       clearTimeout(fadeTimeoutRef.current);
       fadeTimeoutRef.current = null;
     }
   };
 
-  // Handle ready state
-  const handleReady = () => {
-    cleanup();
-    setState('READY');
-    
-    // Wait 1.5s then start fade out
-    fadeTimeoutRef.current = window.setTimeout(() => {
-      setFadeOut(true);
-      // After fade animation completes, hide completely
-      fadeTimeoutRef.current = window.setTimeout(() => {
-        setState('HIDDEN');
-      }, 500);
-    }, 1500);
-  };
-
-  // Initial check and setup polling
+  // ComfyUI HTTP status polling — first gate
   useEffect(() => {
     let mounted = true;
 
@@ -62,11 +54,12 @@ export function StartupOverlay() {
       if (!mounted) return;
 
       if (running) {
-        setState('HIDDEN');
+        cleanupPollTimers();
+        setComfyReady(true);
         return;
       }
 
-      // Not running, start waiting
+      // Not running, start waiting for ComfyUI
       setState('WAITING');
 
       // Start countdown timer (1s interval)
@@ -78,7 +71,8 @@ export function StartupOverlay() {
       pollIntervalRef.current = window.setInterval(async () => {
         const isRunning = await checkStatus();
         if (isRunning && mounted) {
-          handleReady();
+          cleanupPollTimers();
+          setComfyReady(true);
         }
       }, 2000);
     };
@@ -87,15 +81,37 @@ export function StartupOverlay() {
 
     return () => {
       mounted = false;
-      cleanup();
+      cleanupAll();
     };
   }, []);
+
+  // Gate overlay dismissal on BOTH ComfyUI running AND WebSocket clientId ready.
+  // This prevents the overlay from disappearing while the Generate button is still
+  // disabled (clientId is only set after the WebSocket 'connected' message arrives).
+  useEffect(() => {
+    if (state === 'READY' || state === 'HIDDEN') return;
+
+    if (comfyReady && clientId) {
+      // Both gates passed — show success, then fade out
+      setState('READY');
+      fadeTimeoutRef.current = window.setTimeout(() => {
+        setFadeOut(true);
+        fadeTimeoutRef.current = window.setTimeout(() => {
+          setState('HIDDEN');
+        }, 500);
+      }, 1500);
+    } else if (comfyReady && !clientId) {
+      // ComfyUI is up but WebSocket handshake not yet complete
+      setState('CONNECTING');
+    }
+  }, [comfyReady, clientId, state]);
 
   // Don't render if hidden
   if (state === 'HIDDEN') return null;
 
   const isReady = state === 'READY';
   const isChecking = state === 'CHECKING';
+  const isConnecting = state === 'CONNECTING';
 
   // Styles
   const overlayStyle: React.CSSProperties = {
@@ -165,10 +181,16 @@ export function StartupOverlay() {
         )}
         
         <p style={titleStyle}>
-          {isChecking ? '检测 ComfyUI 状态...' : isReady ? '一切就绪！' : '正在启动 ComfyUI...'}
+          {isChecking
+            ? '检测 ComfyUI 状态...'
+            : isReady
+              ? '一切就绪！'
+              : isConnecting
+                ? '正在建立服务连接...'
+                : '正在启动 ComfyUI...'}
         </p>
         
-        {!isReady && !isChecking && (
+        {!isReady && !isChecking && !isConnecting && (
           <p style={subtitleStyle}>已等待 {seconds} 秒</p>
         )}
       </div>
