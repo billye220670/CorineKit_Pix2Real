@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import { useWorkflowStore, type ZitConfig } from '../hooks/useWorkflowStore.js';
 import { type LoraSlot } from '../services/sessionService.js';
 import { usePromptAssistantStore } from '../hooks/usePromptAssistantStore.js';
@@ -135,6 +135,14 @@ export function ZITSidebar({ width }: { width?: number }) {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const selectionRef = useRef({ start: 0, end: 0 });
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // 提示词输入框：根据内容动态调整高度，最小高度保持默认 4 行（80px）
+  useLayoutEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.max(80, el.scrollHeight) + 'px';
+  }, [prompt]);
 
   const getSelectedText = () => {
     const { start, end } = selectionRef.current;
@@ -644,10 +652,11 @@ export function ZITSidebar({ width }: { width?: number }) {
                 backgroundColor: 'var(--color-bg)',
                 color: 'var(--color-text)',
                 fontSize: '12px',
-                resize: 'vertical',
+                resize: 'none',
                 outline: 'none',
                 fontFamily: 'inherit',
                 minHeight: 80,
+                overflow: 'hidden',
                 boxSizing: 'border-box',
                 opacity: quickActionLoading !== null ? 0.45 : 1,
                 transition: 'opacity 0.2s',

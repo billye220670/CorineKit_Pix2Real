@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import { useWorkflowStore, type Text2ImgConfig } from '../hooks/useWorkflowStore.js';
 import { type LoraSlot } from '../services/sessionService.js';
 import { usePromptAssistantStore } from '../hooks/usePromptAssistantStore.js';
@@ -136,6 +136,32 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const selectionRef = useRef({ start: 0, end: 0 });
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const negTextareaRef = useRef<HTMLTextAreaElement>(null);
+  // 负面提示词输入框的最小高度（根据首次渲染的默认高度动态测量）
+  const [negMinHeight, setNegMinHeight] = useState<number>(0);
+
+  // 提示词输入框：根据内容动态调整高度，最小高度保持默认 4 行（80px）
+  useLayoutEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.max(80, el.scrollHeight) + 'px';
+  }, [prompt]);
+
+  // 首次渲染后测量负面提示词输入框的默认高度，作为最小高度
+  useLayoutEffect(() => {
+    if (negTextareaRef.current && negMinHeight === 0) {
+      setNegMinHeight(negTextareaRef.current.offsetHeight);
+    }
+  }, [negMinHeight]);
+
+  // 负面提示词输入框：根据内容动态调整高度
+  useLayoutEffect(() => {
+    const el = negTextareaRef.current;
+    if (!el || negMinHeight === 0) return;
+    el.style.height = 'auto';
+    el.style.height = Math.max(negMinHeight, el.scrollHeight) + 'px';
+  }, [negativePrompt, negMinHeight]);
 
   const getSelectedText = () => {
     const { start, end } = selectionRef.current;
@@ -665,10 +691,11 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
                 backgroundColor: 'var(--color-bg)',
                 color: 'var(--color-text)',
                 fontSize: '12px',
-                resize: 'vertical',
+                resize: 'none',
                 outline: 'none',
                 fontFamily: 'inherit',
                 minHeight: 80,
+                overflow: 'hidden',
                 boxSizing: 'border-box',
                 opacity: quickActionLoading !== null ? 0.45 : 1,
                 transition: 'opacity 0.2s',
@@ -798,6 +825,7 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
           </div>
           <div style={{ marginTop: 10, position: 'relative' }} className={negQuickActionLoading ? 'textarea-ai-active' : undefined}>
             <textarea
+              ref={negTextareaRef}
               placeholder="额外负面提示词（可选）"
               value={negativePrompt}
               onChange={(e) => setNegativePrompt(e.target.value)}
@@ -813,9 +841,11 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
                 backgroundColor: 'var(--color-bg)',
                 color: 'var(--color-text)',
                 fontSize: '12px',
-                resize: 'vertical',
+                resize: 'none',
                 outline: 'none',
                 fontFamily: 'inherit',
+                minHeight: negMinHeight || undefined,
+                overflow: 'hidden',
                 boxSizing: 'border-box' as const,
                 opacity: negQuickActionLoading !== null ? 0.45 : 1,
                 transition: 'opacity 0.2s',
