@@ -1,8 +1,10 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { X, Check, Trash2, Ban } from 'lucide-react';
+import { X, Check, Trash2, Ban, Star, BookmarkPlus } from 'lucide-react';
 import { useWorkflowStore } from '../hooks/useWorkflowStore.js';
 import { useWebSocket } from '../hooks/useWebSocket.js';
 import { useDragStore } from '../hooks/useDragStore.js';
+import { useFavoriteFaces, type FavoriteFace } from '../hooks/useFavoriteFaces.js';
+import { FavoriteFacesMenu } from './FavoriteFacesMenu.js';
 import { ImageCard } from './ImageCard.js';
 import { showToast } from '../hooks/useToast.js';
 import type { ViewSize } from './PhotoWall.js';
@@ -33,9 +35,12 @@ interface FaceZoneCardProps {
   onDelete: () => void;
   onDragStart: (e: React.DragEvent) => void;
   setDragging: (drag: { type: 'card'; imageId: string } | null) => void;
+  isFavorited: boolean;
+  favoriteBusy: boolean;
+  onToggleFavorite: () => void;
 }
 
-function FaceZoneCard({ image, isMultiSelectMode, isSelected, onLongPress, onToggleSelect, onDelete, onDragStart, setDragging }: FaceZoneCardProps) {
+function FaceZoneCard({ image, isMultiSelectMode, isSelected, onLongPress, onToggleSelect, onDelete, onDragStart, setDragging, isFavorited, favoriteBusy, onToggleFavorite }: FaceZoneCardProps) {
   const [isCardHovered, setIsCardHovered] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -189,9 +194,30 @@ function FaceZoneCard({ image, isMultiSelectMode, isSelected, onLongPress, onTog
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
           flex: 1,
+          minWidth: 0,
         }}>
           {image.originalName}
         </span>
+        <button
+          onClick={(e) => { e.stopPropagation(); if (!favoriteBusy) onToggleFavorite(); }}
+          title={isFavorited ? '取消收藏' : '加入收藏'}
+          disabled={favoriteBusy}
+          style={{
+            flexShrink: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 4,
+            background: 'transparent',
+            border: 'none',
+            borderRadius: 4,
+            cursor: favoriteBusy ? 'wait' : 'pointer',
+            color: isFavorited ? '#f5a623' : 'var(--color-text-secondary)',
+            opacity: favoriteBusy ? 0.5 : (isFavorited ? 1 : 0.7),
+          }}
+        >
+          <Star size={14} strokeWidth={2} fill={isFavorited ? '#f5a623' : 'none'} />
+        </button>
         <button
           onClick={(e) => { e.stopPropagation(); onDelete(); }}
           title="删除"
@@ -235,6 +261,23 @@ export function FaceSwapPhotoWall({ viewSize }: FaceSwapPhotoWallProps) {
   const { sendMessage } = useWebSocket();
   const { dragging, setDragging } = useDragStore();
 
+  // 收藏面容相关：状态 & 动作
+  const favoriteList = useFavoriteFaces((s) => s.list);
+  const favoriteHashCache = useFavoriteFaces((s) => s.imageHashCache);
+  const loadFavorites = useFavoriteFaces((s) => s.load);
+  const ensureImageHash = useFavoriteFaces((s) => s.ensureImageHash);
+  const addFavorite = useFavoriteFaces((s) => s.add);
+  const removeFavorite = useFavoriteFaces((s) => s.remove);
+
+  const [favoriteBusyIds, setFavoriteBusyIds] = useState<Record<string, boolean>>({});
+  const favoriteButtonRef = useRef<HTMLButtonElement | null>(null);
+  const [favoritesMenuAnchor, setFavoritesMenuAnchor] = useState<DOMRect | null>(null);
+
+  // 首次进入时预加载收藏列表
+  useEffect(() => {
+    loadFavorites();
+  }, [loadFavorites]);
+
   // Delete zone state
   const [isOverDeleteZone, setIsOverDeleteZone] = useState(false);
   const deleteZoneDragCount = useRef(0);
@@ -271,6 +314,84 @@ export function FaceSwapPhotoWall({ viewSize }: FaceSwapPhotoWallProps) {
   const targetImages = images.filter((img) => faceSwapZones[img.id] !== 'face');
 
   const isMultiSelectMode = selectedImageIds.length > 0;
+
+  // 为每张脸部参考图惰性计算 SHA-256（用于判断收藏状态 & 导入时去重）
+  useEffect(() => {
+    for (const img of faceImages) {
+      if (!favoriteHashCache[img.id]) {
+        ensureImageHash(img.id, img.file).catch(() => {});
+      }
+    }
+  }, [faceImages, favoriteHashCache, ensureImageHash]);
+
+  const favoriteIdSet = new Set(favoriteList.map((f) => f.id));
+
+  // 点击卡片星星：添加/移除收藏
+  const handleToggleFavorite = useCallback(async (img: ImageItem) => {
+    setFavoriteBusyIds((prev) => ({ ...prev, [img.id]: true }));
+    try {
+      const hash = await ensureImageHash(img.id, img.file);
+      if (useFavoriteFaces.getState().list.some((f) => f.id === hash)) {
+        // 已收藏 → 取消收藏
+        const ok = await removeFavorite(hash);
+        if (ok) showToast('已取消收藏');
+        else showToast('取消收藏失败');
+      } else {
+        const fav = await addFavorite(img.file);
+        if (fav) showToast('已加入收藏');
+        else showToast('收藏失败');
+      }
+    } finally {
+      setFavoriteBusyIds((prev) => {
+        const next = { ...prev };
+        delete next[img.id];
+        return next;
+      });
+    }
+  }, [ensureImageHash, addFavorite, removeFavorite]);
+
+  // 从浮动菜单导入收藏面容到脸部参考区（去重：已有相同 hash 则忽略）
+  const handleImportFromFavorite = useCallback(async (fav: FavoriteFace) => {
+    // 收集当前脸部参考区所有已知 hash
+    const existingHashes = new Set<string>();
+    for (const img of faceImages) {
+      const h = favoriteHashCache[img.id];
+      if (h) existingHashes.add(h);
+    }
+    if (existingHashes.has(fav.id)) {
+      showToast('该面容已存在于脸部参考');
+      return;
+    }
+    try {
+      const res = await fetch(fav.url);
+      if (!res.ok) {
+        showToast('导入失败');
+        return;
+      }
+      const blob = await res.blob();
+      const file = new File([blob], fav.originalName, { type: blob.type || 'image/png' });
+      const ids = addImagesGetIds([file]);
+      ids.forEach((id) => {
+        setFaceSwapZone(id, 'face');
+        // 提前填充 hash 缓存，避免重新计算
+        useFavoriteFaces.setState((state) => ({
+          imageHashCache: { ...state.imageHashCache, [id]: fav.id },
+        }));
+      });
+    } catch (err) {
+      console.error('[favorites] import failed', err);
+      showToast('导入失败');
+    }
+  }, [faceImages, favoriteHashCache, addImagesGetIds, setFaceSwapZone]);
+
+  const handleOpenFavoritesMenu = useCallback(() => {
+    if (favoritesMenuAnchor) {
+      setFavoritesMenuAnchor(null);
+      return;
+    }
+    const rect = favoriteButtonRef.current?.getBoundingClientRect();
+    setFavoritesMenuAnchor(rect ?? null);
+  }, [favoritesMenuAnchor]);
 
   // Execute a face-swap task: faceImage dropped on targetImage
   const executeFaceSwap = useCallback(async (faceImg: ImageItem, targetImg: ImageItem) => {
@@ -605,8 +726,38 @@ export function FaceSwapPhotoWall({ viewSize }: FaceSwapPhotoWallProps) {
             letterSpacing: '0.04em',
             flexShrink: 0,
             borderBottom: '1px solid var(--color-border)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 8,
           }}>
-            脸部参考 · {faceImages.length}
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              脸部参考 · {faceImages.length}
+            </span>
+            <button
+              ref={favoriteButtonRef}
+              onClick={handleOpenFavoritesMenu}
+              title="收藏夹：查看跨会话收藏的面容"
+              style={{
+                flexShrink: 0,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: '3px 8px',
+                background: favoritesMenuAnchor ? 'var(--color-primary)' : 'transparent',
+                color: favoritesMenuAnchor ? '#fff' : 'var(--color-text-secondary)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 6,
+                cursor: 'pointer',
+                fontSize: 11,
+                fontWeight: 600,
+                letterSpacing: '0.02em',
+                transition: 'background 0.15s, color 0.15s',
+              }}
+            >
+              <BookmarkPlus size={12} strokeWidth={2} />
+              收藏夹
+            </button>
           </div>
 
           {/* Cards */}
@@ -659,6 +810,9 @@ export function FaceSwapPhotoWall({ viewSize }: FaceSwapPhotoWallProps) {
                     onDelete={() => removeImages([img.id])}
                     onDragStart={(e) => handleFaceDragStart(e, img.id)}
                     setDragging={setDragging}
+                    isFavorited={!!favoriteHashCache[img.id] && favoriteIdSet.has(favoriteHashCache[img.id])}
+                    favoriteBusy={!!favoriteBusyIds[img.id]}
+                    onToggleFavorite={() => handleToggleFavorite(img)}
                   />
 
                   {/* Drop overlay when a target card hovers over this face card */}
@@ -983,6 +1137,14 @@ export function FaceSwapPhotoWall({ viewSize }: FaceSwapPhotoWallProps) {
               : '松开删除此图片'}
           </div>
         </>
+      )}
+
+      {favoritesMenuAnchor && (
+        <FavoriteFacesMenu
+          anchorRect={favoritesMenuAnchor}
+          onClose={() => setFavoritesMenuAnchor(null)}
+          onImport={handleImportFromFavorite}
+        />
       )}
     </div>
   );

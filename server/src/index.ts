@@ -10,6 +10,7 @@ import outputRouter from './routes/output.js';
 import sessionRouter from './routes/session.js';
 import modelMetaRouter from './routes/modelMeta.js';
 import agentRouter from './routes/agent.js';
+import favoritesRouter, { favoritesBase } from './routes/favorites.js';
 import { connectWebSocket, getHistory, getImageBuffer, getPromptNodeInfo, getPromptTotalNodes, getPromptTotalWeight, clearPromptNodeInfo, SAMPLER_STEP_WEIGHT } from './services/comfyui.js';
 import { sessionsBase, saveOutputFile } from './services/sessionManager.js';
 import { ensureComfyUI, isComfyUIRunning } from './services/comfyuiLauncher.js';
@@ -130,6 +131,8 @@ app.use('/api/session-files', express.static(sessionsBase));
 app.use('/model_meta', express.static(modelMetaBase));
 app.use('/api/models', modelMetaRouter);
 app.use('/api/agent', agentRouter);
+app.use('/api/favorites', favoritesRouter);
+app.use('/favorites', express.static(favoritesBase));
 
 // ComfyUI 状态查询
 app.get('/api/comfyui/status', async (req, res) => {

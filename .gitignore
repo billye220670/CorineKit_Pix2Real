@@ -10,6 +10,9 @@ server/dist/
 # Generated output files (not tracked)
 output/
 
+# User favorites (runtime data, not tracked)
+favorites/
+
 # Environment
 .env
 .env.local
