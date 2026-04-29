@@ -3,8 +3,14 @@ import { useWorkflowStore } from '../hooks/useWorkflowStore.js';
 
 type OverlayState = 'CHECKING' | 'WAITING' | 'CONNECTING' | 'READY' | 'HIDDEN';
 
+// Session-scoped flag: once the overlay has completed its ready handshake,
+// skip it for any subsequent mount (e.g. window.location.reload() triggered
+// when entering a session from the welcome page).
+const READY_FLAG_KEY = 'pix2real_startup_overlay_shown';
+
 export function StartupOverlay() {
-  const [state, setState] = useState<OverlayState>('CHECKING');
+  const alreadyShown = typeof window !== 'undefined' && sessionStorage.getItem(READY_FLAG_KEY) === '1';
+  const [state, setState] = useState<OverlayState>(alreadyShown ? 'HIDDEN' : 'CHECKING');
   const [seconds, setSeconds] = useState(0);
   const [fadeOut, setFadeOut] = useState(false);
   const [comfyReady, setComfyReady] = useState(false);
@@ -47,6 +53,7 @@ export function StartupOverlay() {
 
   // ComfyUI HTTP status polling — first gate
   useEffect(() => {
+    if (alreadyShown) return;
     let mounted = true;
 
     const init = async () => {
@@ -94,6 +101,7 @@ export function StartupOverlay() {
     if (comfyReady && clientId) {
       // Both gates passed — show success, then fade out
       setState('READY');
+      try { sessionStorage.setItem(READY_FLAG_KEY, '1'); } catch { /* ignore */ }
       fadeTimeoutRef.current = window.setTimeout(() => {
         setFadeOut(true);
         fadeTimeoutRef.current = window.setTimeout(() => {
@@ -149,15 +157,6 @@ export function StartupOverlay() {
     animation: 'spin 1s linear infinite',
   };
 
-  const checkmarkStyle: React.CSSProperties = {
-    width: '48px',
-    height: '48px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: '32px',
-  };
-
   const titleStyle: React.CSSProperties = {
     fontSize: '18px',
     fontWeight: 600,
@@ -174,9 +173,7 @@ export function StartupOverlay() {
   return (
     <div style={overlayStyle}>
       <div style={panelStyle}>
-        {isReady ? (
-          <div style={checkmarkStyle}>✅</div>
-        ) : (
+        {isReady ? null : (
           <div style={spinnerStyle} />
         )}
         
