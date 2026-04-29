@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, Star, Loader, Check, ImagePlus, PencilLine, Tag, ChevronRight, Plus, Trash2, Settings } from 'lucide-react';
+import { ChevronDown, Star, Loader, Check, ImagePlus, PencilLine, Tag, ChevronRight, Plus, Trash2, Settings, Search, X } from 'lucide-react';
+import PinyinMatch from 'pinyin-match';
 import { MetadataEditorModal } from './MetadataEditorModal.js';
 import type { ModelMetadata } from '../hooks/useModelMetadata.js';
 import { useSettingsStore } from '../hooks/useSettingsStore.js';
@@ -132,6 +133,8 @@ export function ModelSelect({
   const [tooltipPos, setTooltipPos] = useState<{ top: number; left: number } | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [metadataEditorModel, setMetadataEditorModel] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -187,6 +190,12 @@ export function ModelSelect({
       setTooltipModel(null);
       setTooltipPos(null);
       setContextMenu(null);
+      setSearchQuery('');
+    } else {
+      // 打开时自动聚焦搜索框
+      requestAnimationFrame(() => {
+        searchInputRef.current?.focus();
+      });
     }
   }, [open]);
 
@@ -261,9 +270,33 @@ export function ModelSelect({
     return filteredModels.filter((m) => metadata[m]?.thumbnail);
   }, [filteredModels, isFastMode, metadata]);
 
+  // 按搜索词多字段过滤（名称/昵称/路径/分类/触发词，AND 多 token，子串优先 + 拼音回退）
+  const searchedModels = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return displayModels;
+    const tokens = q.split(/\s+/).filter(Boolean);
+    if (tokens.length === 0) return displayModels;
+    return displayModels.filter((m) => {
+      const meta = metadata?.[m];
+      const fields = [
+        m,
+        getDisplayName(m),
+        meta?.nickname ?? '',
+        meta?.category ?? '',
+        meta?.triggerWords ?? '',
+      ];
+      const haystack = fields.join('\n').toLowerCase();
+      return tokens.every((t) => {
+        if (haystack.includes(t)) return true;
+        // 回退：拼音模糊匹配（全拼 / 首字母 / 混合）
+        return fields.some((f) => f && PinyinMatch.match(f, t) !== false);
+      });
+    });
+  }, [displayModels, searchQuery, metadata]);
+
   // 分离收藏项和非收藏项
-  const favoriteModels = displayModels.filter((m) => favorites.has(m));
-  const otherModels = displayModels.filter((m) => !favorites.has(m));
+  const favoriteModels = searchedModels.filter((m) => favorites.has(m));
+  const otherModels = searchedModels.filter((m) => !favorites.has(m));
 
   const getModelDisplayName = useCallback((model: string) => {
     const nick = metadata?.[model]?.nickname;
@@ -756,10 +789,76 @@ export function ModelSelect({
                 )}
               </div>
             )}
+            {/* 搜索框 */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '6px 8px',
+              borderTop: showCategoryBar ? '1px solid var(--color-border)' : 'none',
+            }}>
+              <Search size={13} color="var(--color-text-secondary)" style={{ flexShrink: 0 }} />
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  e.stopPropagation();
+                  if (e.key === 'Escape') {
+                    if (searchQuery) {
+                      setSearchQuery('');
+                    } else {
+                      setOpen(false);
+                    }
+                  }
+                }}
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
+                placeholder="搜索名称 / 触发词 / 分类 / 路径…"
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  fontSize: '12px',
+                  padding: '4px 6px',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 4,
+                  backgroundColor: 'var(--color-bg)',
+                  color: 'var(--color-text)',
+                  outline: 'none',
+                  fontFamily: 'inherit',
+                  boxSizing: 'border-box',
+                }}
+              />
+              {searchQuery && (
+                <X
+                  size={13}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSearchQuery('');
+                    searchInputRef.current?.focus();
+                  }}
+                  style={{
+                    flexShrink: 0,
+                    cursor: 'pointer',
+                    color: 'var(--color-text-secondary)',
+                  }}
+                />
+              )}
+            </div>
           </div>
           {/* 模型列表（可滚动） */}
           <div style={{ overflowY: 'auto', flex: 1 }}>
-            {isFastMode ? (
+            {searchedModels.length === 0 ? (
+              <div style={{
+                padding: '16px 12px',
+                textAlign: 'center',
+                fontSize: 12,
+                color: 'var(--color-text-secondary)',
+              }}>
+                未匹配到模型
+              </div>
+            ) : isFastMode ? (
               /* ── 快速模式：宫格布局 ── */
               <div style={{
                 display: 'grid',
