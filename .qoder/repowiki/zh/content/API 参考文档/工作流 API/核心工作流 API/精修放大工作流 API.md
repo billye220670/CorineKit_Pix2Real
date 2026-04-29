@@ -8,6 +8,7 @@
 - [2-Pix2Real-精修放大.json](file://ComfyUI_API/2-Pix2Real-精修放大.json)
 - [Pix2Real-高清重绘.json](file://ComfyUI_API/Pix2Real-高清重绘.json)
 - [Pix2Real-SD放大.json](file://ComfyUI_API/Pix2Real-SD放大.json)
+- [Pix2Real-Klein重绘Pro.json](file://ComfyUI_API/Pix2Real-Klein重绘Pro.json)
 - [comfyui.ts](file://server/src/services/comfyui.ts)
 - [index.ts](file://server/src/types/index.ts)
 - [README.md](file://README.md)
@@ -26,9 +27,9 @@
 10. [附录](#附录)
 
 ## 简介
-本文件为“精修放大”工作流（Workflow 2）的详细 API 文档，面向需要通过 HTTP 接口调用该工作流的开发者与集成方。内容涵盖：
+本文件为"精修放大"工作流（Workflow 2）的详细 API 文档，面向需要通过 HTTP 接口调用该工作流的开发者与集成方。内容涵盖：
 - 执行接口的 HTTP 方法、URL 模式、请求参数与响应格式
-- 支持的放大模型选择（seedvr2 默认模型、klein upscale 模型、sd 放大模型）
+- 支持的放大模型选择（seedvr2 默认模型、klein upscale 模型、kleinpro Pro 模型、sd 放大模型、remacri 模型）
 - 放大倍数与质量参数配置
 - 完整的 API 调用示例与各模型特点及适用场景
 - 放大后图像质量与性能考虑
@@ -53,12 +54,14 @@ subgraph "ComfyUI"
 T1["2-Pix2Real-精修放大.json"]
 T2["Pix2Real-高清重绘.json"]
 T3["Pix2Real-SD放大.json"]
+T4["Pix2Real-Klein重绘Pro.json"]
 end
 UI --> R
 R --> A
 A --> T1
 A --> T2
 A --> T3
+A --> T4
 R --> S
 S --> |"队列/进度/输出"| ComfyUI
 ```
@@ -69,6 +72,7 @@ S --> |"队列/进度/输出"| ComfyUI
 - [2-Pix2Real-精修放大.json:1-146](file://ComfyUI_API/2-Pix2Real-精修放大.json#L1-L146)
 - [Pix2Real-高清重绘.json:1-446](file://ComfyUI_API/Pix2Real-高清重绘.json#L1-L446)
 - [Pix2Real-SD放大.json:1-229](file://ComfyUI_API/Pix2Real-SD放大.json#L1-L229)
+- [Pix2Real-Klein重绘Pro.json:1-352](file://ComfyUI_API/Pix2Real-Klein重绘Pro.json#L1-L352)
 
 章节来源
 - [README.md:41-79](file://README.md#L41-L79)
@@ -87,7 +91,7 @@ S --> |"队列/进度/输出"| ComfyUI
 
 ## 架构总览
 精修放大工作流的调用链路如下：
-- 前端选择模型（seedvr2/klein/sd），构造表单并发送至后端
+- 前端选择模型（seedvr2/klein/kleinpro/sd/remacri），构造表单并发送至后端
 - 后端接收文件与参数，上传到 ComfyUI 并根据模型选择模板
 - 适配器读取模板 JSON，替换输入节点（图像名、种子等）
 - 将拼装好的 prompt 提交到 ComfyUI 队列，返回 promptId
@@ -129,13 +133,13 @@ Note over Client,Comfy : 后续通过 WebSocket 获取进度与完成事件
   - image：二进制图像文件（必填）
   - clientId：字符串，用于关联 WebSocket 进度与 ComfyUI 队列
 - 可选字段：
-  - model：字符串，可选值为 seedvr2（默认）、klein、sd
+  - model：字符串，可选值为 seedvr2（默认）、klein、kleinpro、sd、remacri
   - prompt：字符串，当使用非 seedvr2 模型时可传入提示词（seedvr2 模型无需提示词）
 - 响应字段：
   - promptId：提交到队列的提示 ID
   - clientId：传入的客户端 ID
   - workflowId：工作流 ID（固定为 2）
-  - workflowName：工作流名称（固定为“精修放大”）
+  - workflowName：工作流名称（固定为"精修放大"）
 
 章节来源
 - [workflow.ts:357-405](file://server/src/routes/workflow.ts#L357-L405)
@@ -149,7 +153,7 @@ Note over Client,Comfy : 后续通过 WebSocket 获取进度与完成事件
   - 作用：用于建立与 ComfyUI 的会话标识，配合 WebSocket 使用
 - model
   - 类型：字符串
-  - 取值：seedvr2（默认）、klein、sd
+  - 取值：seedvr2（默认）、klein、kleinpro、sd、remacri
   - 说明：决定使用的放大模板与参数
 - prompt
   - 类型：字符串
@@ -163,7 +167,7 @@ Note over Client,Comfy : 后续通过 WebSocket 获取进度与完成事件
   - promptId: 提交到队列的提示 ID（字符串）
   - clientId: 客户端 ID（字符串）
   - workflowId: 工作流 ID（数字，固定为 2）
-  - workflowName: 工作流名称（字符串，固定为“精修放大”）
+  - workflowName: 工作流名称（字符串，固定为"精修放大"）
 - 错误响应字段：
   - error: 错误信息（字符串）
 
@@ -181,8 +185,8 @@ Note over Client,Comfy : 后续通过 WebSocket 获取进度与完成事件
   - 批大小：batch_size（例如 5）
   - 颜色校正：color_correction（例如 lab）
   - 种子：seed（每次执行随机生成）
-- 放大倍数：模板中通过“缩放图像（比例）”节点设置 scale_by（例如约 0.5），实际输出分辨率由 resolution 决定
-- 输出：保存为“精修放大”目录下的图像文件
+- 放大倍数：模板中通过"缩放图像（比例）"节点设置 scale_by（例如约 0.5），实际输出分辨率由 resolution 决定
+- 输出：保存为"精修放大"目录下的图像文件
 
 章节来源
 - [2-Pix2Real-精修放大.json:87-129](file://ComfyUI_API/2-Pix2Real-精修放大.json#L87-L129)
@@ -197,10 +201,29 @@ Note over Client,Comfy : 后续通过 WebSocket 获取进度与完成事件
   - 调色：ColorMatch（颜色匹配）
   - 缩放：ImageScaleToTotalPixels（按总像素缩放）
 - 放大倍数：由 megapixels 与原图尺寸共同决定
-- 输出：保存为“精修放大”目录下的图像文件
+- 输出：保存为"精修放大"目录下的图像文件
 
 章节来源
 - [Pix2Real-高清重绘.json:158-266](file://ComfyUI_API/Pix2Real-高清重绘.json#L158-L266)
+
+#### KleinPro（Pro 模型）
+- 适用场景：专业级高清重绘与细节增强，基于 Flux2 的增强版本，提供更高质量的图像处理
+- 关键参数（来自模板）：
+  - UNet 模型：flux-2-klein\Flux2-Klein-9B-True-v2-fp8mixed.safetensors
+  - LoRA：F2K_9bb-一致性lcs_consist_preview.safetensors（强度 0.65）
+  - VAE：flux2-vae.safetensors
+  - CLIP：qwen_3_8b_fp8mixed.safetensors
+  - 步数：5（采样步数）
+  - 调度器：Flux2Scheduler（步数 5，宽度高度来自输入图像）
+  - 采样器：euler
+  - 引导器：CFGGuider（CFG 1）
+  - 智能锐化：ImageSmartSharpen+（噪波半径 7，边缘保护 0.75，锐化 4，比例 0.5）
+  - 颜色匹配：easy imageColorMatch（波形变换）
+- 放大倍数：由模板中的尺度调整节点决定，支持按原始比例缩放
+- 输出：保存为"精修放大"目录下的图像文件
+
+章节来源
+- [Pix2Real-Klein重绘Pro.json:1-352](file://ComfyUI_API/Pix2Real-Klein重绘Pro.json#L1-L352)
 
 #### sd 放大模型（UltimateSDUpscale）
 - 适用场景：基于 SD 的放大流程，适合需要控制采样步骤、降噪与瓦片参数的场景
@@ -217,18 +240,29 @@ Note over Client,Comfy : 后续通过 WebSocket 获取进度与完成事件
   - 放大模型：4x-UltraSharp.pth
   - 图像质量：KOOK_ImageCompression（质量 90）
 - 放大倍数：由 upscale_by 决定
-- 输出：保存为“精修放大”目录下的图像文件
+- 输出：保存为"精修放大"目录下的图像文件
 
 章节来源
 - [Pix2Real-SD放大.json:70-124](file://ComfyUI_API/Pix2Real-SD放大.json#L70-L124)
 
+#### remacri 模型
+- 适用场景：基于 Remacri 的放大算法，提供不同的图像增强效果
+- 关键参数（来自模板）：
+  - 放大模型：remacri_original.safetensors
+  - 其他参数与 SD 放大模型相同
+- 放大倍数：与 SD 放大模型相同
+- 输出：保存为"精修放大"目录下的图像文件
+
+章节来源
+- [workflow.ts:525-531](file://server/src/routes/workflow.ts#L525-L531)
+
 ### 前端模型选择与持久化
-- 前端提供“精修放大”标签页的模型选择面板，支持 seedvr2/klein/sd
+- 前端提供"精修放大"标签页的模型选择面板，支持 seedvr2/klein/kleinpro/sd/remacri
 - 用户选择会被写入本地存储（localStorage），下次打开时恢复
 - 发起执行时，前端会将 model 参数附加到 multipart/form-data 中
 
 章节来源
-- [Workflow2SettingsPanel.tsx:1-59](file://client/src/components/Workflow2SettingsPanel.tsx#L1-L59)
+- [Workflow2SettingsPanel.tsx:1-61](file://client/src/components/Workflow2SettingsPanel.tsx#L1-L61)
 
 ### 执行流程与错误处理
 - 文件上传：后端通过服务函数上传图像到 ComfyUI，返回文件名
@@ -285,11 +319,15 @@ Route_workflow --> Service_comfyui : "上传/队列/历史"
 - klein upscale
   - 优点：基于 Flux2 的真实感增强，LoRA 可提升细节
   - 注意：megapixels 与 resolution_steps 会显著影响显存与耗时
+- KleinPro
+  - 优点：专业级高清重绘，增强的 LoRA 模型提供更好的细节保持
+  - 注意：更高的模型复杂度，需要更多显存；智能锐化和颜色匹配增加处理时间
 - sd 放大
   - 优点：可控性强（steps、denoise、tile 参数）
   - 注意：upscale_by 与 tile 尺寸/填充会直接影响显存与速度；质量压缩可减少体积但可能损失细节
-
-[本节为通用性能指导，不直接分析具体文件]
+- remacri
+  - 优点：提供不同的放大算法选择
+  - 注意：与 SD 放大模型相同的性能特征
 
 ## 故障排查指南
 - 常见错误与原因
@@ -299,7 +337,7 @@ Route_workflow --> Service_comfyui : "上传/队列/历史"
 - 排查步骤
   - 确认 ComfyUI 服务运行于 http://127.0.0.1:8188
   - 检查 clientId 是否正确传递
-  - 检查模型参数是否为允许值（seedvr2/klein/sd）
+  - 检查模型参数是否为允许值（seedvr2/klein/kleinpro/sd/remacri）
   - 查看后端日志与 ComfyUI 队列状态
 - 相关接口
   - 获取系统状态：GET /api/workflow/system-stats
@@ -311,9 +349,7 @@ Route_workflow --> Service_comfyui : "上传/队列/历史"
 - [comfyui.ts:106-125](file://server/src/services/comfyui.ts#L106-L125)
 
 ## 结论
-精修放大工作流提供了三种主流放大路径：seedvr2（默认）、klein upscale 与 SD 放大。通过统一的 POST /api/workflow/2/execute 接口，结合前端模型选择与后端适配器模板拼装，用户可以灵活地在不同模型间切换，满足从细节修复到真实感增强的不同需求。建议根据硬件资源与质量要求选择合适的模型与参数组合，并结合队列管理与系统监控保障稳定运行。
-
-[本节为总结性内容，不直接分析具体文件]
+精修放大工作流提供了五种主流放大路径：seedvr2（默认）、klein upscale、KleinPro Pro、SD 放大和 Remacri 模型。通过统一的 POST /api/workflow/2/execute 接口，结合前端模型选择与后端适配器模板拼装，用户可以灵活地在不同模型间切换，满足从细节修复到专业级高清重绘的不同需求。建议根据硬件资源与质量要求选择合适的模型与参数组合，并结合队列管理与系统监控保障稳定运行。
 
 ## 附录
 
@@ -324,7 +360,7 @@ Route_workflow --> Service_comfyui : "上传/队列/历史"
   - 表单字段：
     - image：二进制图像文件
     - clientId：字符串
-    - model：seedvr2（默认）/klein/sd
+    - model：seedvr2（默认）/klein/kleinpro/sd/remacri
     - prompt：当 model 不为 seedvr2 时可选
   - 成功响应：包含 promptId、clientId、workflowId、workflowName
 - 批量调用
@@ -347,11 +383,19 @@ Route_workflow --> Service_comfyui : "上传/队列/历史"
 - klein upscale
   - 特点：Flux2 + LoRA，真实感增强
   - 适用：需要更强真实感与细节补充的任务
+- KleinPro
+  - 特点：专业级高清重绘，增强的 LoRA 模型，智能锐化与颜色匹配
+  - 适用：需要最高质量输出的专业图像处理任务
 - sd 放大
   - 特点：可控性强（steps、denoise、tile）
   - 适用：需要精细控制放大过程与输出质量的场景
+- remacri
+  - 特点：基于 Remacri 的不同放大算法
+  - 适用：需要尝试不同放大效果的场景
 
 章节来源
 - [2-Pix2Real-精修放大.json:87-129](file://ComfyUI_API/2-Pix2Real-精修放大.json#L87-L129)
 - [Pix2Real-高清重绘.json:158-266](file://ComfyUI_API/Pix2Real-高清重绘.json#L158-L266)
+- [Pix2Real-Klein重绘Pro.json:1-352](file://ComfyUI_API/Pix2Real-Klein重绘Pro.json#L1-L352)
 - [Pix2Real-SD放大.json:70-124](file://ComfyUI_API/Pix2Real-SD放大.json#L70-L124)
+- [workflow.ts:525-531](file://server/src/routes/workflow.ts#L525-L531)

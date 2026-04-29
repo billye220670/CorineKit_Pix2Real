@@ -12,8 +12,17 @@
 - [Workflow0Adapter.ts](file://server/src/adapters/Workflow0Adapter.ts)
 - [Workflow2Adapter.ts](file://server/src/adapters/Workflow2Adapter.ts)
 - [index.ts](file://server/src/adapters/index.ts)
+- [workflow.ts](file://server/src/routes/workflow.ts)
 - [settings-panel.md](file://docs/settings-panel.md)
+- [Pix2Real-Klein重绘Pro.json](file://ComfyUI_API/Pix2Real-Klein重绘Pro.json)
 </cite>
+
+## 更新摘要
+**变更内容**
+- 新增KleinPro工作流选项作为放大模型的新选择
+- 更新放大模型选项表格，包含KleinPro的技术特点和适用场景
+- 更新工作流设置面板的模型选择逻辑和用户界面说明
+- 增强系统对KleinPro模型的支持和配置
 
 ## 目录
 1. [简介](#简介)
@@ -31,6 +40,8 @@
 工作流设置面板是 CorineKit Pix2Real 图像处理系统中的关键组件，负责为不同的工作流提供可配置的参数设置界面。该系统支持多种AI驱动的图像处理工作流，包括二次元转真人、真人精修、精修放大等，每个工作流都有其特定的设置选项。
 
 系统采用React + TypeScript 构建，使用Zustand进行状态管理，通过本地存储实现设置持久化。工作流设置面板与ComfyUI后端集成，通过JSON模板驱动实际的AI处理流程。
+
+**更新** 新增KleinPro作为精修放大工作流的第四种放大模型选项，提供更专业的图像增强功能。
 
 ## 项目结构
 
@@ -62,6 +73,7 @@ end
 subgraph "工作流模板"
 TPL0[0-Pix2Real-二次元转真人.json]
 TPL2[2-Pix2Real-精修放大.json]
+KPT[Pix2Real-Klein重绘Pro.json]
 end
 end
 WF0 --> WA0
@@ -74,13 +86,13 @@ UWS --> WA2
 
 **图表来源**
 - [Workflow0SettingsPanel.tsx:1-58](file://client/src/components/Workflow0SettingsPanel.tsx#L1-L58)
-- [Workflow2SettingsPanel.tsx:1-60](file://client/src/components/Workflow2SettingsPanel.tsx#L1-L60)
-- [useWorkflowStore.ts:1-690](file://client/src/hooks/useWorkflowStore.ts#L1-L690)
+- [Workflow2SettingsPanel.tsx:1-61](file://client/src/components/Workflow2SettingsPanel.tsx#L1-L61)
+- [useWorkflowStore.ts:1-720](file://client/src/hooks/useWorkflowStore.ts#L1-L720)
 
 **章节来源**
 - [Workflow0SettingsPanel.tsx:1-58](file://client/src/components/Workflow0SettingsPanel.tsx#L1-L58)
-- [Workflow2SettingsPanel.tsx:1-60](file://client/src/components/Workflow2SettingsPanel.tsx#L1-L60)
-- [useWorkflowStore.ts:1-690](file://client/src/hooks/useWorkflowStore.ts#L1-L690)
+- [Workflow2SettingsPanel.tsx:1-61](file://client/src/components/Workflow2SettingsPanel.tsx#L1-L61)
+- [useWorkflowStore.ts:1-720](file://client/src/hooks/useWorkflowStore.ts#L1-L720)
 
 ## 核心组件
 
@@ -97,6 +109,8 @@ UWS --> WA2
 - 支持响应式宽度调整
 - 集成到主界面布局中
 
+**更新** Workflow2SettingsPanel现已支持五种放大模型选项，包括新增的KleinPro。
+
 ### 状态管理系统
 
 工作流状态通过Zustand管理，包含：
@@ -106,7 +120,7 @@ UWS --> WA2
 - 会话管理功能
 
 **章节来源**
-- [useWorkflowStore.ts:1-690](file://client/src/hooks/useWorkflowStore.ts#L1-L690)
+- [useWorkflowStore.ts:1-720](file://client/src/hooks/useWorkflowStore.ts#L1-L720)
 - [useSettingsStore.ts:1-31](file://client/src/hooks/useSettingsStore.ts#L1-L31)
 
 ## 架构概览
@@ -203,13 +217,13 @@ SettingsStore --> localStorage : 持久化
 
 ### Workflow2SettingsPanel 组件分析
 
-Workflow2SettingsPanel 面向精修放大工作流，提供多种放大模型选择：
+Workflow2SettingsPanel 面向精修放大工作流，提供五种放大模型选择：
 
 ```mermaid
 classDiagram
 class Workflow2SettingsPanel {
 +width : number
-+upscaleModel : 'seedvr2' | 'klein' | 'sd' | 'remacri'
++upscaleModel : 'seedvr2' | 'klein' | 'sd' | 'remacri' | 'kleinpro'
 +readSettings() object
 +render() JSX.Element
 }
@@ -218,6 +232,7 @@ class UpscaleModels {
 +klein : Klein模型
 +sd : 4xUltraSharp模型
 +remacri : Remacri模型
++kleinpro : KleinPro模型
 }
 class ButtonGroup {
 +activeModel : string
@@ -229,22 +244,25 @@ Workflow2SettingsPanel --> ButtonGroup : 渲染
 ```
 
 **图表来源**
-- [Workflow2SettingsPanel.tsx:9-60](file://client/src/components/Workflow2SettingsPanel.tsx#L9-L60)
+- [Workflow2SettingsPanel.tsx:9-61](file://client/src/components/Workflow2SettingsPanel.tsx#L9-L61)
 - [Workflow2SettingsPanel.tsx:24-34](file://client/src/components/Workflow2SettingsPanel.tsx#L24-L34)
 
 #### 放大模型选项
 
-系统提供四种不同的放大模型：
+系统提供五种不同的放大模型：
 
 | 模型名称 | 技术特点 | 适用场景 |
 |---------|----------|----------|
 | SeedVR2 | 专为视频优化的超分辨率模型 | 视频质量提升、动态内容处理 |
 | Klein | 平衡质量和速度的通用模型 | 一般性图像放大需求 |
+| **KleinPro** | **专业级图像增强模型** | **高质量图像修复和细节增强** |
 | 4xUltraSharp | 注重细节锐化的模型 | 需要极致清晰度的图像处理 |
 | Remacri | 去噪和细节增强模型 | 低质量图像的降噪和增强 |
 
+**更新** 新增KleinPro模型，专为高质量图像修复和细节增强设计，提供更专业的图像增强功能。
+
 **章节来源**
-- [Workflow2SettingsPanel.tsx:1-60](file://client/src/components/Workflow2SettingsPanel.tsx#L1-L60)
+- [Workflow2SettingsPanel.tsx:1-61](file://client/src/components/Workflow2SettingsPanel.tsx#L1-L61)
 
 ### 状态管理架构
 
@@ -269,11 +287,11 @@ stateDiagram-v2
 ```
 
 **图表来源**
-- [useWorkflowStore.ts:99-690](file://client/src/hooks/useWorkflowStore.ts#L99-L690)
+- [useWorkflowStore.ts:99-720](file://client/src/hooks/useWorkflowStore.ts#L99-L720)
 - [useSettingsStore.ts:16-31](file://client/src/hooks/useSettingsStore.ts#L16-L31)
 
 **章节来源**
-- [useWorkflowStore.ts:1-690](file://client/src/hooks/useWorkflowStore.ts#L1-L690)
+- [useWorkflowStore.ts:1-720](file://client/src/hooks/useWorkflowStore.ts#L1-L720)
 - [useSettingsStore.ts:1-31](file://client/src/hooks/useSettingsStore.ts#L1-L31)
 
 ## 依赖关系分析
@@ -369,6 +387,11 @@ UWS --> TS
    - 验证事件监听器注册
    - 确认副作用清理
 
+4. **KleinPro模型加载失败**
+   - **更新** 验证KleinPro模板文件存在且路径正确
+   - 检查模型文件是否已下载并放置在正确位置
+   - 确认ComfyUI后端能够访问KleinPro相关资源
+
 **章节来源**
 - [Workflow0SettingsPanel.tsx:5-7](file://client/src/components/Workflow0SettingsPanel.tsx#L5-L7)
 - [Workflow2SettingsPanel.tsx:5-7](file://client/src/components/Workflow2SettingsPanel.tsx#L5-L7)
@@ -382,4 +405,4 @@ UWS --> TS
 3. **技术架构先进**：采用现代前端技术和最佳实践
 4. **可扩展性强**：清晰的架构为未来功能扩展奠定基础
 
-系统通过精心设计的状态管理和组件架构，为用户提供了一个强大而易用的AI图像处理工具。未来可以进一步优化性能，增加更多工作流类型，并改进用户界面的个性化定制能力。
+**更新** 系统现已支持五种放大模型选项，包括新增的KleinPro，为用户提供了更丰富的选择和更专业的图像处理能力。通过精心设计的状态管理和组件架构，为用户提供了一个强大而易用的AI图像处理工具。未来可以进一步优化性能，增加更多工作流类型，并改进用户界面的个性化定制能力。

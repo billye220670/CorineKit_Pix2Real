@@ -29,6 +29,32 @@ const uploadFields = multer({ storage: multer.memoryStorage() }).fields([
   { name: 'mask', maxCount: 1 },
 ]);
 
+// ── ComfyUI 错误到用户友好提示的统一映射 ───────────────────────
+// ComfyUI 校验失败时报 value_not_in_list，此处识别出具体字段（ckpt/lora/unet）并折算成中文提示。
+// 其他未知错误回落原始 message，保留调试能力。
+function toFriendlyComfyError(err: any): string {
+  const errStr = err?.message || String(err);
+  if (errStr.includes('value_not_in_list') && errStr.includes('ckpt_name')) {
+    return '模型文件未找到，请检查 ComfyUI 模型是否已正确安装';
+  }
+  if (errStr.includes('value_not_in_list') && errStr.includes('lora_name')) {
+    return 'LoRA 文件未找到，请检查 LoRA 是否已正确安装';
+  }
+  if (errStr.includes('value_not_in_list') && errStr.includes('unet_name')) {
+    return 'UNET 模型文件未找到，请检查模型是否已正确安装';
+  }
+  if (errStr.includes('value_not_in_list') && errStr.includes('vae_name')) {
+    return 'VAE 文件未找到，请检查 VAE 是否已正确安装';
+  }
+  if (errStr.includes('value_not_in_list') && errStr.includes('control_net_name')) {
+    return 'ControlNet 模型未找到，请检查是否已正确安装';
+  }
+  if (errStr.includes('Queue prompt failed')) {
+    return '工作流提交失败，请检查 ComfyUI 是否正常运行';
+  }
+  return errStr || 'Internal server error';
+}
+
 // GET /api/workflows - list all workflows
 router.get('/', (_req, res) => {
   const list = Object.values(adapters).map((a) => ({
@@ -90,7 +116,7 @@ router.post('/5/execute', uploadFields, async (req, res) => {
     });
   } catch (err: any) {
     console.error('[Workflow 5 Execute Error]', err);
-    res.status(500).json({ error: err.message || 'Internal server error' });
+    res.status(500).json({ error: toFriendlyComfyError(err) });
   }
 });
 
@@ -142,7 +168,7 @@ router.post('/10/execute', uploadFields, async (req, res) => {
     });
   } catch (err: any) {
     console.error('[Workflow 10 Execute Error]', err);
-    res.status(500).json({ error: err.message || 'Internal server error' });
+    res.status(500).json({ error: toFriendlyComfyError(err) });
   }
 });
 
@@ -249,7 +275,7 @@ router.post('/7/execute', express.json(), async (req, res) => {
     });
   } catch (err: any) {
     console.error('[Workflow 7 Execute Error]', err);
-    res.status(500).json({ error: err.message || 'Internal server error' });
+    res.status(500).json({ error: toFriendlyComfyError(err) });
   }
 });
 
@@ -389,7 +415,7 @@ router.post('/9/execute', express.json(), async (req, res) => {
     });
   } catch (err: any) {
     console.error('[Workflow 9 Execute Error]', err);
-    res.status(500).json({ error: err.message || 'Internal server error' });
+    res.status(500).json({ error: toFriendlyComfyError(err) });
   }
 });
 
@@ -438,7 +464,7 @@ router.post('/8/execute', uploadFaceSwapFields, async (req, res) => {
     });
   } catch (err: any) {
     console.error('[Workflow 8 Execute Error]', err);
-    res.status(500).json({ error: err.message || 'Internal server error' });
+    res.status(500).json({ error: toFriendlyComfyError(err) });
   }
 });
 
@@ -483,7 +509,7 @@ router.post('/0/execute', upload.single('image'), async (req, res) => {
     });
   } catch (err: any) {
     console.error('[Workflow 0 Execute Error]', err);
-    res.status(500).json({ error: err.message || 'Internal server error' });
+    res.status(500).json({ error: toFriendlyComfyError(err) });
   }
 });
 
@@ -544,7 +570,7 @@ router.post('/2/execute', upload.single('image'), async (req, res) => {
     });
   } catch (err: any) {
     console.error('[Workflow 2 Execute Error]', err);
-    res.status(500).json({ error: err.message || 'Internal server error' });
+    res.status(500).json({ error: toFriendlyComfyError(err) });
   }
 });
 
@@ -594,7 +620,7 @@ router.post('/:id/execute', upload.single('image'), async (req, res) => {
     });
   } catch (err: any) {
     console.error('[Workflow Execute Error]', err);
-    res.status(500).json({ error: err.message || 'Internal server error' });
+    res.status(500).json({ error: toFriendlyComfyError(err) });
   }
 });
 
@@ -659,7 +685,7 @@ router.post('/:id/batch', upload.array('images', 50), async (req, res) => {
     });
   } catch (err: any) {
     console.error('[Workflow Batch Error]', err);
-    res.status(500).json({ error: err.message || 'Internal server error' });
+    res.status(500).json({ error: toFriendlyComfyError(err) });
   }
 });
 
@@ -669,7 +695,7 @@ router.post('/cancel-queue/:promptId', async (req, res) => {
     await deleteQueueItem(req.params.promptId as string);
     res.json({ ok: true });
   } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Internal server error' });
+    res.status(500).json({ error: toFriendlyComfyError(err) });
   }
 });
 
@@ -698,7 +724,7 @@ router.post('/release-memory', async (req, res) => {
     res.json({ promptId: result.prompt_id, clientId });
   } catch (err: any) {
     console.error('[Release Memory Error]', err);
-    res.status(500).json({ error: err.message || 'Internal server error' });
+    res.status(500).json({ error: toFriendlyComfyError(err) });
   }
 });
 
@@ -718,7 +744,7 @@ router.post('/queue/prioritize/:promptId', async (req, res) => {
     const mapping = await prioritizeQueueItem(req.params.promptId as string);
     res.json({ ok: true, mapping });
   } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Internal server error' });
+    res.status(500).json({ error: toFriendlyComfyError(err) });
   }
 });
 
@@ -951,7 +977,7 @@ router.post('/reverse-prompt', upload.single('image'), async (req, res) => {
     res.json({ text });
   } catch (err: any) {
     console.error('[Reverse Prompt Error]', err);
-    res.status(500).json({ error: err.message || 'Internal server error' });
+    res.status(500).json({ error: toFriendlyComfyError(err) });
   }
 });
 
@@ -1017,7 +1043,7 @@ router.post('/prompt-assistant', express.json(), async (req, res) => {
     res.json({ text });
   } catch (err: any) {
     console.error('[Prompt Assistant Error]', err);
-    res.status(500).json({ error: err.message || 'Internal server error' });
+    res.status(500).json({ error: toFriendlyComfyError(err) });
   }
 });
 
@@ -1066,7 +1092,7 @@ router.post('/mask/auto-recognize', upload.single('image'), async (req, res) => 
     res.send(imgBuffer);
   } catch (err: any) {
     console.error('[Mask Auto-recognize Error]', err);
-    res.status(500).json({ error: err.message || 'Internal server error' });
+    res.status(500).json({ error: toFriendlyComfyError(err) });
   }
 });
 

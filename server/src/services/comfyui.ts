@@ -52,6 +52,7 @@ export interface PromptNodeInfo {
   classType: string;
   title: string;
   weight: number;
+  isTiledSampler: boolean;
 }
 
 // 节点权重表：基于时间开销的相对值（1 权重 ≈ 1 个采样步的耗时）
@@ -114,9 +115,17 @@ const SAMPLER_NODE_TYPES = new Set([
   'KSampler (Efficient)',
 ]);
 
+// Tiled 采样器：对图像分块重复采样，实际耗时 = steps × tile 数；
+// tile 数取决于图片尺寸和放大倍率，无法静态精确计算，用经验平均值估算。
+const TILED_SAMPLER_NODE_TYPES = new Set([
+  'UltimateSDUpscale',
+  'UltimateSDUpscaleNoUpscale',
+]);
+const ESTIMATED_TILE_COUNT = 8; // 保守估算：小图约 4，大图可达 100+，取偏下的中值避免过度膨胀
+
 // 采样每步的权重系数：采样是整个工作流中 GPU 耗时最大的阶段，放大让其在进度条上占更大比重；
 // 多采样器工作流（高清重绘/精修/二次元转真人）会自然按采样次数累加，总占比进一步放大。
-const SAMPLER_STEP_WEIGHT = 2.5;
+export const SAMPLER_STEP_WEIGHT = 2.5;
 const SAMPLER_DEFAULT_STEPS = 20; // 缺失 steps 时的夹保底
 
 function getNodeWeight(classType: string, inputs?: Record<string, unknown>): number {
@@ -124,6 +133,12 @@ function getNodeWeight(classType: string, inputs?: Record<string, unknown>): num
     const steps = inputs?.steps;
     const base = typeof steps === 'number' && steps > 0 ? steps : SAMPLER_DEFAULT_STEPS;
     return base * SAMPLER_STEP_WEIGHT;
+  }
+  if (TILED_SAMPLER_NODE_TYPES.has(classType)) {
+    // Tiled 采样：steps × 估算 tile 数 × 采样系数
+    const steps = inputs?.steps;
+    const base = typeof steps === 'number' && steps > 0 ? steps : 2;
+    return base * ESTIMATED_TILE_COUNT * SAMPLER_STEP_WEIGHT;
   }
   return STATIC_NODE_WEIGHTS[classType] ?? 1;
 }
@@ -172,6 +187,7 @@ export async function queuePrompt(prompt: object, clientId: string): Promise<Que
         classType,
         title: node?._meta?.title ?? '',
         weight: getNodeWeight(classType, node?.inputs),
+        isTiledSampler: TILED_SAMPLER_NODE_TYPES.has(classType),
       });
     }
     promptNodeInfo.set(data.prompt_id, nodeMap);

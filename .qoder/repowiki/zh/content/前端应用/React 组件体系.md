@@ -4,6 +4,7 @@
 **本文档引用的文件**
 - [main.tsx](file://client/src/main.tsx)
 - [App.tsx](file://client/src/components/App.tsx)
+- [StartupOverlay.tsx](file://client/src/components/StartupOverlay.tsx)
 - [Sidebar.tsx](file://client/src/components/Sidebar.tsx)
 - [PhotoWall.tsx](file://client/src/components/PhotoWall.tsx)
 - [DropZone.tsx](file://client/src/components/DropZone.tsx)
@@ -15,6 +16,7 @@
 - [Text2ImgSidebar.tsx](file://client/src/components/Text2ImgSidebar.tsx)
 - [ZITSidebar.tsx](file://client/src/components/ZITSidebar.tsx)
 - [useWorkflowStore.ts](file://client/src/hooks/useWorkflowStore.ts)
+- [useWebSocket.ts](file://client/src/hooks/useWebSocket.ts)
 - [useDragStore.ts](file://client/src/hooks/useDragStore.ts)
 - [useMaskStore.ts](file://client/src/hooks/useMaskStore.ts)
 - [useModelMetadata.ts](file://client/src/hooks/useModelMetadata.ts)
@@ -40,7 +42,7 @@
 ## 简介
 本项目是一个基于 React 的图像处理与生成工作流前端应用，围绕 App 主组件构建了完整的组件体系。系统通过多 Tab 工作流、拖拽交互、蒙版编辑、实时进度反馈等能力，支撑从图像导入、处理到结果输出的完整流程。本文档将深入解析 App 主组件的设计架构、组件层次结构、状态传递机制与事件处理模式，并详细说明 Sidebar、PhotoWall、DropZone、ImageCard 等核心组件的职责与协作方式。
 
-**更新** 本版本新增了右侧侧边栏可调整大小功能、卡片布局系统、滑块控件改进和切换开关等UI增强功能。
+**更新** 本版本新增了右侧侧边栏可调整大小功能、卡片布局系统、滑块控件改进和切换开关等UI增强功能，以及全新的五状态 StartupOverlay 启动覆盖组件，实现了双门验证系统确保 ComfyUI 服务就绪和 WebSocket 客户端 ID 可用性的双重条件满足。
 
 ## 项目结构
 客户端采用按功能模块组织的目录结构，核心入口位于 main.tsx，应用根组件为 App.tsx，其余组件分布在 components 目录下，状态管理通过 hooks 中的 Zustand stores 实现，类型定义集中在 types 目录，样式通过全局 CSS 控制。
@@ -48,31 +50,34 @@
 ```mermaid
 graph TB
 A["main.tsx<br/>应用入口"] --> B["App.tsx<br/>主容器组件"]
-B --> C["Sidebar.tsx<br/>侧边导航"]
-B --> D["PhotoWall.tsx<br/>图片墙展示"]
-B --> E["DropZone.tsx<br/>拖拽区域"]
-B --> F["FaceSwapPhotoWall.tsx<br/>换脸专用墙"]
-D --> G["ImageCard.tsx<br/>单张图片卡片"]
-G --> H["ThumbnailStrip.tsx<br/>缩略条"]
-B --> I["MaskEditor.tsx<br/>蒙版编辑器"]
-B --> J["useWorkflowStore.ts<br/>工作流状态"]
-B --> K["useDragStore.ts<br/>拖拽状态"]
-B --> L["useMaskStore.ts<br/>蒙版状态"]
-M["maskConfig.ts<br/>蒙版配置"] --> I
-N["index.ts<br/>类型定义"] --> G
-O["package.json<br/>依赖声明"] --> A
-P["ModelSelect.tsx<br/>模型选择器"] --> Q["useModelMetadata.ts<br/>模型元数据"]
-R["Text2ImgSidebar.tsx<br/>文生图侧边栏"] --> P
-S["ZITSidebar.tsx<br/>ZIT侧边栏"] --> P
-T["sessionService.ts<br/>会话服务"] --> R
-U["sessionService.ts<br/>会话服务"] --> S
-V["global.css<br/>全局样式"] --> R
-V --> S
+B --> C["StartupOverlay.tsx<br/>启动覆盖层"]
+B --> D["Sidebar.tsx<br/>侧边导航"]
+B --> E["PhotoWall.tsx<br/>图片墙展示"]
+B --> F["DropZone.tsx<br/>拖拽区域"]
+B --> G["FaceSwapPhotoWall.tsx<br/>换脸专用墙"]
+E --> H["ImageCard.tsx<br/>单张图片卡片"]
+H --> I["ThumbnailStrip.tsx<br/>缩略条"]
+B --> J["MaskEditor.tsx<br/>蒙版编辑器"]
+B --> K["useWorkflowStore.ts<br/>工作流状态"]
+B --> L["useWebSocket.ts<br/>WebSocket管理"]
+B --> M["useDragStore.ts<br/>拖拽状态"]
+B --> N["useMaskStore.ts<br/>蒙版状态"]
+O["maskConfig.ts<br/>蒙版配置"] --> J
+P["index.ts<br/>类型定义"] --> H
+Q["package.json<br/>依赖声明"] --> A
+R["ModelSelect.tsx<br/>模型选择器"] --> S["useModelMetadata.ts<br/>模型元数据"]
+T["Text2ImgSidebar.tsx<br/>文生图侧边栏"] --> R
+U["ZITSidebar.tsx<br/>ZIT侧边栏"] --> R
+V["sessionService.ts<br/>会话服务"] --> T
+W["sessionService.ts<br/>会话服务"] --> U
+X["global.css<br/>全局样式"] --> T
+X --> U
 ```
 
 **图表来源**
 - [main.tsx:1-11](file://client/src/main.tsx#L1-L11)
-- [App.tsx:54-335](file://client/src/components/App.tsx#L54-L335)
+- [App.tsx:25-196](file://client/src/components/App.tsx#L25-L196)
+- [StartupOverlay.tsx:1-200](file://client/src/components/StartupOverlay.tsx#L1-L200)
 - [Sidebar.tsx:30-425](file://client/src/components/Sidebar.tsx#L30-L425)
 - [PhotoWall.tsx:103-578](file://client/src/components/PhotoWall.tsx#L103-L578)
 - [DropZone.tsx:39-171](file://client/src/components/DropZone.tsx#L39-L171)
@@ -84,6 +89,7 @@ V --> S
 - [Text2ImgSidebar.tsx:1-683](file://client/src/components/Text2ImgSidebar.tsx#L1-L683)
 - [ZITSidebar.tsx:1-716](file://client/src/components/ZITSidebar.tsx#L1-L716)
 - [useWorkflowStore.ts:96-645](file://client/src/hooks/useWorkflowStore.ts#L96-L645)
+- [useWebSocket.ts:1-225](file://client/src/hooks/useWebSocket.ts#L1-L225)
 - [useDragStore.ts:1-17](file://client/src/hooks/useDragStore.ts#L1-L17)
 - [useMaskStore.ts:1-51](file://client/src/hooks/useMaskStore.ts#L1-L51)
 - [useModelMetadata.ts:1-169](file://client/src/hooks/useModelMetadata.ts#L1-L169)
@@ -100,6 +106,7 @@ V --> S
 ## 核心组件
 本节概述主要组件及其职责：
 - App：应用根容器，负责全局布局、主题切换、欢迎页、拖拽处理、状态持久化与子组件编排，**新增右侧侧边栏可调整大小功能**。
+- **StartupOverlay：全新五状态启动覆盖层**，实现双门验证系统，确保 ComfyUI 服务就绪和 WebSocket 客户端 ID 可用性双重条件满足，提供 CHECKING、WAITING、CONNECTING、READY、HIDDEN 五种状态。
 - Sidebar：工作流导航与任务队列管理，支持跨标签拖拽与任务状态指示。
 - PhotoWall：图片墙展示与批量操作，支持懒加载、多选、批量执行与删除，**采用CSS Grid实现响应式卡片布局**。
 - DropZone：通用拖拽导入区域，支持文件夹与文件拖放。
@@ -111,10 +118,11 @@ V --> S
 - Text2ImgSidebar：文生图工作流侧边栏，支持多槽位 LoRA、触发词复制、提示词助手、**自定义切换开关**。
 - ZITSidebar：ZIT工作流侧边栏，支持 UNet 模型选择、多槽位 LoRA、触发词复制、采样算法偏移、**自定义切换开关**。
 
-**更新** 新增了右侧侧边栏可调整大小功能、CSS Grid卡片布局、改进的滑块控件样式和自定义切换开关等UI增强功能。
+**更新** 新增了右侧侧边栏可调整大小功能、CSS Grid卡片布局、改进的滑块控件样式和自定义切换开关等UI增强功能，以及全新的五状态 StartupOverlay 启动覆盖组件。
 
 **章节来源**
-- [App.tsx:54-335](file://client/src/components/App.tsx#L54-L335)
+- [App.tsx:25-196](file://client/src/components/App.tsx#L25-L196)
+- [StartupOverlay.tsx:1-200](file://client/src/components/StartupOverlay.tsx#L1-L200)
 - [Sidebar.tsx:30-425](file://client/src/components/Sidebar.tsx#L30-L425)
 - [PhotoWall.tsx:103-578](file://client/src/components/PhotoWall.tsx#L103-L578)
 - [DropZone.tsx:39-171](file://client/src/components/DropZone.tsx#L39-L171)
@@ -128,16 +136,18 @@ V --> S
 
 ## 架构总览
 应用采用"容器-展示"分层与"状态集中管理"的架构模式：
-- 容器组件（App、Sidebar、PhotoWall、FaceSwapPhotoWall）负责业务逻辑与用户交互。
+- 容器组件（App、Sidebar、PhotoWall、FaceSwapPhotoWall、StartupOverlay）负责业务逻辑与用户交互。
 - 展示组件（ImageCard、DropZone、ThumbnailStrip、MaskEditor、ModelSelect）专注渲染与最小化重渲染。
 - 状态管理通过多个 Zustand stores 实现，避免深层 props 传递与样板代码。
 - 模型元数据通过 useModelMetadata hook 管理，支持触发词、缩略图、昵称等信息的持久化。
 - **新增全局样式系统**，通过 CSS 变量和自定义样式类提供一致的UI体验。
+- **新增双门验证系统**，StartupOverlay 与 useWebSocket 协同确保服务就绪和客户端连接双重验证。
 
 ```mermaid
 graph TB
 subgraph "容器组件"
 APP["App"]
+SO["StartupOverlay"]
 SIDEBAR["Sidebar"]
 PW["PhotoWall"]
 FSPW["FaceSwapPhotoWall"]
@@ -153,6 +163,7 @@ MS["ModelSelect"]
 end
 subgraph "状态管理"
 WFS["useWorkflowStore"]
+WS["useWebSocket"]
 DRAG["useDragStore"]
 MASK["useMaskStore"]
 MM["useModelMetadata"]
@@ -163,6 +174,7 @@ end
 subgraph "样式系统"
 GC["global.css"]
 end
+APP --> SO
 APP --> SIDEBAR
 APP --> PW
 APP --> FSPW
@@ -171,6 +183,7 @@ PW --> IC
 IC --> TS
 APP --> ME
 APP --> WFS
+APP --> WS
 APP --> DRAG
 APP --> MASK
 IC --> WFS
@@ -183,9 +196,11 @@ FSPW --> DRAG
 T2IS --> MS
 T2IS --> MM
 T2IS --> WFS
+T2IS --> WS
 ZITS --> MS
 ZITS --> MM
 ZITS --> WFS
+ZITS --> WS
 MS --> MM
 SS --> T2IS
 SS --> ZITS
@@ -194,7 +209,8 @@ GC --> ZITS
 ```
 
 **图表来源**
-- [App.tsx:54-335](file://client/src/components/App.tsx#L54-L335)
+- [App.tsx:25-196](file://client/src/components/App.tsx#L25-L196)
+- [StartupOverlay.tsx:1-200](file://client/src/components/StartupOverlay.tsx#L1-L200)
 - [Sidebar.tsx:30-425](file://client/src/components/Sidebar.tsx#L30-L425)
 - [PhotoWall.tsx:103-578](file://client/src/components/PhotoWall.tsx#L103-L578)
 - [FaceSwapPhotoWall.tsx:213-800](file://client/src/components/FaceSwapPhotoWall.tsx#L213-L800)
@@ -206,6 +222,7 @@ GC --> ZITS
 - [Text2ImgSidebar.tsx:57-683](file://client/src/components/Text2ImgSidebar.tsx#L57-L683)
 - [ZITSidebar.tsx:57-716](file://client/src/components/ZITSidebar.tsx#L57-L716)
 - [useWorkflowStore.ts:96-645](file://client/src/hooks/useWorkflowStore.ts#L96-L645)
+- [useWebSocket.ts:1-225](file://client/src/hooks/useWebSocket.ts#L1-L225)
 - [useDragStore.ts:1-17](file://client/src/hooks/useDragStore.ts#L1-L17)
 - [useMaskStore.ts:1-51](file://client/src/hooks/useMaskStore.ts#L1-L51)
 - [useModelMetadata.ts:9-169](file://client/src/hooks/useModelMetadata.ts#L9-L169)
@@ -222,15 +239,24 @@ App 是整个应用的根容器，承担以下职责：
 - 子组件编排：根据当前活动标签动态渲染 PhotoWall 或 FaceSwapPhotoWall，以及对应的工作流侧边栏与设置面板。
 - 全局对话框：重复文件名导入确认、全局 Toast 通知、遮罩层弹窗（设置、提示词助理、蒙版编辑器）。
 - **新增右侧侧边栏可调整大小功能**：通过拖拽分割线实现侧边栏宽度动态调整，支持最小260px、最大500px范围。
+- **新增启动覆盖层**：StartupOverlay 作为应用的第一个渲染组件，确保服务就绪后再显示主界面。
 
 ```mermaid
 sequenceDiagram
 participant U as "用户"
 participant APP as "App"
+participant SO as "StartupOverlay"
 participant RESIZE as "Resize Handler"
 participant DZ as "DropZone"
 participant WFS as "useWorkflowStore"
-U->>APP : 拖拽右侧分割线
+U->>APP : 加载应用
+APP->>SO : 渲染启动覆盖层
+SO->>SO : 检查 ComfyUI 状态
+SO->>SO : WAITING 状态显示倒计时
+SO->>SO : 连接 WebSocket 获取 clientId
+SO->>SO : CONNECTING 状态等待连接
+SO->>SO : READY 状态渐隐消失
+SO-->>APP : HIDDEN 状态完成初始化
 APP->>RESIZE : handleResizeMouseDown
 RESIZE->>RESIZE : 监听鼠标移动事件
 RESIZE->>APP : 更新 sidebarWidth 状态
@@ -242,12 +268,53 @@ APP-->>U : 刷新 PhotoWall 显示
 ```
 
 **图表来源**
-- [App.tsx:77-112](file://client/src/components/App.tsx#L77-L112)
+- [App.tsx:25-196](file://client/src/components/App.tsx#L25-L196)
+- [StartupOverlay.tsx:48-107](file://client/src/components/StartupOverlay.tsx#L48-L107)
 - [DropZone.tsx:42-73](file://client/src/components/DropZone.tsx#L42-L73)
 - [useWorkflowStore.ts:197-252](file://client/src/hooks/useWorkflowStore.ts#L197-L252)
 
 **章节来源**
-- [App.tsx:54-335](file://client/src/components/App.tsx#L54-L335)
+- [App.tsx:25-196](file://client/src/components/App.tsx#L25-L196)
+
+### StartupOverlay 启动覆盖层
+StartupOverlay 是一个全新的五状态状态机组件，实现了双门验证系统：
+
+#### 状态机设计
+- **CHECKING**：初始状态，检测 ComfyUI 服务状态
+- **WAITING**：服务未就绪，显示倒计时等待
+- **CONNECTING**：服务就绪但 WebSocket 连接未完成，等待 clientId
+- **READY**：双门验证通过，显示成功状态
+- **HIDDEN**：完成初始化，隐藏覆盖层
+
+#### 双门验证系统
+StartupOverlay 实现了严格的双门验证机制：
+1. **第一道门**：ComfyUI 服务就绪验证
+   - 通过 HTTP 请求检查 `/api/comfyui/status`
+   - 2秒间隔轮询直到服务运行
+   - 超时显示 WAITING 状态和倒计时
+
+2. **第二道门**：WebSocket 客户端 ID 验证
+   - 通过 WebSocket 'connected' 消息获取 clientId
+   - 仅当 clientId 存在时才允许通过
+   - 防止 Generate 按钮在连接完成前被启用
+
+```mermaid
+stateDiagram-v2
+[*] --> CHECKING
+CHECKING --> WAITING : ComfyUI未运行
+CHECKING --> READY : ComfyUI已运行
+WAITING --> READY : 服务就绪
+READY --> HIDDEN : 成功显示
+CHECKING --> CONNECTING : ComfyUI运行但无clientId
+CONNECTING --> READY : 获取clientId
+CONNECTING --> HIDDEN : 错误状态
+```
+
+**图表来源**
+- [StartupOverlay.tsx:4-107](file://client/src/components/StartupOverlay.tsx#L4-L107)
+
+**章节来源**
+- [StartupOverlay.tsx:1-200](file://client/src/components/StartupOverlay.tsx#L1-L200)
 
 ### Sidebar 侧边导航
 Sidebar 的职责包括：
@@ -454,6 +521,7 @@ Text2ImgSidebar 是文生图工作流的增强侧边栏，具有以下特性：
 - 采样设置：支持步数、CFG、采样器、调度器等高级参数调节。
 - 批量生成：支持批量生成多张图片，支持自定义命名。
 - **新增自定义切换开关**：使用纯 CSS 实现的圆形切换开关，支持平滑过渡动画和视觉反馈。
+- **新增双门验证支持**：Generate 按钮依赖 clientId 状态，确保 WebSocket 连接完成。
 
 ```mermaid
 flowchart TD
@@ -479,24 +547,28 @@ ZITSidebar 是 ZIT 工作流的增强侧边栏，具有以下特性：
 - 多槽位 LoRA：与文生图侧边栏相同的多槽位 LoRA 管理功能。
 - 触发词管理：支持 LoRA 模型触发词的显示与复制。
 - 采样算法偏移：新增 AuraFlow 算法的采样偏移功能，支持启用/禁用和偏移量调节。
-- 提示词助手：集成提示词助理功能，支持自然语言与标签之间的相互转换。
+- 提示词助理：集成提示词助理功能，支持自然语言与标签之间的相互转换。
 - 采样设置：支持步数、CFG、采样器、调度器等高级参数调节。
 - 批量生成：支持批量生成多张图片，支持自定义命名。
 - **新增自定义切换开关**：使用纯 CSS 实现的圆形切换开关，支持启用/禁用采样算法偏移功能。
+- **新增双门验证支持**：Generate 按钮依赖 clientId 状态，确保 WebSocket 连接完成。
 
 **章节来源**
 - [ZITSidebar.tsx:57-716](file://client/src/components/ZITSidebar.tsx#L57-L716)
 
 ## 依赖关系分析
 - 组件耦合：容器组件之间低耦合，通过 props 与 stores 通信；展示组件尽量无副作用，提升可测试性。
-- 状态依赖：useWorkflowStore 管理全局工作流状态；useDragStore 管理拖拽上下文；useMaskStore 管理蒙版数据；useModelMetadata 管理模型元数据。
+- 状态依赖：useWorkflowStore 管理全局工作流状态；useWebSocket 管理 WebSocket 连接和 clientId；useDragStore 管理拖拽上下文；useMaskStore 管理蒙版数据；useModelMetadata 管理模型元数据。
 - 类型约束：sessionService.ts 定义了 LoraSlot、Text2ImgConfig、ZitConfig 等核心类型，支持多槽位 LoRA 的配置管理。
 - 外部依赖：lucide-react 提供图标；zustand 提供轻量状态管理；React 19 提供并发与性能优化。
 - **新增样式依赖**：global.css 提供全局样式，包括改进的滑块控件样式和动画效果。
+- **新增双门验证依赖**：StartupOverlay 依赖 useWebSocket 的 clientId 状态，确保服务就绪和连接完成双重验证。
 
 ```mermaid
 graph LR
-APP["App"] --> WFS["useWorkflowStore"]
+APP["App"] --> SO["StartupOverlay"]
+APP --> WFS["useWorkflowStore"]
+APP --> WS["useWebSocket"]
 APP --> DRAG["useDragStore"]
 APP --> MASK["useMaskStore"]
 PW["PhotoWall"] --> WFS
@@ -504,14 +576,17 @@ PW --> DRAG
 IC["ImageCard"] --> WFS
 IC --> DRAG
 IC --> MASK
+IC --> WS
 FSPW["FaceSwapPhotoWall"] --> WFS
 FSPW --> DRAG
 TS["ThumbnailStrip"] --> WFS
 ME["MaskEditor"] --> MASK
 T2IS["Text2ImgSidebar"] --> WFS
+T2IS --> WS
 T2IS --> MM["useModelMetadata"]
 T2IS --> MS["ModelSelect"]
 ZITS["ZITSidebar"] --> WFS
+ZITS --> WS
 ZITS --> MM
 ZITS --> MS
 MS --> MM
@@ -526,9 +601,12 @@ GC --> ZITS
 ```
 
 **图表来源**
+- [App.tsx:25-196](file://client/src/components/App.tsx#L25-L196)
+- [StartupOverlay.tsx:11-107](file://client/src/components/StartupOverlay.tsx#L11-L107)
 - [useWorkflowStore.ts:96-645](file://client/src/hooks/useWorkflowStore.ts#L96-L645)
-- [useDragStore.ts:1-17](file://client/src/hooks/useDragStore.ts#L1-17)
-- [useMaskStore.ts:1-51](file://client/src/hooks/useMaskStore.ts#L1-51)
+- [useWebSocket.ts:1-225](file://client/src/hooks/useWebSocket.ts#L1-L225)
+- [useDragStore.ts:1-17](file://client/src/hooks/useDragStore.ts#L1-L17)
+- [useMaskStore.ts:1-51](file://client/src/hooks/useMaskStore.ts#L1-L51)
 - [useModelMetadata.ts:9-169](file://client/src/hooks/useModelMetadata.ts#L9-L169)
 - [sessionService.ts:1-140](file://client/src/services/sessionService.ts#L1-L140)
 - [index.ts:1-58](file://client/src/types/index.ts#L1-L58)
@@ -551,6 +629,7 @@ GC --> ZITS
 - **新增滑块控件优化**：通过全局 CSS 样式统一管理 range 输入控件的外观，减少组件内部样式计算。
 - **新增CSS Grid布局**：PhotoWall 使用 CSS Grid 实现响应式布局，相比 JavaScript 计算更高效。
 - **新增侧边栏调整优化**：右侧侧边栏宽度调整使用 requestAnimationFrame 和防抖技术，确保流畅的用户体验。
+- **新增 StartupOverlay 性能优化**：使用防抖和节流技术优化轮询频率，避免过度的 HTTP 请求和 WebSocket 连接尝试。
 
 ## 故障排除指南
 - 拖拽无效：检查 App 主区域的 dragover/leave 事件处理与标签页类型限制。
@@ -564,17 +643,21 @@ GC --> ZITS
 - **右侧侧边栏调整失效**：检查 handleResizeMouseDown 事件绑定和鼠标事件监听器是否正确移除。
 - **卡片布局错乱**：检查 CSS Grid 属性和 minmax() 函数的参数设置。
 - **滑块控件样式异常**：确认 global.css 中的 range 输入控件样式规则是否正确加载。
+- **StartupOverlay 无法隐藏**：检查 ComfyUI 服务状态和 WebSocket 连接是否正常，确认 clientId 是否正确设置。
+- **Generate 按钮不可用**：确认 StartupOverlay 已进入 READY 状态，检查 WebSocket 连接和 clientId 设置。
+- **双门验证失败**：检查 ComfyUI 服务是否完全就绪，确认 WebSocket 'connected' 消息是否正确发送 clientId。
 
 **章节来源**
 - [App.tsx:84-134](file://client/src/components/App.tsx#L84-L134)
 - [ImageCard.tsx:478-580](file://client/src/components/ImageCard.tsx#L478-L580)
 - [useMaskStore.ts:32-50](file://client/src/hooks/useMaskStore.ts#L32-L50)
 - [useModelMetadata.ts:12-21](file://client/src/hooks/useModelMetadata.ts#L12-L21)
+- [StartupOverlay.tsx:88-107](file://client/src/components/StartupOverlay.tsx#L88-L107)
 
 ## 结论
-该 React 组件体系通过清晰的容器-展示分离、集中式状态管理与完善的拖拽/蒙版/进度反馈机制，实现了复杂图像处理工作流的高效交互。App 主组件作为中枢，协调 Sidebar、PhotoWall、DropZone、ImageCard、FaceSwapPhotoWall 等组件，形成高内聚、低耦合的架构。
+该 React 组件体系通过清晰的容器-展示分离、集中式状态管理与完善的拖拽/蒙版/进度反馈机制，实现了复杂图像处理工作流的高效交互。App 主组件作为中枢，协调 Sidebar、PhotoWall、DropZone、ImageCard、FaceSwapPhotoWall、StartupOverlay 等组件，形成高内聚、低耦合的架构。
 
-**更新** 本次更新显著增强了UI交互体验，新增了右侧侧边栏可调整大小功能、CSS Grid响应式卡片布局、改进的滑块控件样式和自定义切换开关等现代化UI增强功能。这些改进不仅提升了用户体验，还通过更好的性能优化和更直观的操作界面，使用户能够更高效地完成图像处理任务。
+**更新** 本次更新显著增强了UI交互体验，新增了右侧侧边栏可调整大小功能、CSS Grid响应式卡片布局、改进的滑块控件样式和自定义切换开关等现代化UI增强功能，以及全新的五状态 StartupOverlay 启动覆盖组件。StartupOverlay 通过双门验证系统确保了应用启动的可靠性，通过严格的 ComfyUI 服务就绪和 WebSocket 客户端 ID 双重验证，防止了组件在未完全初始化时的误操作，显著提升了用户体验和系统的稳定性。
 
 建议在后续迭代中进一步完善类型安全、错误边界与性能监控，以提升可维护性与用户体验。
 
@@ -585,11 +668,13 @@ GC --> ZITS
   - 将跨组件共享的状态收敛到 Zustand stores，避免 props 钻取。
   - 利用 useModelMetadata hook 管理模型元数据，提供统一的数据访问接口。
   - **新增样式复用**：通过全局 CSS 变量和样式类提供一致的UI设计规范。
+  - **新增双门验证模式**：StartupOverlay 展示了严格的状态机验证模式，可作为其他组件状态管理的参考。
 - 组件组合模式
   - PhotoWall 通过 LazyCard 与 ImageCard 组合实现高性能图片墙，**采用CSS Grid实现响应式布局**。
   - ImageCard 内嵌 ThumbnailStrip 与 MaskEditor，形成"卡片内生态"。
   - Text2ImgSidebar 和 ZITSidebar 通过 ModelSelect 组合实现增强的模型管理功能，**集成自定义切换开关**。
   - App 主组件通过条件渲染和动态宽度调整实现灵活的布局系统。
+  - **新增 StartupOverlay 组合模式**：StartupOverlay 作为应用的第一个渲染组件，确保服务就绪后再显示主界面。
 - 渲染优化技巧
   - 使用 IntersectionObserver 与占位符高度补偿，减少滚动抖动。
   - 合理拆分状态订阅，避免不必要的组件重渲染。
@@ -599,3 +684,5 @@ GC --> ZITS
   - **新增滑块控件优化**：通过全局样式统一管理，减少组件内部样式计算开销。
   - **新增CSS Grid布局**：使用浏览器原生布局引擎，相比 JavaScript 实现更高效。
   - **新增侧边栏调整优化**：使用防抖和节流技术，确保拖拽过程的流畅性。
+  - **新增 StartupOverlay 优化**：通过防抖和节流技术优化轮询频率，减少资源消耗。
+  - **新增双门验证优化**：StartupOverlay 使用高效的轮询策略和状态机管理，确保启动过程的流畅性。

@@ -10,7 +10,7 @@ import outputRouter from './routes/output.js';
 import sessionRouter from './routes/session.js';
 import modelMetaRouter from './routes/modelMeta.js';
 import agentRouter from './routes/agent.js';
-import { connectWebSocket, getHistory, getImageBuffer, getPromptNodeInfo, getPromptTotalNodes, getPromptTotalWeight, clearPromptNodeInfo } from './services/comfyui.js';
+import { connectWebSocket, getHistory, getImageBuffer, getPromptNodeInfo, getPromptTotalNodes, getPromptTotalWeight, clearPromptNodeInfo, SAMPLER_STEP_WEIGHT } from './services/comfyui.js';
 import { sessionsBase, saveOutputFile } from './services/sessionManager.js';
 import { ensureComfyUI, isComfyUIRunning } from './services/comfyuiLauncher.js';
 
@@ -52,6 +52,8 @@ const STAGE_NAMES: Record<string, string> = {
   'NNLatentUpscale': '放大潜空间',
   'LatentUpscale': '放大潜空间',
   'LatentUpscaleBy': '放大潜空间',
+  'UltimateSDUpscale': 'SD 放大采样',
+  'UltimateSDUpscaleNoUpscale': 'SD 放大采样',
   // 视频
   'VHS_VideoCombine': '合成视频',
   'VHS_LoadVideo': '加载视频',
@@ -182,6 +184,11 @@ wss.on('connection', (clientWs) => {
     currentNodeWeight: number;
     currentValue: number;
     currentMax: number;
+    lastPercentage: number;
+    // Tick 计数：统计当前节点收到的 progress 消息总数，用于多轮场景（如 UltimateSDUpscale）
+    nodeTickCount: number;
+    nodeIsMultiRound: boolean;
+    nodeIsTiledSampler: boolean; // 预标记：该节点是否为 tiled sampler，始终用 tick 计数
   }
   const promptProgressMap = new Map<string, PromptProgressState>();
 
@@ -198,6 +205,10 @@ wss.on('connection', (clientWs) => {
         currentNodeWeight: 0,
         currentValue: 0,
         currentMax: 0,
+        lastPercentage: 0,
+        nodeTickCount: 0,
+        nodeIsMultiRound: false,
+        nodeIsTiledSampler: false,
       };
       promptProgressMap.set(promptId, p);
     }
@@ -217,12 +228,23 @@ wss.on('connection', (clientWs) => {
     // 权重化全局百分比，封顶 99%，100% 留给 complete 确认
     let percentage: number;
     if (p.totalWeight > 0) {
-      const nodeProgress = p.currentMax > 0 ? p.currentValue / p.currentMax : 0;
+      // 节点内部进度：多轮模式用 tick 计数，单轮用 value/max
+      let nodeProgress: number;
+      if (p.nodeIsTiledSampler || p.nodeIsMultiRound) {
+        // Tiled sampler 或多轮节点：用 tick 数 / 预期 tick 数，线性递增不受 max 重置影响
+        const expectedTicks = p.currentNodeWeight / SAMPLER_STEP_WEIGHT;
+        nodeProgress = Math.min(0.95, p.nodeTickCount / expectedTicks);
+      } else {
+        nodeProgress = p.currentMax > 0 ? p.currentValue / p.currentMax : 0;
+      }
       const pct = ((p.completedWeight + p.currentNodeWeight * nodeProgress) / p.totalWeight) * 100;
       percentage = Math.min(99, Math.max(0, Math.round(pct)));
     } else {
       percentage = p.currentMax > 0 ? Math.round((p.currentValue / p.currentMax) * 100) : 0;
     }
+    // 棘轮保护：多轮间不让用户看到回退
+    if (percentage < p.lastPercentage) percentage = p.lastPercentage;
+    p.lastPercentage = percentage;
     bufferAndSend(promptId, {
       type: 'progress',
       promptId,
@@ -263,8 +285,11 @@ wss.on('connection', (clientWs) => {
         p.currentStage = getStageName(promptId, nodeId);
         const info = getPromptNodeInfo(promptId, nodeId);
         p.currentNodeWeight = info?.weight ?? 1;
+        p.nodeIsTiledSampler = info?.isTiledSampler ?? false;
         p.currentValue = 0;
         p.currentMax = 0;
+        p.nodeTickCount = 0;
+        p.nodeIsMultiRound = false;
       }
       emitProgress(promptId, p);
     },
@@ -280,7 +305,15 @@ wss.on('connection', (clientWs) => {
         p.currentStage = getStageName(promptId, progress.node);
         const info = getPromptNodeInfo(promptId, progress.node);
         p.currentNodeWeight = info?.weight ?? 1;
+        p.nodeIsTiledSampler = info?.isTiledSampler ?? false;
+        p.nodeTickCount = 0;
+        p.nodeIsMultiRound = false;
       }
+      // 多轮检测：value 回退或 max 变化表示新一轮开始
+      if (p.currentMax > 0 && (progress.value < p.currentValue || progress.max !== p.currentMax)) {
+        p.nodeIsMultiRound = true;
+      }
+      p.nodeTickCount++;
       p.currentValue = progress.value;
       p.currentMax = progress.max;
       emitProgress(promptId, p);

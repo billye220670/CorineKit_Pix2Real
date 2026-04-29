@@ -15,8 +15,17 @@
 - [client/src/hooks/useWebSocket.ts](file://client/src/hooks/useWebSocket.ts)
 - [client/src/hooks/useWorkflowStore.ts](file://client/src/hooks/useWorkflowStore.ts)
 - [client/src/types/index.ts](file://client/src/types/index.ts)
+- [client/src/components/ProgressOverlay.tsx](file://client/src/components/ProgressOverlay.tsx)
 - [README.md](file://README.md)
 </cite>
+
+## 更新摘要
+**所做更改**
+- 新增加权进度计算系统章节，详细介绍 PromptProgressState 管理机制
+- 更新节点权重分析与阶段映射功能说明
+- 增强 WebSocket 进度事件处理与前端展示优化
+- 补充采样器权重计算与动态权重调整机制
+- 更新进度条计算公式与阶段名称映射表
 
 ## 目录
 1. [简介](#简介)
@@ -24,11 +33,12 @@
 3. [核心组件](#核心组件)
 4. [架构总览](#架构总览)
 5. [详细组件分析](#详细组件分析)
-6. [依赖关系分析](#依赖关系分析)
-7. [性能考虑](#性能考虑)
-8. [故障排查指南](#故障排查指南)
-9. [结论](#结论)
-10. [附录](#附录)
+6. [加权进度计算系统](#加权进度计算系统)
+7. [依赖关系分析](#依赖关系分析)
+8. [性能考虑](#性能考虑)
+9. [故障排查指南](#故障排查指南)
+10. [结论](#结论)
+11. [附录](#附录)
 
 ## 简介
 本技术文档面向 CorineKit Pix2Real 的 ComfyUI 集成服务，聚焦于以下方面：
@@ -36,8 +46,9 @@
 - WebSocket 连接管理：连接建立、消息路由、事件监听、断线重连策略
 - 文件上传下载处理：二进制数据传输、进度监控、内存管理
 - ComfyUI 服务集成流程：认证机制（clientId）、超时处理、性能优化建议
+- **新增** 加权进度计算系统：基于节点权重分析的精确进度估算
 
-该系统通过适配器模式加载 ComfyUI 工作流模板，统一构建 prompt JSON 并提交队列；后端以单例 WebSocket 代理与 ComfyUI 实时通信，同时在任务完成后将输出文件下载到本地会话目录，供前端按需访问。
+该系统通过适配器模式加载 ComfyUI 工作流模板，统一构建 prompt JSON 并提交队列；后端以单例 WebSocket 代理与 ComfyUI 实时通信，同时在任务完成后将输出文件下载到本地会话目录，供前端按需访问。**最新更新**引入了基于节点权重分析的加权进度计算系统，提供更准确的任务进度估算。
 
 ## 项目结构
 整体采用前后端分离架构：
@@ -50,6 +61,7 @@ subgraph "前端"
 FE_Client["浏览器客户端"]
 FE_WS["useWebSocket 钩子<br/>单例连接"]
 FE_Store["useWorkflowStore 状态库"]
+FE_Progress["ProgressOverlay 进度显示"]
 end
 subgraph "后端"
 BE_Express["Express 应用"]
@@ -57,6 +69,7 @@ BE_WS["WebSocket 服务器<br/>/ws"]
 BE_Routes["REST 路由<br/>workflow/output/session"]
 BE_Services["ComfyUI 服务层<br/>HTTP/WS 封装"]
 BE_Session["会话管理<br/>sessionsBase"]
+BE_Progress["加权进度计算<br/>PromptProgressState"]
 end
 subgraph "外部服务"
 COMFY["ComfyUI 服务<br/>HTTP/WS"]
@@ -70,9 +83,10 @@ BE_Express --> BE_Routes
 BE_Routes --> BE_Services
 BE_Routes --> BE_Session
 BE_Services --> BE_Session
+BE_WS --> BE_Progress
 ```
 
-图表来源
+**图表来源**
 - [server/src/index.ts:62-219](file://server/src/index.ts#L62-L219)
 - [server/src/routes/workflow.ts:1-862](file://server/src/routes/workflow.ts#L1-L862)
 - [server/src/routes/output.ts:1-134](file://server/src/routes/output.ts#L1-L134)
@@ -81,8 +95,9 @@ BE_Services --> BE_Session
 - [server/src/services/sessionManager.ts:1-164](file://server/src/services/sessionManager.ts#L1-L164)
 - [client/src/hooks/useWebSocket.ts:1-99](file://client/src/hooks/useWebSocket.ts#L1-L99)
 - [client/src/hooks/useWorkflowStore.ts:1-645](file://client/src/hooks/useWorkflowStore.ts#L1-L645)
+- [client/src/components/ProgressOverlay.tsx:1-126](file://client/src/components/ProgressOverlay.tsx#L1-L126)
 
-章节来源
+**章节来源**
 - [README.md:41-79](file://README.md#L41-L79)
 - [server/src/index.ts:1-228](file://server/src/index.ts#L1-L228)
 
@@ -101,8 +116,12 @@ BE_Services --> BE_Session
 - 前端 WebSocket 与状态
   - 单例 WebSocket 连接、断线重连、事件分发至状态库
   - 状态库维护任务生命周期、进度、输出文件映射
+- **新增** 加权进度计算系统
+  - PromptProgressState 管理：跟踪任务总节点数、总权重、已完成权重等状态
+  - 节点权重分析：基于时间开销的静态权重表和动态采样权重计算
+  - 阶段映射：将节点类型映射为用户友好的中文阶段名称
 
-章节来源
+**章节来源**
 - [server/src/services/comfyui.ts:1-285](file://server/src/services/comfyui.ts#L1-L285)
 - [server/src/routes/workflow.ts:1-862](file://server/src/routes/workflow.ts#L1-L862)
 - [server/src/routes/output.ts:1-134](file://server/src/routes/output.ts#L1-L134)
@@ -114,22 +133,22 @@ BE_Services --> BE_Session
 - [client/src/hooks/useWorkflowStore.ts:1-645](file://client/src/hooks/useWorkflowStore.ts#L1-L645)
 
 ## 架构总览
-后端启动时创建 Express 与 WebSocketServer，分别监听 HTTP 与 WS 请求。每个浏览器客户端连接后，后端分配唯一 clientId 并与 ComfyUI 建立 WebSocket 连接，将 ComfyUI 的进度/完成/错误事件转换为统一格式回传给前端。完成事件中包含输出文件信息，后端从 ComfyUI 下载对应二进制并保存到会话目录，随后通知前端。
+后端启动时创建 Express 与 WebSocketServer，分别监听 HTTP 与 WS 请求。每个浏览器客户端连接后，后端分配唯一 clientId 并与 ComfyUI 建立 WebSocket 连接，将 ComfyUI 的进度/完成/错误事件转换为统一格式回传给前端。**新增的加权进度计算系统**在事件处理过程中实时计算精确的进度百分比，包括阶段名称、步骤索引和总步骤数。完成事件中包含输出文件信息，后端从 ComfyUI 下载对应二进制并保存到会话目录，随后通知前端。
 
 ```mermaid
 sequenceDiagram
 participant Browser as "浏览器"
 participant WS_Server as "后端 WebSocket 服务器"
 participant WS_Comfy as "ComfyUI WebSocket"
+participant Progress as "加权进度计算"
 participant HTTP as "后端 HTTP 服务"
 participant FS as "会话文件系统"
 Browser->>WS_Server : 建立 /ws 连接
 WS_Server->>Browser : 发送 {type : "connected", clientId}
 WS_Server->>WS_Comfy : connectWebSocket(clientId,...)
-Browser->>WS_Server : 注册 promptId 映射
-WS_Server->>HTTP : queuePrompt(prompt, clientId)
-HTTP-->>WS_Comfy : 提交到 ComfyUI 队列
-WS_Comfy-->>WS_Server : progress/executing/execution_success/error
+WS_Comfy-->>WS_Server : progress/executing/...
+WS_Server->>Progress : 计算加权进度
+Progress-->>WS_Server : {percentage, stage, stepIndex, stepTotal}
 WS_Server-->>Browser : 转发进度/开始/完成/错误
 WS_Server->>HTTP : getHistory(promptId)
 HTTP-->>WS_Server : 历史输出列表
@@ -141,12 +160,12 @@ end
 WS_Server-->>Browser : 完成事件 + 输出文件 URL
 ```
 
-图表来源
+**图表来源**
 - [server/src/index.ts:73-219](file://server/src/index.ts#L73-L219)
 - [server/src/services/comfyui.ts:47-125](file://server/src/services/comfyui.ts#L47-L125)
 - [server/src/services/sessionManager.ts:34-57](file://server/src/services/sessionManager.ts#L34-L57)
 
-章节来源
+**章节来源**
 - [server/src/index.ts:62-228](file://server/src/index.ts#L62-L228)
 
 ## 详细组件分析
@@ -158,6 +177,7 @@ WS_Server-->>Browser : 完成事件 + 输出文件 URL
 - 提交工作流
   - 将适配器构建好的 prompt JSON 通过 /prompt 接口提交
   - 返回 prompt_id，作为后续历史查询与输出下载的标识
+  - **新增**：在提交时自动登记节点信息（class_type、title、weight）
 - 历史与输出
   - 通过 /history/{promptId} 获取输出文件列表
   - 通过 /view 接口下载具体文件为 Buffer
@@ -171,7 +191,8 @@ flowchart TD
 Start(["开始"]) --> Upload["上传图像/视频<br/>返回内部文件名"]
 Upload --> BuildPrompt["适配器构建 prompt JSON"]
 BuildPrompt --> Submit["POST /prompt 提交"]
-Submit --> Resp{"响应成功?"}
+Submit --> RegisterNodes["登记节点信息<br/>class_type/title/weight"]
+RegisterNodes --> Resp{"响应成功?"}
 Resp --> |否| Err["抛出错误"]
 Resp --> |是| SaveId["记录 prompt_id"]
 SaveId --> Wait["等待 ComfyUI 执行"]
@@ -183,12 +204,12 @@ View --> Save["保存到会话 output 目录"]
 Save --> Done
 ```
 
-图表来源
+**图表来源**
 - [server/src/services/comfyui.ts:9-83](file://server/src/services/comfyui.ts#L9-L83)
 - [server/src/routes/workflow.ts:407-455](file://server/src/routes/workflow.ts#L407-L455)
 - [server/src/services/sessionManager.ts:34-57](file://server/src/services/sessionManager.ts#L34-L57)
 
-章节来源
+**章节来源**
 - [server/src/services/comfyui.ts:9-125](file://server/src/services/comfyui.ts#L9-L125)
 - [server/src/routes/workflow.ts:407-455](file://server/src/routes/workflow.ts#L407-L455)
 
@@ -206,16 +227,24 @@ Save --> Done
   - 后端在客户端断开时关闭对应的 ComfyUI 连接
 - 事件缓冲与重放
   - 对每个 promptId 维护事件缓冲，若客户端注册较晚可重放已发生的 execution_start/progress
+- **新增** 加权进度计算
+  - onExecutionStart：初始化 PromptProgressState
+  - onExecutionCached：处理缓存命中节点，直接计入已完成权重
+  - onExecutingNode：节点切换时更新阶段名称和权重
+  - onProgress：实时计算加权进度百分比
 
 ```mermaid
 sequenceDiagram
 participant FE as "前端"
 participant WS as "后端 WS 服务器"
 participant CW as "ComfyUI WS"
+participant PS as "进度状态管理"
 FE->>WS : 建立 /ws 连接
 WS-->>FE : {type : "connected", clientId}
 WS->>CW : connectWebSocket(clientId,...)
 CW-->>WS : progress/executing/...
+WS->>PS : 初始化/更新进度状态
+PS-->>WS : 计算加权进度
 WS-->>FE : 转发进度/开始/完成/错误
 FE->>WS : 注册 promptId 映射
 WS-->>FE : 重放缓冲事件
@@ -223,11 +252,11 @@ FE-->>WS : 关闭连接
 WS->>CW : 关闭连接
 ```
 
-图表来源
+**图表来源**
 - [server/src/index.ts:73-219](file://server/src/index.ts#L73-L219)
 - [client/src/hooks/useWebSocket.ts:1-99](file://client/src/hooks/useWebSocket.ts#L1-L99)
 
-章节来源
+**章节来源**
 - [server/src/index.ts:73-219](file://server/src/index.ts#L73-L219)
 - [client/src/hooks/useWebSocket.ts:1-99](file://client/src/hooks/useWebSocket.ts#L1-L99)
 
@@ -244,7 +273,7 @@ WS->>CW : 关闭连接
 - 输出访问
   - 输出路由支持直接下载与打开文件，默认应用
 
-章节来源
+**章节来源**
 - [server/src/routes/workflow.ts:22-27](file://server/src/routes/workflow.ts#L22-L27)
 - [server/src/services/comfyui.ts:9-83](file://server/src/services/comfyui.ts#L9-L83)
 - [server/src/routes/output.ts:1-134](file://server/src/routes/output.ts#L1-L134)
@@ -278,12 +307,12 @@ class Workflow0Adapter {
 Workflow0Adapter ..|> WorkflowAdapter
 ```
 
-图表来源
+**图表来源**
 - [server/src/adapters/BaseAdapter.ts:1-4](file://server/src/adapters/BaseAdapter.ts#L1-L4)
 - [server/src/adapters/Workflow0Adapter.ts:1-35](file://server/src/adapters/Workflow0Adapter.ts#L1-L35)
 - [server/src/adapters/index.ts:1-31](file://server/src/adapters/index.ts#L1-L31)
 
-章节来源
+**章节来源**
 - [server/src/adapters/Workflow0Adapter.ts:1-35](file://server/src/adapters/Workflow0Adapter.ts#L1-L35)
 - [server/src/adapters/index.ts:1-31](file://server/src/adapters/index.ts#L1-L31)
 
@@ -297,10 +326,95 @@ Workflow0Adapter ..|> WorkflowAdapter
 - 与输出路由配合
   - 输出文件通过 /api/session-files 暴露，支持打开文件默认应用
 
-章节来源
+**章节来源**
 - [server/src/services/sessionManager.ts:1-164](file://server/src/services/sessionManager.ts#L1-L164)
 - [server/src/routes/output.ts:1-134](file://server/src/routes/output.ts#L1-L134)
 - [server/src/routes/session.ts:1-95](file://server/src/routes/session.ts#L1-L95)
+
+## 加权进度计算系统
+
+### PromptProgressState 管理机制
+**新增** 系统引入了 PromptProgressState 接口来管理每个任务的进度状态：
+
+- totalNodes：任务总节点数
+- totalWeight：任务总权重（基于节点时间开销计算）
+- completedWeight：已完成节点的累计权重
+- stepIndex：当前执行步骤索引
+- currentNode：当前执行节点ID
+- currentStage：当前阶段名称
+- currentNodeWeight：当前节点权重
+- currentValue/currentMax：当前节点内部进度值
+
+系统通过 getOrInitProgress 函数为每个 promptId 创建和维护独立的进度状态，确保多任务并行时的准确性。
+
+**章节来源**
+- [server/src/index.ts:175-205](file://server/src/index.ts#L175-L205)
+
+### 节点权重分析与计算
+**新增** 节点权重系统基于时间开销分析，分为静态权重和动态权重两部分：
+
+#### 静态权重表（基于节点类型的时间开销）
+- 模型加载类：15 权重（CheckpointLoaderSimple、UNETLoader 等）
+- 文本编码类：2-3 权重（CLIPTextEncode 等）
+- VAE 编解码：3-4 权重（VAEEncode、VAEDecode 等）
+- 放大类：8 权重（ImageUpscaleWithModel 等）
+- IO 类：1 权重（SaveImage、LoadImage 等）
+- 特殊处理：换脸、分割、反推等 8-10 权重
+
+#### 动态权重计算（采样器）
+采样器节点权重根据 steps 参数动态计算：
+- 基础权重：steps × 2.5
+- 默认步骤：20 步（当缺少 steps 时）
+- 多采样器工作流会自然按采样次数累加权重
+
+**章节来源**
+- [server/src/services/comfyui.ts:57-129](file://server/src/services/comfyui.ts#L57-L129)
+
+### 阶段映射与友好显示
+**新增** 系统提供了节点类型到中文阶段名称的映射表：
+
+- 模型加载：加载主模型、加载 UNET、加载 VAE 等
+- 文本编码：编码提示词
+- VAE 编解码：VAE 编码、VAE 解码
+- 采样：采样中
+- 放大：放大图像、放大潜空间
+- 视频：合成视频、加载视频
+- IO：保存图像、预览图像、加载图像
+- 特殊：面部交换、智能分割、反推提示词
+
+如果节点没有映射，系统会回退到用户在 ComfyUI 中设置的节点标题。
+
+**章节来源**
+- [server/src/index.ts:19-72](file://server/src/index.ts#L19-L72)
+
+### 进度计算公式与事件处理
+**新增** 加权进度计算的核心公式：
+```
+全局进度 = (已完成权重 + 当前节点权重 × 当前节点内部进度) / 总权重 × 100%
+```
+
+系统通过多个事件处理器实现精确进度跟踪：
+
+- onExecutionStart：初始化进度状态，发送 execution_start 事件
+- onExecutionCached：处理缓存命中节点，直接计入已完成权重
+- onExecutingNode：节点切换时更新阶段名称和权重，推进步骤索引
+- onProgress：实时计算并发送加权进度，支持节点切换时的权重同步
+
+**章节来源**
+- [server/src/index.ts:216-287](file://server/src/index.ts#L216-L287)
+
+### 前端进度展示优化
+**新增** 前端 ProgressOverlay 组件现在接收并展示新的进度信息：
+
+- stage：当前执行阶段名称
+- stepIndex/stepTotal：当前步骤索引和总步骤数
+- percentage：加权计算的进度百分比（最大 99%，完成时为 100%）
+
+组件支持"准备中"动画状态，当还没有进入第一个节点时显示加载动画。
+
+**章节来源**
+- [client/src/components/ProgressOverlay.tsx:59-94](file://client/src/components/ProgressOverlay.tsx#L59-L94)
+- [client/src/hooks/useWorkflowStore.ts:73](file://client/src/hooks/useWorkflowStore.ts#L73)
 
 ## 依赖关系分析
 - 路由依赖服务层
@@ -312,6 +426,9 @@ Workflow0Adapter ..|> WorkflowAdapter
 - 前端依赖
   - useWebSocket 依赖 WebSocket 与 Zustand 状态库
   - 类型定义统一前后端事件结构
+- **新增** 进度计算依赖
+  - index.ts 中的 PromptProgressState 管理
+  - comfyui.ts 中的节点权重计算
 
 ```mermaid
 graph LR
@@ -322,9 +439,11 @@ IDX["index.ts"] --> SVC
 IDX --> SM
 FE_WS["useWebSocket.ts"] --> FE_TYPES["types/index.ts"]
 FE_STORE["useWorkflowStore.ts"] --> FE_TYPES
+PROGRESS["加权进度计算"] --> IDX
+PROGRESS --> SVC
 ```
 
-图表来源
+**图表来源**
 - [server/src/routes/workflow.ts:1-11](file://server/src/routes/workflow.ts#L1-L11)
 - [server/src/routes/output.ts:1-6](file://server/src/routes/output.ts#L1-L6)
 - [server/src/routes/session.ts:1-13](file://server/src/routes/session.ts#L1-L13)
@@ -335,7 +454,7 @@ FE_STORE["useWorkflowStore.ts"] --> FE_TYPES
 - [client/src/hooks/useWorkflowStore.ts:1-5](file://client/src/hooks/useWorkflowStore.ts#L1-L5)
 - [client/src/types/index.ts:1-58](file://client/src/types/index.ts#L1-L58)
 
-章节来源
+**章节来源**
 - [server/src/routes/workflow.ts:1-11](file://server/src/routes/workflow.ts#L1-L11)
 - [server/src/routes/output.ts:1-6](file://server/src/routes/output.ts#L1-L6)
 - [server/src/routes/session.ts:1-13](file://server/src/routes/session.ts#L1-L13)
@@ -357,8 +476,10 @@ FE_STORE["useWorkflowStore.ts"] --> FE_TYPES
   - 下载完成后立即清理临时文件，避免磁盘膨胀；对大文件建议流式传输或分块下载
 - 模型与资源
   - 通过 /object_info 接口动态获取模型列表，减少硬编码；在 UI 中缓存模型列表以降低请求频率
-
-[本节为通用指导，不直接分析具体文件]
+- **新增** 进度计算性能
+  - 节点权重计算复杂度低，对性能影响可忽略
+  - 进度状态缓存使用 Map 结构，内存占用与任务数量线性相关
+  - 建议定期清理已完成任务的进度状态以释放内存
 
 ## 故障排查指南
 - ComfyUI 不可用
@@ -373,19 +494,21 @@ FE_STORE["useWorkflowStore.ts"] --> FE_TYPES
 - 无进度/无完成事件
   - 现象：WebSocket 无 progress 或 complete
   - 排查：确认客户端已注册 promptId 映射；检查后端事件缓冲与重放逻辑
+  - **新增**：检查节点权重计算是否正常，确认 STAGE_NAMES 映射是否存在
 - 输出文件缺失
   - 现象：完成事件存在但无法下载
   - 排查：检查 /history 返回的输出列表；确认 /view 参数与文件存在；查看后端日志中的下载错误
+- **新增** 进度显示异常
+  - 现象：进度百分比不准确或阶段名称显示异常
+  - 排查：检查节点权重表配置；确认节点类型映射；验证采样器 steps 参数
 
-章节来源
+**章节来源**
 - [server/src/services/comfyui.ts:47-83](file://server/src/services/comfyui.ts#L47-L83)
 - [server/src/routes/workflow.ts:522-579](file://server/src/routes/workflow.ts#L522-L579)
 - [server/src/index.ts:92-189](file://server/src/index.ts#L92-L189)
 
 ## 结论
-本系统通过适配器模式与统一的 HTTP/WS 封装，实现了对多种 ComfyUI 工作流的标准化接入。前端以单例 WebSocket 与状态库协同，提供实时进度与输出管理；后端负责与 ComfyUI 的桥接与本地文件持久化。建议在生产环境中增强 HTTP 重试与超时、优化大文件处理与内存占用，并完善错误监控与日志追踪。
-
-[本节为总结，不直接分析具体文件]
+本系统通过适配器模式与统一的 HTTP/WS 封装，实现了对多种 ComfyUI 工作流的标准化接入。**最新更新**引入的加权进度计算系统显著提升了进度估算的准确性，通过节点权重分析和阶段映射为用户提供了更直观的任务执行状态。前端以单例 WebSocket 与状态库协同，提供实时进度与输出管理；后端负责与 ComfyUI 的桥接与本地文件持久化。建议在生产环境中增强 HTTP 重试与超时、优化大文件处理与内存占用，并完善错误监控与日志追踪。
 
 ## 附录
 
@@ -414,7 +537,7 @@ FE_STORE["useWorkflowStore.ts"] --> FE_TYPES
   - GET /api/sessions
   - DELETE /api/session/:sessionId
 
-章节来源
+**章节来源**
 - [server/src/routes/workflow.ts:29-579](file://server/src/routes/workflow.ts#L29-L579)
 - [server/src/routes/output.ts:22-131](file://server/src/routes/output.ts#L22-L131)
 - [server/src/routes/session.ts:18-92](file://server/src/routes/session.ts#L18-L92)

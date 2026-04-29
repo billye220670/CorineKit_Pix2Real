@@ -3,7 +3,7 @@
 <cite>
 **本文引用的文件**
 - [server/src/index.ts](file://server/src/index.ts)
-- [server/src/route/workflow.ts](file://server/src/routes/workflow.ts)
+- [server/src/routes/workflow.ts](file://server/src/routes/workflow.ts)
 - [server/src/services/comfyui.ts](file://server/src/services/comfyui.ts)
 - [server/src/services/sessionManager.ts](file://server/src/services/sessionManager.ts)
 - [server/src/adapters/index.ts](file://server/src/adapters/index.ts)
@@ -16,7 +16,14 @@
 - [server/src/routes/output.ts](file://server/src/routes/output.ts)
 - [server/src/routes/session.ts](file://server/src/routes/session.ts)
 - [README.md](file://README.md)
+- [ComfyUI_API/Pix2Real-Klein重绘Pro.json](file://ComfyUI_API/Pix2Real-Klein重绘Pro.json)
 </cite>
+
+## 更新摘要
+**变更内容**
+- 新增KleinPro工作流模式支持说明
+- 更新二次元转真人（Workflow 0）和精修放大（Workflow 2）的工作流参数说明
+- 添加KleinPro模式的请求参数、响应格式和使用示例
 
 ## 目录
 1. [简介](#简介)
@@ -39,6 +46,8 @@
 - 真人转二次元（Workflow 3）
 
 内容涵盖：HTTP 方法与 URL 模式、请求参数、响应格式、文件上传处理、提示词参数传递、客户端 ID 管理、错误处理机制、调用示例（curl 与 JavaScript fetch）、工作流 ID 映射、参数验证规则、超时处理策略等。
+
+**更新** 新增KleinPro工作流模式支持，为二次元转真人和精修放大工作流提供更高质量的渲染效果。
 
 ## 项目结构
 后端采用 Express + TypeScript 构建，核心模块如下：
@@ -72,7 +81,7 @@ R2 --> T
 R3 --> T
 ```
 
-图表来源
+**图表来源**
 - [server/src/index.ts:42-61](file://server/src/index.ts#L42-L61)
 - [server/src/routes/workflow.ts:1-28](file://server/src/routes/workflow.ts#L1-L28)
 - [server/src/routes/output.ts:11-134](file://server/src/routes/output.ts#L11-L134)
@@ -82,7 +91,7 @@ R3 --> T
 - [server/src/adapters/index.ts:13-28](file://server/src/adapters/index.ts#L13-L28)
 - [server/src/types/index.ts:1-52](file://server/src/types/index.ts#L1-L52)
 
-章节来源
+**章节来源**
 - [README.md:41-79](file://README.md#L41-L79)
 - [server/src/index.ts:42-61](file://server/src/index.ts#L42-L61)
 
@@ -93,7 +102,7 @@ R3 --> T
 - 适配器：按工作流加载模板 JSON，并注入上传后的文件名、提示词、随机种子等参数
 - 类型定义：统一的事件、队列项、历史条目、输出文件等类型
 
-章节来源
+**章节来源**
 - [server/src/routes/workflow.ts:1-800](file://server/src/routes/workflow.ts#L1-L800)
 - [server/src/services/comfyui.ts:1-285](file://server/src/services/comfyui.ts#L1-L285)
 - [server/src/services/sessionManager.ts:1-164](file://server/src/services/sessionManager.ts#L1-L164)
@@ -120,7 +129,7 @@ S->>FS : "保存输出到会话目录"
 S-->>C : "返回 {promptId, clientId, workflowId}"
 ```
 
-图表来源
+**图表来源**
 - [server/src/routes/workflow.ts:407-455](file://server/src/routes/workflow.ts#L407-L455)
 - [server/src/services/comfyui.ts:47-60](file://server/src/services/comfyui.ts#L47-L60)
 - [server/src/index.ts:73-219](file://server/src/index.ts#L73-L219)
@@ -131,7 +140,7 @@ S-->>C : "返回 {promptId, clientId, workflowId}"
 - 工作流 ID 到名称与输出目录的映射由适配器与路由共同维护
 - 通用字段：clientId（必填）、prompt（可选，按工作流是否需要提示词而定）、seed 随机化、模板节点参数注入
 
-章节来源
+**章节来源**
 - [server/src/adapters/Workflow0Adapter.ts:9-34](file://server/src/adapters/Workflow0Adapter.ts#L9-L34)
 - [server/src/adapters/Workflow1Adapter.ts:9-35](file://server/src/adapters/Workflow1Adapter.ts#L9-L35)
 - [server/src/adapters/Workflow2Adapter.ts:9-27](file://server/src/adapters/Workflow2Adapter.ts#L9-L27)
@@ -144,12 +153,12 @@ S-->>C : "返回 {promptId, clientId, workflowId}"
   - POST /api/workflow/0/execute
 - 请求方式
   - 单文件上传：multipart/form-data，字段名为 image
-  - 查询参数或请求体字段：clientId（必填），prompt（可选），model（可选，默认 qwen；支持 klein）
+  - 查询参数或请求体字段：clientId（必填），prompt（可选），model（可选，默认 qwen；支持 klein、kleinpro）
 - 参数说明
   - image：二进制图片文件
   - clientId：客户端标识符（必填）
   - prompt：用户提示词（可选，为空则使用模板默认提示词）
-  - model：模型选择（可选，'qwen' 或 'klein'）
+  - model：模型选择（可选，'qwen'、'klein' 或 'kleinpro'）
 - 响应
   - 返回 promptId、clientId、workflowId、workflowName
 - 文件上传与模板注入
@@ -159,8 +168,10 @@ S-->>C : "返回 {promptId, clientId, workflowId}"
 - 超时与进度
   - 通过 WebSocket 实时接收进度与完成事件；完成后从 ComfyUI 下载输出并保存到会话目录
 
-章节来源
-- [server/src/routes/workflow.ts:312-355](file://server/src/routes/workflow.ts#L312-L355)
+**更新** 新增KleinPro模式支持，提供更高质量的二次元转真人效果。
+
+**章节来源**
+- [server/src/routes/workflow.ts:445-488](file://server/src/routes/workflow.ts#L445-L488)
 - [server/src/adapters/Workflow0Adapter.ts:16-33](file://server/src/adapters/Workflow0Adapter.ts#L16-L33)
 - [server/src/services/comfyui.ts:9-25](file://server/src/services/comfyui.ts#L9-L25)
 
@@ -181,7 +192,7 @@ S-->>C : "返回 {promptId, clientId, workflowId}"
 - 错误处理
   - 同上
 
-章节来源
+**章节来源**
 - [server/src/routes/workflow.ts:407-455](file://server/src/routes/workflow.ts#L407-L455)
 - [server/src/adapters/Workflow1Adapter.ts:16-34](file://server/src/adapters/Workflow1Adapter.ts#L16-L34)
 
@@ -190,11 +201,11 @@ S-->>C : "返回 {promptId, clientId, workflowId}"
   - POST /api/workflow/2/execute
 - 请求方式
   - 单文件上传：multipart/form-data，字段名为 image
-  - 查询参数或请求体字段：clientId（必填），model（可选，默认 seedvr2；支持 klein、sd）
+  - 查询参数或请求体字段：clientId（必填），model（可选，默认 seedvr2；支持 klein、kleinpro、sd、remacri）
 - 参数说明
   - image：二进制图片文件
   - clientId：客户端标识符（必填）
-  - model：模型选择（可选，'seedvr2'、'klein'、'sd'）
+  - model：模型选择（可选，'seedvr2'、'klein'、'kleinpro'、'sd'、'remacri'）
 - 响应
   - 返回 promptId、clientId、workflowId、workflowName
 - 模板注入
@@ -202,8 +213,10 @@ S-->>C : "返回 {promptId, clientId, workflowId}"
 - 错误处理
   - 同上
 
-章节来源
-- [server/src/routes/workflow.ts:357-405](file://server/src/routes/workflow.ts#L357-L405)
+**更新** 新增KleinPro模式支持，提供更高质量的图像放大效果。
+
+**章节来源**
+- [server/src/routes/workflow.ts:490-549](file://server/src/routes/workflow.ts#L490-L549)
 - [server/src/adapters/Workflow2Adapter.ts:16-26](file://server/src/adapters/Workflow2Adapter.ts#L16-L26)
 
 ### 解除装备（Workflow 5）
@@ -225,7 +238,7 @@ S-->>C : "返回 {promptId, clientId, workflowId}"
 - 错误处理
   - 同上
 
-章节来源
+**章节来源**
 - [server/src/routes/workflow.ts:40-92](file://server/src/routes/workflow.ts#L40-L92)
 - [server/src/adapters/Workflow5Adapter.ts:11-13](file://server/src/adapters/Workflow5Adapter.ts#L11-L13)
 
@@ -246,7 +259,7 @@ S-->>C : "返回 {promptId, clientId, workflowId}"
 - 错误处理
   - 同上
 
-章节来源
+**章节来源**
 - [server/src/routes/workflow.ts:407-455](file://server/src/routes/workflow.ts#L407-L455)
 - [server/src/adapters/Workflow3Adapter.ts:16-31](file://server/src/adapters/Workflow3Adapter.ts#L16-L31)
 
@@ -261,7 +274,7 @@ S-->>C : "返回 {promptId, clientId, workflowId}"
 - 错误处理
   - 同上
 
-章节来源
+**章节来源**
 - [server/src/routes/workflow.ts:457-520](file://server/src/routes/workflow.ts#L457-L520)
 
 ### 通用接口（队列与系统）
@@ -280,7 +293,7 @@ S-->>C : "返回 {promptId, clientId, workflowId}"
 - 内存释放
   - POST /api/workflow/release-memory
 
-章节来源
+**章节来源**
 - [server/src/routes/workflow.ts:29-38](file://server/src/routes/workflow.ts#L29-L38)
 - [server/src/routes/workflow.ts:151-179](file://server/src/routes/workflow.ts#L151-L179)
 - [server/src/routes/workflow.ts:522-579](file://server/src/routes/workflow.ts#L522-L579)
@@ -301,7 +314,7 @@ S-->>C : "返回 {promptId, clientId, workflowId}"
   - GET /api/sessions
   - DELETE /api/session/:sessionId
 
-章节来源
+**章节来源**
 - [server/src/routes/output.ts:22-134](file://server/src/routes/output.ts#L22-L134)
 - [server/src/routes/session.ts:18-95](file://server/src/routes/session.ts#L18-L95)
 
@@ -314,7 +327,7 @@ S-->>C : "返回 {promptId, clientId, workflowId}"
 - 客户端注册
   - 客户端连接后需发送注册消息，包含 promptId、workflowId、sessionId、tabId，以便完成后回传输出文件链接
 
-章节来源
+**章节来源**
 - [server/src/index.ts:73-219](file://server/src/index.ts#L73-L219)
 - [server/src/types/index.ts:10-30](file://server/src/types/index.ts#L10-L30)
 
@@ -333,7 +346,7 @@ OUT["输出路由"] --> SM
 IDX["WebSocket 服务器"] --> CUI
 ```
 
-图表来源
+**图表来源**
 - [server/src/routes/workflow.ts:7-10](file://server/src/routes/workflow.ts#L7-L10)
 - [server/src/adapters/index.ts:13-28](file://server/src/adapters/index.ts#L13-L28)
 - [server/src/services/comfyui.ts:127-188](file://server/src/services/comfyui.ts#L127-L188)
@@ -346,7 +359,7 @@ IDX["WebSocket 服务器"] --> CUI
 - 队列优先级调整通过重新入队实现，注意对长队列的影响
 - 系统统计接口用于监控 VRAM/内存占用，便于动态调度
 
-章节来源
+**章节来源**
 - [server/src/routes/workflow.ts:23-27](file://server/src/routes/workflow.ts#L23-L27)
 - [server/src/index.ts:83-90](file://server/src/index.ts#L83-L90)
 - [server/src/services/comfyui.ts:255-284](file://server/src/services/comfyui.ts#L255-L284)
@@ -364,7 +377,7 @@ IDX["WebSocket 服务器"] --> CUI
   - 使用 GET /api/workflow/system-stats 监控资源使用
   - 使用 GET /api/workflow/queue 查看队列状态
 
-章节来源
+**章节来源**
 - [server/src/routes/workflow.ts:407-455](file://server/src/routes/workflow.ts#L407-L455)
 - [server/src/routes/workflow.ts:674-744](file://server/src/routes/workflow.ts#L674-L744)
 - [server/src/services/comfyui.ts:106-125](file://server/src/services/comfyui.ts#L106-L125)
@@ -373,16 +386,50 @@ IDX["WebSocket 服务器"] --> CUI
 ## 结论
 该 API 体系以适配器模式解耦工作流模板与执行逻辑，结合 ComfyUI 的队列与 WebSocket 事件，实现了稳定、可扩展的本地图像/视频处理服务。通过明确的参数规范、错误处理与超时策略，能够满足批量与实时场景的需求。
 
+**更新** 新增KleinPro工作流模式支持，为用户提供更多高质量的渲染选项，包括二次元转真人和精修放大功能的增强版本。
+
 ## 附录
 
 ### API 调用示例
 
+- curl 示例（二次元转真人 - 使用KleinPro模式）
+  - curl -X POST http://localhost:3000/api/workflow/0/execute -F image=@input.png -F clientId="your_client_id" -F model="kleinpro"
+- curl 示例（精修放大 - 使用KleinPro模式）
+  - curl -X POST http://localhost:3000/api/workflow/2/execute -F image=@input.png -F clientId="your_client_id" -F model="kleinpro"
 - curl 示例（二次元转真人）
   - curl -X POST http://localhost:3000/api/workflow/0/execute -F image=@input.png -F clientId="your_client_id" -F prompt="增强细节，保持色调一致"
 - curl 示例（解除装备）
   - curl -X POST http://localhost:3000/api/workflow/5/execute -F image=@img.png -F mask=@mask.png -F clientId="your_client_id" -F backPose=true
 - curl 示例（批量执行）
   - curl -X POST http://localhost:3000/api/workflow/2/batch -F images=@img1.png -F images=@img2.png -F clientId="your_client_id"
+
+- JavaScript fetch 示例（二次元转真人 - 使用KleinPro模式）
+  - ```js
+    const formData = new FormData();
+    formData.append("image", fileInput.files[0]);
+    formData.append("clientId", "your_client_id");
+    formData.append("model", "kleinpro");
+    const resp = await fetch("http://localhost:3000/api/workflow/0/execute", {
+      method: "POST",
+      body: formData,
+    });
+    const data = await resp.json();
+    console.log(data);
+    ```
+
+- JavaScript fetch 示例（精修放大 - 使用KleinPro模式）
+  - ```js
+    const formData = new FormData();
+    formData.append("image", fileInput.files[0]);
+    formData.append("clientId", "your_client_id");
+    formData.append("model", "kleinpro");
+    const resp = await fetch("http://localhost:3000/api/workflow/2/execute", {
+      method: "POST",
+      body: formData,
+    });
+    const data = await resp.json();
+    console.log(data);
+    ```
 
 - JavaScript fetch 示例（二次元转真人）
   - ```js
@@ -417,8 +464,40 @@ IDX["WebSocket 服务器"] --> CUI
   - 连接 ws://localhost:3000/ws 后发送注册消息：
   - {"type":"register","promptId":"...","workflowId":0,"sessionId":"...","tabId":0}
 
-章节来源
+**章节来源**
 - [server/src/routes/workflow.ts:40-92](file://server/src/routes/workflow.ts#L40-L92)
-- [server/src/routes/workflow.ts:312-355](file://server/src/routes/workflow.ts#L312-L355)
+- [server/src/routes/workflow.ts:445-488](file://server/src/routes/workflow.ts#L445-L488)
+- [server/src/routes/workflow.ts:490-549](file://server/src/routes/workflow.ts#L490-L549)
 - [server/src/routes/workflow.ts:457-520](file://server/src/routes/workflow.ts#L457-L520)
 - [server/src/index.ts:192-213](file://server/src/index.ts#L192-L213)
+
+### KleinPro工作流模式详细说明
+
+**新增** KleinPro工作流模式提供了更高质量的渲染效果，适用于二次元转真人和精修放大场景。
+
+#### 支持的工作流
+- 二次元转真人（Workflow 0）
+- 精修放大（Workflow 2）
+
+#### 模型特点
+- 基于Flux2架构的高性能渲染引擎
+- 更精细的细节重建能力
+- 改善的色彩匹配和光影处理
+- 支持更高分辨率的输出质量
+
+#### 请求参数
+- model: "kleinpro"（必填，指定使用KleinPro模式）
+- 其他参数与标准工作流相同
+
+#### 默认提示词
+- 二次元转真人：`"Transform the image to realistic photograph. add realistic details to the corrupted image. restore high frequence details from the corrupted image. 超高清，极致细节，高对比度，清晰的光影细节。"`
+- 精修放大：`"realistic，补充细节，修复画面。超高清，极致细节，高对比度，清晰的光影细节，保持画面色调不变，8K画质。亚洲人。"`
+
+#### 使用场景
+- 需要更高质量渲染效果的二次元转真人任务
+- 对细节和色彩要求更高的图像放大任务
+- 追求更自然真实感的图像处理应用
+
+**章节来源**
+- [server/src/routes/workflow.ts:514-519](file://server/src/routes/workflow.ts#L514-L519)
+- [ComfyUI_API/Pix2Real-Klein重绘Pro.json:214](file://ComfyUI_API/Pix2Real-Klein重绘Pro.json#L214)
