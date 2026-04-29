@@ -8,6 +8,7 @@ import PromptContextMenu from './PromptContextMenu';
 import { SYSTEM_PROMPTS } from './prompt-assistant/systemPrompts.js';
 import { ModelSelect, useModelFavorites } from './ModelSelect.js';
 import { useModelMetadata } from '../hooks/useModelMetadata.js';
+import { showToast } from '../hooks/useToast.js';
 
 const RATIO_PRESETS = [
   { label: '1:1',  width: 1024, height: 1024 },
@@ -182,6 +183,42 @@ export function ZITSidebar({ width }: { width?: number }) {
       }, 0);
     });
   }, [prompt, setPrompt]);
+
+  // Drag-and-drop: apply card config by dropping card onto this sidebar
+  const [isDragOverConfig, setIsDragOverConfig] = useState(false);
+  const dragDepthRef = useRef(0);
+  const applyConfigToSidebar = useWorkflowStore((s) => s.applyConfigToSidebar);
+  const handleConfigDragEnter = useCallback((e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes('application/x-workflow-image')) return;
+    e.preventDefault();
+    dragDepthRef.current += 1;
+    if (dragDepthRef.current === 1) setIsDragOverConfig(true);
+  }, []);
+  const handleConfigDragOver = useCallback((e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes('application/x-workflow-image')) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  }, []);
+  const handleConfigDragLeave = useCallback((e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes('application/x-workflow-image')) return;
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) setIsDragOverConfig(false);
+  }, []);
+  const handleConfigDrop = useCallback((e: React.DragEvent) => {
+    const imageId = e.dataTransfer.getData('application/x-workflow-image');
+    if (!imageId) return;
+    e.preventDefault();
+    e.stopPropagation();
+    dragDepthRef.current = 0;
+    setIsDragOverConfig(false);
+    const config = useWorkflowStore.getState().tabData[9]?.zitConfigs?.[imageId];
+    if (!config) {
+      showToast('该卡片没有可用的生成配置');
+      return;
+    }
+    applyConfigToSidebar(config);
+    showToast('已应用卡片配置');
+  }, [applyConfigToSidebar]);
 
   // Listen for pendingApplyConfig from useWorkflowStore
   const pendingApplyConfig = useWorkflowStore((s) => s.pendingApplyConfig);
@@ -366,15 +403,45 @@ export function ZITSidebar({ width }: { width?: number }) {
   );
 
   return (
-    <div className="sidebar-panel" style={{
-      width: width ?? 260,
-      flexShrink: 0,
-      borderLeft: '1px solid var(--color-border)',
-      backgroundColor: 'var(--color-surface)',
-      display: 'flex',
-      flexDirection: 'column',
-      overflow: 'hidden',
-    }}>
+    <div
+      className="sidebar-panel"
+      onDragEnter={handleConfigDragEnter}
+      onDragOver={handleConfigDragOver}
+      onDragLeave={handleConfigDragLeave}
+      onDrop={handleConfigDrop}
+      style={{
+        width: width ?? 260,
+        flexShrink: 0,
+        borderLeft: '1px solid var(--color-border)',
+        backgroundColor: 'var(--color-surface)',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        position: 'relative',
+        outline: isDragOverConfig ? '2px dashed var(--color-primary)' : 'none',
+        outlineOffset: '-2px',
+        transition: 'outline-color 0.12s',
+      }}
+    >
+      {isDragOverConfig && (
+        <div style={{
+          position: 'absolute',
+          top: 8,
+          left: 8,
+          right: 8,
+          padding: '6px 10px',
+          fontSize: 12,
+          color: 'var(--color-primary)',
+          background: 'rgba(0,0,0,0.55)',
+          border: '1px solid var(--color-primary)',
+          borderRadius: 6,
+          textAlign: 'center',
+          zIndex: 20,
+          pointerEvents: 'none',
+        }}>
+          释放以应用该卡片的生成配置
+        </div>
+      )}
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 0 }}>
 
         {/* UNet Model */}
