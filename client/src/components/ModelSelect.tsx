@@ -123,7 +123,7 @@ export function ModelSelect({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const selectedItemRef = useRef<HTMLDivElement>(null);
-  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [dropdownPos, setDropdownPos] = useState<{ top: number | null; bottom: number | null; left: number; width: number; maxHeight: number } | null>(null);
   const [uploadTargetModel, setUploadTargetModel] = useState<string | null>(null);
   const [editingModel, setEditingModel] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -150,17 +150,28 @@ export function ModelSelect({
   const dropdownMenuStyle = useSettingsStore((s) => s.dropdownMenuStyle);
   const isFastMode = dropdownMenuStyle === 'fast';
 
-  // 计算下拉面板位置（基于触发器按钮）
+  // 计算下拉面板位置（基于触发器按钮，自动上翻）
   useEffect(() => {
     if (!open || !triggerRef.current) return;
     const rect = triggerRef.current.getBoundingClientRect();
     const panelWidth = isFastMode ? Math.max(rect.width, 460) : rect.width;
     // 右对齐：面板右边缘对齐触发器右边缘
     const left = rect.right - panelWidth;
+    const maxPanelHeight = isFastMode ? 520 : 400;
+    const margin = 8;
+    const spaceBelow = window.innerHeight - rect.bottom - margin;
+    const spaceAbove = rect.top - margin;
+    // 当下方空间不足以容纳最小展示高度（240px）且上方更宽敷时向上弹出
+    const minDesired = Math.min(maxPanelHeight, 240);
+    const placeAbove = spaceBelow < minDesired && spaceAbove > spaceBelow;
+    const availableHeight = placeAbove ? spaceAbove : spaceBelow;
+    const maxHeight = Math.max(160, Math.min(maxPanelHeight, availableHeight));
     setDropdownPos({
-      top: rect.bottom + 4,
+      top: placeAbove ? null : rect.bottom + 4,
+      bottom: placeAbove ? window.innerHeight - rect.top + 4 : null,
       left: Math.max(0, left),  // 确保不超出窗口左侧
       width: panelWidth,
+      maxHeight,
     });
   }, [open, isFastMode]);
 
@@ -384,11 +395,12 @@ export function ModelSelect({
 
   const dropdownStyle: React.CSSProperties = {
     position: 'fixed',
-    top: dropdownPos?.top ?? 0,
+    top: dropdownPos?.top ?? undefined,
+    bottom: dropdownPos?.bottom ?? undefined,
     left: dropdownPos?.left ?? 0,
     width: dropdownPos?.width ?? 'auto',
     zIndex: 10000,
-    maxHeight: isFastMode ? 520 : 300,
+    maxHeight: dropdownPos?.maxHeight ?? (isFastMode ? 520 : 400),
     backgroundColor: 'var(--color-surface)',
     border: '1px solid var(--color-border)',
     borderRadius: 6,
@@ -763,39 +775,13 @@ export function ModelSelect({
                 </span>
               </div>
             )}
-            {/* 分类筛选胶囊按钮行 */}
-            {showCategoryBar && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: '6px 8px', marginTop: onUpdateMetadata ? 2 : 0 }}>
-                <CategoryPill
-                  label="全部"
-                  active={selectedCategory === null}
-                  onClick={() => setSelectedCategory(null)}
-                />
-                {allCategories.map((cat) => (
-                  <CategoryPill
-                    key={cat}
-                    label={cat}
-                    active={selectedCategory === cat}
-                    onClick={() => setSelectedCategory(cat)}
-                    color={getCategoryColor(cat)}
-                  />
-                ))}
-                {hasUncategorized && (
-                  <CategoryPill
-                    label="未分类"
-                    active={selectedCategory === '__uncategorized__'}
-                    onClick={() => setSelectedCategory('__uncategorized__')}
-                  />
-                )}
-              </div>
-            )}
             {/* 搜索框 */}
             <div style={{
               display: 'flex',
               alignItems: 'center',
               gap: 6,
               padding: '6px 8px',
-              borderTop: showCategoryBar ? '1px solid var(--color-border)' : 'none',
+              marginTop: onUpdateMetadata ? 2 : 0,
             }}>
               <Search size={13} color="var(--color-text-secondary)" style={{ flexShrink: 0 }} />
               <input
@@ -846,6 +832,32 @@ export function ModelSelect({
                 />
               )}
             </div>
+            {/* 分类筛选胶囊按钮行 */}
+            {showCategoryBar && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: '6px 8px' }}>
+                <CategoryPill
+                  label="全部"
+                  active={selectedCategory === null}
+                  onClick={() => setSelectedCategory(null)}
+                />
+                {allCategories.map((cat) => (
+                  <CategoryPill
+                    key={cat}
+                    label={cat}
+                    active={selectedCategory === cat}
+                    onClick={() => setSelectedCategory(cat)}
+                    color={getCategoryColor(cat)}
+                  />
+                ))}
+                {hasUncategorized && (
+                  <CategoryPill
+                    label="未分类"
+                    active={selectedCategory === '__uncategorized__'}
+                    onClick={() => setSelectedCategory('__uncategorized__')}
+                  />
+                )}
+              </div>
+            )}
           </div>
           {/* 模型列表（可滚动） */}
           <div style={{ overflowY: 'auto', flex: 1 }}>
