@@ -27,6 +27,40 @@ const zitRefDir            = path.resolve(__dirname, '../../../zit_ref');
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
+
+// ── 从图片 Buffer 解析宽高（支持 PNG / JPEG / WebP）───────────────
+function getImageDimensions(buffer: Buffer): { width: number; height: number } | null {
+  // PNG: 签名 89 50，IHDR 从第 16 字节开始，宽高各 4 字节大端序
+  if (buffer[0] === 0x89 && buffer[1] === 0x50) {
+    const width = buffer.readUInt32BE(16);
+    const height = buffer.readUInt32BE(20);
+    return { width, height };
+  }
+  // JPEG: 找 SOF 标记 (0xFF 0xC0–0xCF, 排除 0xC4/0xC8/0xCC)
+  if (buffer[0] === 0xFF && buffer[1] === 0xD8) {
+    let offset = 2;
+    while (offset < buffer.length - 9) {
+      if (buffer[offset] !== 0xFF) { offset++; continue; }
+      const marker = buffer[offset + 1];
+      if (marker >= 0xC0 && marker <= 0xCF && marker !== 0xC4 && marker !== 0xC8 && marker !== 0xCC) {
+        const height = buffer.readUInt16BE(offset + 5);
+        const width = buffer.readUInt16BE(offset + 7);
+        return { width, height };
+      }
+      const len = buffer.readUInt16BE(offset + 2);
+      offset += 2 + len;
+    }
+  }
+  // WebP: RIFF header
+  if (buffer.length > 30 && buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP') {
+    if (buffer.toString('ascii', 12, 16) === 'VP8 ') {
+      const width = buffer.readUInt16LE(26) & 0x3FFF;
+      const height = buffer.readUInt16LE(28) & 0x3FFF;
+      return { width, height };
+    }
+  }
+  return null;
+}
 const uploadFields = multer({ storage: multer.memoryStorage() }).fields([
   { name: 'image', maxCount: 1 },
   { name: 'mask', maxCount: 1 },
@@ -221,6 +255,11 @@ router.post('/7/execute', express.json(), async (req, res) => {
       proTemplate['50'].inputs.image = comfyRefFilename;
       proTemplate['49'].inputs.strength = req.body.depthStrength ?? 0.3;
       proTemplate['57'].inputs.strength = req.body.poseStrength ?? 0.5;
+      // 当用户选择了非原图比例时，用指定的 width/height 覆盖 Node #5
+      if (!req.body.useOriginalRatio && width && height) {
+        proTemplate['5'].inputs.width = width;
+        proTemplate['5'].inputs.height = height;
+      }
       if (name) {
         proTemplate['45'].inputs.filename_prefix = name;
       }
@@ -362,10 +401,12 @@ router.post('/7/ref-image', uploadRefImage, async (req, res) => {
     if (!fs.existsSync(zitRefDir)) fs.mkdirSync(zitRefDir, { recursive: true });
     const ext = path.extname(req.file.originalname) || '.png';
     const filename = `${crypto.randomUUID()}${ext}`;
-    fs.writeFileSync(path.join(zitRefDir, filename), req.file.buffer);
-    res.json({ filename, url: `/api/workflow/7/ref-image/${filename}` });
+    const savePath = path.join(zitRefDir, filename);
+    fs.writeFileSync(savePath, req.file.buffer);
+    const dims = getImageDimensions(req.file.buffer);
+    res.json({ filename, url: `/api/workflow/7/ref-image/${filename}`, width: dims?.width ?? 0, height: dims?.height ?? 0 });
   } catch (err: any) {
-    console.error('[Ref Image Upload Error]', err);
+    console.error('[Workflow 7] ref-image upload error:', err);
     res.status(500).json({ error: String(err) });
   }
 });

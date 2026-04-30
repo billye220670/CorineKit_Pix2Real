@@ -213,17 +213,22 @@ export function ZITSidebar({ width }: { width?: number }) {
     if (dragDepthRef.current === 0) setIsDragOverConfig(false);
   }, []);
   const handleConfigDrop = useCallback((e: React.DragEvent) => {
-    const imageId = e.dataTransfer.getData('application/x-workflow-image');
-    if (!imageId) return;
+    // 最优先：阻止默认行为和事件冒泡
     e.preventDefault();
     e.stopPropagation();
+    
+    // 重置拖拽状态
     dragDepthRef.current = 0;
     setIsDragOverConfig(false);
+
+    const imageId = e.dataTransfer.getData('application/x-workflow-image');
+    if (!imageId) return;
     const config = useWorkflowStore.getState().tabData[9]?.zitConfigs?.[imageId];
     if (!config) {
       showToast('该卡片没有可用的生成配置');
       return;
     }
+    console.log('[ZIT Drop] applying config');
     applyConfigToSidebar(config);
     showToast('已应用卡片配置');
   }, [applyConfigToSidebar]);
@@ -264,6 +269,16 @@ export function ZITSidebar({ width }: { width?: number }) {
       unetModel, loras, shiftEnabled, shift, prompt, ratio, steps, cfg, sampler, scheduler, customName, width: customWidth, height: customHeight,
     }));
   }, [unetModel, loras, shiftEnabled, shift, prompt, ratio, steps, cfg, sampler, scheduler, customName, customWidth, customHeight]);
+
+  // 全局 dragend 防御：确保拖拽结束后清除覆盖层
+  useEffect(() => {
+    const handleGlobalDragEnd = () => {
+      dragDepthRef.current = 0;
+      setIsDragOverConfig(false);
+    };
+    document.addEventListener('dragend', handleGlobalDragEnd);
+    return () => document.removeEventListener('dragend', handleGlobalDragEnd);
+  }, []);
 
   // Default model once loaded (or fallback if saved model not in list)
   useEffect(() => {
@@ -417,6 +432,7 @@ export function ZITSidebar({ width }: { width?: number }) {
       onDragOver={handleConfigDragOver}
       onDragLeave={handleConfigDragLeave}
       onDrop={handleConfigDrop}
+      onDragEnd={() => { dragDepthRef.current = 0; setIsDragOverConfig(false); }}
       style={{
         width: width ?? 260,
         flexShrink: 0,

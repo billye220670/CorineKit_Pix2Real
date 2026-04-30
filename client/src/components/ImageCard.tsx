@@ -1404,6 +1404,21 @@ function ConfigPanel({ activeTab, text2imgConfig, zitConfig, onClose }: {
             <ConfigFieldRow label="CFG">{text2imgConfig.cfg}</ConfigFieldRow>
             <ConfigFieldRow label="采样器">{text2imgConfig.sampler}</ConfigFieldRow>
             <ConfigFieldRow label="调度器">{text2imgConfig.scheduler}</ConfigFieldRow>
+            {text2imgConfig.referenceImage && (
+              <div style={{ marginBottom: '6px' }}>
+                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginBottom: '4px' }}>参考图</div>
+                <img
+                  src={`/api/workflow/7/ref-image/${text2imgConfig.referenceImage}`}
+                  alt="参考图"
+                  style={{ width: '100%', maxHeight: '120px', objectFit: 'contain', borderRadius: '4px' }}
+                />
+                {text2imgConfig.poseStrength !== undefined && (
+                  <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginTop: '2px' }}>
+                    姿势: {text2imgConfig.poseStrength?.toFixed(2)} / 深度: {text2imgConfig.depthStrength?.toFixed(2)}
+                  </div>
+                )}
+              </div>
+            )}
           </>
         ) : activeTab === 9 && zitConfig ? (
           <>

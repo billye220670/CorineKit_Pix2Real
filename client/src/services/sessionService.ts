@@ -21,6 +21,8 @@ export interface Text2ImgConfig {
   referenceImage?: string;    // zit_ref/ 中的文件名
   poseStrength?: number;      // 默认 0.5
   depthStrength?: number;     // 默认 0.3
+  refImageWidth?: number;     // 参考图原始宽度
+  refImageHeight?: number;    // 参考图原始高度
 }
 
 export interface ZitConfig {

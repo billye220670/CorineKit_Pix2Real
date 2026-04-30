@@ -237,12 +237,14 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
     if (dragDepthRef.current === 0) setIsDragOverConfig(false);
   }, []);
   const handleConfigDrop = useCallback((e: React.DragEvent) => {
-    const imageId = e.dataTransfer.getData('application/x-workflow-image');
-    if (!imageId) return;
     e.preventDefault();
     e.stopPropagation();
     dragDepthRef.current = 0;
     setIsDragOverConfig(false);
+
+    const imageId = e.dataTransfer.getData('application/x-workflow-image');
+    if (!imageId) return;
+
     const config = useWorkflowStore.getState().tabData[7]?.text2imgConfigs?.[imageId];
     if (!config) {
       showToast('该卡片没有可用的生成配置');
