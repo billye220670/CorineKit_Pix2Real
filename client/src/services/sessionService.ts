@@ -18,6 +18,9 @@ export interface Text2ImgConfig {
   cfg: number;
   sampler: string;
   scheduler: string;
+  referenceImage?: string;    // zit_ref/ 中的文件名
+  poseStrength?: number;      // 默认 0.5
+  depthStrength?: number;     // 默认 0.3
 }
 
 export interface ZitConfig {

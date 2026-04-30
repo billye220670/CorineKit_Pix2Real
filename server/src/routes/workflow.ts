@@ -1,4 +1,5 @@
 import express, { Router } from 'express';
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -21,6 +22,8 @@ const kleinTemplatePath    = path.resolve(__dirname, '../../../ComfyUI_API/Pix2R
 const kleinProTemplatePath  = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-Klein重绘Pro.json');
 const sdUpscaleTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-SD放大.json');
 const zitTemplatePath      = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-ZIT文生图NEW2.json');
+const text2imgProTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/二次元生成 (PRO).json');
+const zitRefDir            = path.resolve(__dirname, '../../../zit_ref');
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -195,6 +198,43 @@ router.post('/7/execute', express.json(), async (req, res) => {
       return;
     }
 
+    // ── PRO 工作流分支：当包含 referenceImage 时使用二次元生成 (PRO) 模板 ──
+    const referenceImage: string | undefined = req.body.referenceImage;
+    if (referenceImage) {
+      const refPath = path.join(zitRefDir, path.basename(referenceImage));
+      if (!fs.existsSync(refPath)) {
+        res.status(400).json({ error: '参考图文件不存在' });
+        return;
+      }
+      const refBuffer = fs.readFileSync(refPath);
+      const comfyRefFilename = await uploadImage(refBuffer, referenceImage);
+
+      const proTemplate = JSON.parse(fs.readFileSync(text2imgProTemplatePath, 'utf-8'));
+      proTemplate['4'].inputs.ckpt_name = model;
+      proTemplate['3'].inputs.seed = Math.floor(Math.random() * 2 ** 32);
+      proTemplate['3'].inputs.steps = steps;
+      proTemplate['3'].inputs.cfg = cfg;
+      proTemplate['3'].inputs.sampler_name = sampler;
+      proTemplate['3'].inputs.scheduler = scheduler;
+      proTemplate['39'].inputs.prompt = prompt;
+      proTemplate['64'].inputs.prompt = negativePrompt || '';
+      proTemplate['50'].inputs.image = comfyRefFilename;
+      proTemplate['49'].inputs.strength = req.body.depthStrength ?? 0.3;
+      proTemplate['57'].inputs.strength = req.body.poseStrength ?? 0.5;
+      if (name) {
+        proTemplate['45'].inputs.filename_prefix = name;
+      }
+
+      const result = await queuePrompt(proTemplate, clientId);
+      res.json({
+        promptId: result.prompt_id,
+        clientId,
+        workflowId: 7,
+        workflowName: '快速出图(PRO)',
+      });
+      return;
+    }
+
     const template = JSON.parse(fs.readFileSync(text2imgTemplatePath, 'utf-8'));
 
     // Node 4: checkpoint model
@@ -307,6 +347,52 @@ router.get('/models/loras', async (_req, res) => {
   } catch {
     res.status(502).json([]);
   }
+});
+
+// ── Tab 7 参考图管理 ─────────────────────────────────────────────
+const uploadRefImage = multer({ storage: multer.memoryStorage() }).single('image');
+
+// POST /api/workflow/7/ref-image — 上传参考图
+router.post('/7/ref-image', uploadRefImage, async (req, res) => {
+  try {
+    if (!req.file) {
+      res.status(400).json({ error: 'No image file provided' });
+      return;
+    }
+    if (!fs.existsSync(zitRefDir)) fs.mkdirSync(zitRefDir, { recursive: true });
+    const ext = path.extname(req.file.originalname) || '.png';
+    const filename = `${crypto.randomUUID()}${ext}`;
+    fs.writeFileSync(path.join(zitRefDir, filename), req.file.buffer);
+    res.json({ filename, url: `/api/workflow/7/ref-image/${filename}` });
+  } catch (err: any) {
+    console.error('[Ref Image Upload Error]', err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// GET /api/workflow/7/ref-image/:filename — 提供参考图访问
+router.get('/7/ref-image/:filename', (req, res) => {
+  const filePath = path.join(zitRefDir, path.basename(req.params.filename));
+  if (!fs.existsSync(filePath)) {
+    res.status(404).json({ error: 'File not found' });
+    return;
+  }
+  const ext = path.extname(filePath).toLowerCase();
+  const mimeMap: Record<string, string> = {
+    '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp',
+  };
+  res.setHeader('Content-Type', mimeMap[ext] || 'application/octet-stream');
+  res.send(fs.readFileSync(filePath));
+});
+
+// DELETE /api/workflow/7/ref-image/:filename — 删除参考图
+router.delete('/7/ref-image/:filename', (req, res) => {
+  const filePath = path.join(zitRefDir, path.basename(req.params.filename));
+  try {
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  } catch { /* ignore */ }
+  res.json({ ok: true });
 });
 
 // POST /api/workflow/9/execute — ZIT快出: text-to-image with UNet + LoRA, JSON body (no file upload)

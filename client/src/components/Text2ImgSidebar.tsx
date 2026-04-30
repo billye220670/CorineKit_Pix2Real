@@ -3,7 +3,7 @@ import { useWorkflowStore, type Text2ImgConfig } from '../hooks/useWorkflowStore
 import { type LoraSlot } from '../services/sessionService.js';
 import { usePromptAssistantStore } from '../hooks/usePromptAssistantStore.js';
 import { useWebSocket } from '../hooks/useWebSocket.js';
-import { ChevronRight, ChevronDown, Loader, BookText, Hash, AlignLeft, Wand2, Loader2, AlertTriangle, Plus, Trash2 } from 'lucide-react';
+import { ChevronRight, ChevronDown, Loader, BookText, Hash, AlignLeft, Wand2, Loader2, AlertTriangle, Plus, Trash2, Upload, RefreshCw, X } from 'lucide-react';
 import { SYSTEM_PROMPTS } from './prompt-assistant/systemPrompts.js';
 import { ModelSelect, useModelFavorites } from './ModelSelect.js';
 import { useModelMetadata } from '../hooks/useModelMetadata.js';
@@ -125,6 +125,11 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
   const [scheduler,  setScheduler]  = useState(() => readDraft().scheduler ?? 'normal');
   const [customName, setCustomName] = useState(() => readDraft().customName ?? '');
   const [samplerOpen, setSamplerOpen] = useState(false);
+  const [refOpen, setRefOpen] = useState(false);
+  const [referenceImage, setReferenceImage] = useState<string | null>(() => readDraft().referenceImage ?? null);
+  const [poseStrength, setPoseStrength] = useState(() => readDraft().poseStrength ?? 0.5);
+  const [depthStrength, setDepthStrength] = useState(() => readDraft().depthStrength ?? 0.3);
+  const refFileInputRef = useRef<HTMLInputElement>(null);
   const [batchCount, setBatchCount] = useState(1);
   const [isGenerating, setIsGenerating] = useState(false);
   const [promptFocused, setPromptFocused] = useState(false);
@@ -272,14 +277,24 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
       }
       setCustomWidth(c.width ?? 832);
       setCustomHeight(c.height ?? 1216);
+      if (c.referenceImage) {
+        setReferenceImage(c.referenceImage);
+        setPoseStrength(c.poseStrength ?? 0.5);
+        setDepthStrength(c.depthStrength ?? 0.3);
+        setRefOpen(true);
+      } else {
+        setReferenceImage(null);
+        setPoseStrength(0.5);
+        setDepthStrength(0.3);
+      }
       clearPendingApplyConfig();
     }
   }, [pendingApplyConfig, clearPendingApplyConfig]);
 
   // Persist config to localStorage whenever it changes
   useEffect(() => {
-    localStorage.setItem(DRAFT_KEY, JSON.stringify({ model, loras, prompt, negativePrompt, ratio, steps, cfg, sampler, scheduler, customName, width: customWidth, height: customHeight }));
-  }, [model, loras, prompt, negativePrompt, ratio, steps, cfg, sampler, scheduler, customName, customWidth, customHeight]);
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({ model, loras, prompt, negativePrompt, ratio, steps, cfg, sampler, scheduler, customName, width: customWidth, height: customHeight, referenceImage, poseStrength, depthStrength }));
+  }, [model, loras, prompt, negativePrompt, ratio, steps, cfg, sampler, scheduler, customName, customWidth, customHeight, referenceImage, poseStrength, depthStrength]);
 
   // Default model once loaded (only if none was saved or saved model not in list)
   useEffect(() => {
@@ -300,6 +315,43 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
 
   const selectedPreset = RATIO_PRESETS.find((p) => p.label === ratio);
 
+  // ── Reference image handlers ───────────────────────────────────────────────
+  const handleRefImageUpload = useCallback(async (file: File) => {
+    const formData = new FormData();
+    formData.append('image', file);
+    try {
+      const res = await fetch('/api/workflow/7/ref-image', { method: 'POST', body: formData });
+      if (!res.ok) { showToast('上传参考图失败'); return; }
+      const data = await res.json();
+      if (referenceImage) {
+        await fetch(`/api/workflow/7/ref-image/${referenceImage}`, { method: 'DELETE' }).catch(() => {});
+      }
+      setReferenceImage(data.filename);
+    } catch {
+      showToast('上传参考图失败');
+    }
+  }, [referenceImage]);
+
+  const handleRefImageDelete = useCallback(async () => {
+    if (referenceImage) {
+      await fetch(`/api/workflow/7/ref-image/${referenceImage}`, { method: 'DELETE' }).catch(() => {});
+      setReferenceImage(null);
+    }
+  }, [referenceImage]);
+
+  const handleRefFilePick = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleRefImageUpload(file);
+    e.target.value = '';
+  }, [handleRefImageUpload]);
+
+  const handleRefDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const file = e.dataTransfer.files?.[0];
+    if (file && file.type.startsWith('image/')) handleRefImageUpload(file);
+  }, [handleRefImageUpload]);
+
   const handleGenerate = useCallback(async () => {
     if (!clientId || isGenerating) return;
 
@@ -314,6 +366,7 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
       cfg,
       sampler,
       scheduler,
+      ...(referenceImage ? { referenceImage, poseStrength, depthStrength } : {}),
     };
 
     // Build base name: user input or auto timestamp
@@ -349,7 +402,7 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
     } finally {
       setIsGenerating(false);
     }
-  }, [clientId, isGenerating, model, models, loras, loraModels, prompt, negativePrompt, selectedPreset, customWidth, customHeight, steps, cfg, sampler, scheduler, customName, batchCount, addText2ImgCard, startTask, sendMessage, sessionId]);
+  }, [clientId, isGenerating, model, models, loras, loraModels, prompt, negativePrompt, selectedPreset, customWidth, customHeight, steps, cfg, sampler, scheduler, customName, batchCount, addText2ImgCard, startTask, sendMessage, sessionId, referenceImage, poseStrength, depthStrength]);
 
   const handleQuickAction = useCallback(async (mode: 'naturalToTags' | 'tagsToNatural' | 'detailer') => {
     if (!prompt.trim()) return;
@@ -973,6 +1026,139 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
               </button>
             </div>
           </div>
+        </div>
+
+        <div style={dividerStyle} />
+
+        {/* 图像参考 */}
+        <div style={{ ...cardStyle, paddingTop: 16, paddingBottom: 16 }}>
+          <button
+            onClick={() => setRefOpen((v) => !v)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              cursor: 'pointer',
+              color: 'var(--color-text-secondary)',
+              fontSize: '12px',
+              fontWeight: 600,
+              letterSpacing: '0.02em',
+              marginBottom: refOpen ? 10 : 0,
+            }}
+          >
+            {refOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+            图像参考
+          </button>
+
+          {refOpen && (
+            <div>
+              <input
+                ref={refFileInputRef}
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                onChange={handleRefFilePick}
+              />
+              {!referenceImage ? (
+                <div
+                  onClick={() => refFileInputRef.current?.click()}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={handleRefDrop}
+                  style={{
+                    border: '2px dashed rgba(255,255,255,0.3)',
+                    borderRadius: 8,
+                    textAlign: 'center',
+                    cursor: 'pointer',
+                    padding: '24px 12px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 8,
+                  }}
+                >
+                  <Upload size={24} color="var(--color-text-secondary)" />
+                  <span style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>点击上传或拖拽图片</span>
+                </div>
+              ) : (
+                <div style={{ position: 'relative', borderRadius: 8, overflow: 'hidden' }}>
+                  <img
+                    src={`/api/workflow/7/ref-image/${referenceImage}`}
+                    alt="参考图"
+                    style={{ width: '100%', borderRadius: 8, display: 'block' }}
+                  />
+                  <div style={{
+                    position: 'absolute',
+                    top: 6,
+                    right: 6,
+                    display: 'flex',
+                    gap: 4,
+                  }}>
+                    <button
+                      onClick={() => refFileInputRef.current?.click()}
+                      title="替换图片"
+                      style={{
+                        width: 24, height: 24, borderRadius: 6,
+                        background: 'rgba(0,0,0,0.55)',
+                        border: 'none', cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: '#fff',
+                      }}
+                    >
+                      <RefreshCw size={12} />
+                    </button>
+                    <button
+                      onClick={handleRefImageDelete}
+                      title="删除图片"
+                      style={{
+                        width: 24, height: 24, borderRadius: 6,
+                        background: 'rgba(0,0,0,0.55)',
+                        border: 'none', cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: '#fff',
+                      }}
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* 姿势参考 */}
+              <div style={{ marginTop: 12, opacity: referenceImage ? 1 : 0.4 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>姿势参考</span>
+                  <span style={{ fontSize: '12px', color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}>{poseStrength.toFixed(2)}</span>
+                </div>
+                <input
+                  type="range"
+                  min={0} max={1} step={0.05}
+                  value={poseStrength}
+                  disabled={!referenceImage}
+                  onChange={(e) => setPoseStrength(Number(e.target.value))}
+                  style={{ width: '100%', accentColor: 'var(--color-primary)' }}
+                />
+              </div>
+
+              {/* 深度参考 */}
+              <div style={{ marginTop: 10, opacity: referenceImage ? 1 : 0.4 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>深度参考</span>
+                  <span style={{ fontSize: '12px', color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}>{depthStrength.toFixed(2)}</span>
+                </div>
+                <input
+                  type="range"
+                  min={0} max={1} step={0.05}
+                  value={depthStrength}
+                  disabled={!referenceImage}
+                  onChange={(e) => setDepthStrength(Number(e.target.value))}
+                  style={{ width: '100%', accentColor: 'var(--color-primary)' }}
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         <div style={dividerStyle} />
