@@ -127,6 +127,7 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
   const [samplerOpen, setSamplerOpen] = useState(false);
   const [refOpen, setRefOpen] = useState(false);
   const [referenceImage, setReferenceImage] = useState<string | null>(() => readDraft().referenceImage ?? null);
+  const [refImageSize, setRefImageSize] = useState<{ width: number; height: number } | null>(() => readDraft().refImageSize ?? null);
   const [poseStrength, setPoseStrength] = useState(() => readDraft().poseStrength ?? 0.5);
   const [depthStrength, setDepthStrength] = useState(() => readDraft().depthStrength ?? 0.3);
   const refFileInputRef = useRef<HTMLInputElement>(null);
@@ -284,10 +285,16 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
         setPoseStrength(c.poseStrength ?? 0.5);
         setDepthStrength(c.depthStrength ?? 0.3);
         setRefOpen(true);
+        if ((c as any).refImageSize) {
+          setRefImageSize((c as any).refImageSize);
+        }
       } else {
         setReferenceImage(null);
+        setRefImageSize(null);
         setPoseStrength(0.5);
         setDepthStrength(0.3);
+        // If currently on 'original', switch to default
+        setRatio((prev: string) => prev === 'original' ? '3:4' : prev);
       }
       clearPendingApplyConfig();
     }
@@ -295,8 +302,8 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
 
   // Persist config to localStorage whenever it changes
   useEffect(() => {
-    localStorage.setItem(DRAFT_KEY, JSON.stringify({ model, loras, prompt, negativePrompt, ratio, steps, cfg, sampler, scheduler, customName, width: customWidth, height: customHeight, referenceImage, poseStrength, depthStrength }));
-  }, [model, loras, prompt, negativePrompt, ratio, steps, cfg, sampler, scheduler, customName, customWidth, customHeight, referenceImage, poseStrength, depthStrength]);
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({ model, loras, prompt, negativePrompt, ratio, steps, cfg, sampler, scheduler, customName, width: customWidth, height: customHeight, referenceImage, refImageSize, poseStrength, depthStrength }));
+  }, [model, loras, prompt, negativePrompt, ratio, steps, cfg, sampler, scheduler, customName, customWidth, customHeight, referenceImage, refImageSize, poseStrength, depthStrength]);
 
   // Default model once loaded (only if none was saved or saved model not in list)
   useEffect(() => {
@@ -315,7 +322,7 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
     }
   }, [loraModels]);
 
-  const selectedPreset = RATIO_PRESETS.find((p) => p.label === ratio);
+  const selectedPreset = ratio === 'original' ? undefined : RATIO_PRESETS.find((p) => p.label === ratio);
 
   // ── Reference image handlers ───────────────────────────────────────────────
   const handleRefImageUpload = useCallback(async (file: File) => {
@@ -325,21 +332,24 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
       const res = await fetch('/api/workflow/7/ref-image', { method: 'POST', body: formData });
       if (!res.ok) { showToast('上传参考图失败'); return; }
       const data = await res.json();
-      if (referenceImage) {
-        await fetch(`/api/workflow/7/ref-image/${referenceImage}`, { method: 'DELETE' }).catch(() => {});
-      }
       setReferenceImage(data.filename);
+      if (data.width && data.height) {
+        setRefImageSize({ width: data.width, height: data.height });
+        setRatio('original');
+        setCustomWidth(data.width);
+        setCustomHeight(data.height);
+      }
     } catch {
       showToast('上传参考图失败');
     }
   }, [referenceImage]);
 
-  const handleRefImageDelete = useCallback(async () => {
-    if (referenceImage) {
-      await fetch(`/api/workflow/7/ref-image/${referenceImage}`, { method: 'DELETE' }).catch(() => {});
-      setReferenceImage(null);
-    }
-  }, [referenceImage]);
+  const handleRefImageDelete = useCallback(() => {
+    setReferenceImage(null);
+    setRefImageSize(null);
+    setRatio((prev: string) => prev === 'original' ? '3:4' : prev);
+    if (ratio === 'original') { setCustomWidth(832); setCustomHeight(1216); }
+  }, [ratio]);
 
   const handleRefFilePick = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -368,7 +378,7 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
       cfg,
       sampler,
       scheduler,
-      ...(referenceImage ? { referenceImage, poseStrength, depthStrength } : {}),
+      ...(referenceImage ? { referenceImage, poseStrength, depthStrength, useOriginalRatio: ratio === 'original' } : {}),
     };
 
     // Build base name: user input or auto timestamp
@@ -1169,6 +1179,23 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
         <div style={{ ...cardStyle, paddingTop: 16, paddingBottom: 16 }}>
           <div style={sectionLabelStyle}>比例</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {referenceImage && refImageSize && (
+              <button
+                key="original"
+                style={{
+                  ...pillBtn(ratio === 'original'),
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minWidth: 52,
+                  height: 52,
+                  padding: '4px 6px',
+                }}
+                onClick={() => { setRatio('original'); setCustomWidth(refImageSize.width); setCustomHeight(refImageSize.height); }}
+              >
+                <span style={{ fontSize: 12 }}>auto</span>
+              </button>
+            )}
             {RATIO_PRESETS.map((p) => {
               const active = ratio === p.label;
               const maxSize = p.width === p.height ? 19 : 24;
