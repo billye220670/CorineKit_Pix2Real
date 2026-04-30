@@ -73,13 +73,14 @@ export function ZITSidebar({ width }: { width?: number }) {
   const [unetLoading, setUnetLoading]       = useState(false);
 
   useEffect(() => {
+    if (!clientId) return;
     setUnetLoading(true);
     fetch('/api/workflow/models/unets')
       .then((r) => r.json())
       .then((data: string[]) => setUnetModels(data))
       .catch(() => {})
       .finally(() => setUnetLoading(false));
-  }, []);
+  }, [clientId]);
 
   // LoRA model list
   const [loraModels, setLoraModels]         = useState<string[]>([]);
@@ -91,13 +92,14 @@ export function ZITSidebar({ width }: { width?: number }) {
   const { metadata, uploadThumbnail, setNickname, setTriggerWords, getThumbnailUrl, getTriggerWords, getNickname, setCategory, deleteCategory, updateMetadataFields } = useModelMetadata();
 
   useEffect(() => {
+    if (!clientId) return;
     setLoraListLoading(true);
     fetch('/api/workflow/models/loras')
       .then((r) => r.json())
       .then((data: string[]) => setLoraModels(data))
       .catch(() => {})
       .finally(() => setLoraListLoading(false));
-  }, []);
+  }, [clientId]);
 
   // Config state — initialised from localStorage draft
   const [unetModel,   setUnetModel]   = useState(() => readDraft().unetModel   ?? '');

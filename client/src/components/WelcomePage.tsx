@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
+import { useWorkflowStore } from '../hooks/useWorkflowStore.js';
 import { Plus, X, Pencil, Check, Image } from 'lucide-react';
 import {
   listSessions,
@@ -93,8 +94,11 @@ export function WelcomePage({ onNewSession, onEnterApp }: WelcomePageProps) {
   const [namingNew, setNamingNew] = useState(false);
   const [newName, setNewName] = useState('');
   const newNameInputRef = useRef<HTMLInputElement>(null);
+  const clientId = useWorkflowStore((s) => s.clientId);
 
   useEffect(() => {
+    if (!clientId) return;
+    setLoading(true);
     void (async () => {
       try {
         const metas = await listSessions();
@@ -117,7 +121,7 @@ export function WelcomePage({ onNewSession, onEnterApp }: WelcomePageProps) {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [clientId]);
 
   useEffect(() => {
     if (renamingId && renameInputRef.current) {

@@ -81,22 +81,24 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
   const [loraListLoading, setLoraListLoading] = useState(false);
 
   useEffect(() => {
+    if (!clientId) return;
     setLoraListLoading(true);
     fetch('/api/workflow/models/loras')
       .then((r) => r.json())
       .then((data: string[]) => setLoraModels(data))
       .catch(() => {})
       .finally(() => setLoraListLoading(false));
-  }, []);
+  }, [clientId]);
 
   useEffect(() => {
+    if (!clientId) return;
     setModelsLoading(true);
     fetch('/api/workflow/models/checkpoints')
       .then((r) => r.json())
       .then((data: string[]) => { setModels(data); })
       .catch(() => {})
       .finally(() => setModelsLoading(false));
-  }, []);
+  }, [clientId]);
 
   // Config state — initialised from localStorage draft so tab switches don't reset values
   const [model,      setModel]      = useState(() => readDraft().model     ?? '');

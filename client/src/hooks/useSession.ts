@@ -383,6 +383,11 @@ export function useSession(): UseSessionReturn {
       } catch (err) {
         console.warn('[Session] Failed to restore session:', err);
         isRestoring.current = false;
+        // 即使请求失败，仍然尊重 startupBehavior 设置
+        const fallbackBehavior = useSettingsStore.getState().startupBehavior;
+        if (fallbackBehavior === 'welcome') {
+          setShowWelcome(true);
+        }
       }
     })();
     // Only on mount
