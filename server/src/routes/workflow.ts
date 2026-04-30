@@ -28,6 +28,62 @@ const zitRefDir            = path.resolve(__dirname, '../../../zit_ref');
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
+/**
+ * 处理 LoRA 节点的赋值和动态重连
+ * @param template - 工作流 JSON 模板
+ * @param loraNodeIds - LoRA 节点 ID 数组
+ * @param loras - 用户的 LoRA 配置数组
+ * @param checkpointNodeId - Checkpoint 节点 ID
+ * @param outputNodes - 需要接收 LoRA 输出的节点映射
+ */
+function applyLoraChain(
+  template: any,
+  loraNodeIds: string[],
+  loras: Array<{ model: string; enabled: boolean; strength: number }>,
+  checkpointNodeId: string,
+  outputNodes: Array<{ nodeId: string; field: 'model' | 'clip'; slot: number }>
+): void {
+  // Set lora_name and strength for each LoRA node
+  loras.forEach((lora, i) => {
+    if (i < loraNodeIds.length) {
+      template[loraNodeIds[i]].inputs.lora_name = lora.model;
+      template[loraNodeIds[i]].inputs.strength_model = lora.strength;
+      template[loraNodeIds[i]].inputs.strength_clip = lora.strength;
+    }
+  });
+
+  // Find enabled LoRA indices
+  const modelSource: [string, number] = [checkpointNodeId, 0];
+  const clipSource: [string, number] = [checkpointNodeId, 1];
+  const enabledIndices = loras.map((l, i) => l.enabled ? i : -1).filter(i => i >= 0 && i < loraNodeIds.length);
+
+  if (enabledIndices.length === 0) {
+    // All disabled: output nodes connect directly to Checkpoint
+    for (const out of outputNodes) {
+      template[out.nodeId].inputs[out.field] = out.slot === 0 ? modelSource : clipSource;
+    }
+  } else {
+    // First enabled LoRA connects to Checkpoint
+    const firstIdx = enabledIndices[0];
+    template[loraNodeIds[firstIdx]].inputs.model = modelSource;
+    template[loraNodeIds[firstIdx]].inputs.clip = clipSource;
+
+    // Chain enabled LoRAs together
+    for (let k = 1; k < enabledIndices.length; k++) {
+      const curr = enabledIndices[k];
+      const prev = enabledIndices[k - 1];
+      template[loraNodeIds[curr]].inputs.model = [loraNodeIds[prev], 0];
+      template[loraNodeIds[curr]].inputs.clip = [loraNodeIds[prev], 1];
+    }
+
+    // Last enabled LoRA outputs to downstream nodes
+    const lastIdx = enabledIndices[enabledIndices.length - 1];
+    for (const out of outputNodes) {
+      template[out.nodeId].inputs[out.field] = [loraNodeIds[lastIdx], out.slot];
+    }
+  }
+}
+
 // ── 从图片 Buffer 解析宽高（支持 PNG / JPEG / WebP）───────────────
 function getImageDimensions(buffer: Buffer): { width: number; height: number } | null {
   // PNG: 签名 89 50，IHDR 从第 16 字节开始，宽高各 4 字节大端序
@@ -264,6 +320,20 @@ router.post('/7/execute', express.json(), async (req, res) => {
         proTemplate['45'].inputs.filename_prefix = name;
       }
 
+      // LoRA handling for PRO workflow (nodes 70-74)
+      const proLoras = loras && loras.length > 0 ? loras : [];
+      applyLoraChain(
+        proTemplate,
+        ['70', '71', '72', '73', '74'],
+        proLoras,
+        '4',
+        [
+          { nodeId: '3', field: 'model', slot: 0 },
+          { nodeId: '6', field: 'clip', slot: 1 },
+          { nodeId: '7', field: 'clip', slot: 1 },
+        ]
+      );
+
       const result = await queuePrompt(proTemplate, clientId);
       res.json({
         promptId: result.prompt_id,
@@ -301,48 +371,18 @@ router.post('/7/execute', express.json(), async (req, res) => {
     }
 
     // LoRA handling: nodes 50, 51, 52, 53, 54 chained from Checkpoint #4
-    const tab7LoraNodeIds = ['50', '51', '52', '53', '54'];
     const tab7Loras = loras && loras.length > 0 ? loras : [];
-
-    // Set lora_name and strength for each LoRA node
-    tab7Loras.forEach((lora, i) => {
-      if (i < tab7LoraNodeIds.length) {
-        template[tab7LoraNodeIds[i]].inputs.lora_name = lora.model;
-        template[tab7LoraNodeIds[i]].inputs.strength_model = lora.strength;
-        template[tab7LoraNodeIds[i]].inputs.strength_clip = lora.strength;
-      }
-    });
-
-    // Dynamic reconnection: bypass disabled LoRAs
-    const tab7ModelSource: [string, number] = ['4', 0];
-    const tab7ClipSource: [string, number] = ['4', 1];
-    const tab7EnabledIndices = tab7Loras.map((l, i) => l.enabled ? i : -1).filter(i => i >= 0 && i < tab7LoraNodeIds.length);
-
-    if (tab7EnabledIndices.length === 0) {
-      // All disabled: KSampler and CLIPTextEncode nodes connect directly to Checkpoint
-      template['3'].inputs.model = tab7ModelSource;
-      template['6'].inputs.clip = tab7ClipSource;
-      template['7'].inputs.clip = tab7ClipSource;
-    } else {
-      // First enabled LoRA connects to source
-      const firstIdx = tab7EnabledIndices[0];
-      template[tab7LoraNodeIds[firstIdx]].inputs.model = tab7ModelSource;
-      template[tab7LoraNodeIds[firstIdx]].inputs.clip = tab7ClipSource;
-
-      // Chain enabled LoRAs together
-      for (let k = 1; k < tab7EnabledIndices.length; k++) {
-        const curr = tab7EnabledIndices[k];
-        const prev = tab7EnabledIndices[k - 1];
-        template[tab7LoraNodeIds[curr]].inputs.model = [tab7LoraNodeIds[prev], 0];
-        template[tab7LoraNodeIds[curr]].inputs.clip = [tab7LoraNodeIds[prev], 1];
-      }
-
-      // Last enabled LoRA outputs to KSampler and CLIPTextEncode nodes
-      const lastIdx = tab7EnabledIndices[tab7EnabledIndices.length - 1];
-      template['3'].inputs.model = [tab7LoraNodeIds[lastIdx], 0];
-      template['6'].inputs.clip = [tab7LoraNodeIds[lastIdx], 1];
-      template['7'].inputs.clip = [tab7LoraNodeIds[lastIdx], 1];
-    }
+    applyLoraChain(
+      template,
+      ['50', '51', '52', '53', '54'],
+      tab7Loras,
+      '4',
+      [
+        { nodeId: '3', field: 'model', slot: 0 },
+        { nodeId: '6', field: 'clip', slot: 1 },
+        { nodeId: '7', field: 'clip', slot: 1 },
+      ]
+    );
 
     const result = await queuePrompt(template, clientId);
 

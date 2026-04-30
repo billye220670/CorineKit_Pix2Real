@@ -8,7 +8,7 @@
       "scheduler": "normal",
       "denoise": 1,
       "model": [
-        "4",
+        "74",
         0
       ],
       "positive": [
@@ -62,7 +62,7 @@
         0
       ],
       "clip": [
-        "4",
+        "74",
         1
       ]
     },
@@ -78,7 +78,7 @@
         0
       ],
       "clip": [
-        "4",
+        "74",
         1
       ]
     },
@@ -322,6 +322,101 @@
     "class_type": "CR Prompt Text",
     "_meta": {
       "title": "前缀可修改"
+    }
+  },
+  "70": {
+    "inputs": {
+      "lora_name": "placeholder.safetensors",
+      "strength_model": 1,
+      "strength_clip": 1,
+      "model": [
+        "4",
+        0
+      ],
+      "clip": [
+        "4",
+        1
+      ]
+    },
+    "class_type": "LoraLoader",
+    "_meta": {
+      "title": "加载LoRA"
+    }
+  },
+  "71": {
+    "inputs": {
+      "lora_name": "placeholder.safetensors",
+      "strength_model": 1,
+      "strength_clip": 1,
+      "model": [
+        "70",
+        0
+      ],
+      "clip": [
+        "70",
+        1
+      ]
+    },
+    "class_type": "LoraLoader",
+    "_meta": {
+      "title": "加载LoRA 2"
+    }
+  },
+  "72": {
+    "inputs": {
+      "lora_name": "placeholder.safetensors",
+      "strength_model": 1,
+      "strength_clip": 1,
+      "model": [
+        "71",
+        0
+      ],
+      "clip": [
+        "71",
+        1
+      ]
+    },
+    "class_type": "LoraLoader",
+    "_meta": {
+      "title": "加载LoRA 3"
+    }
+  },
+  "73": {
+    "inputs": {
+      "lora_name": "placeholder.safetensors",
+      "strength_model": 1,
+      "strength_clip": 1,
+      "model": [
+        "72",
+        0
+      ],
+      "clip": [
+        "72",
+        1
+      ]
+    },
+    "class_type": "LoraLoader",
+    "_meta": {
+      "title": "加载LoRA 4"
+    }
+  },
+  "74": {
+    "inputs": {
+      "lora_name": "placeholder.safetensors",
+      "strength_model": 1,
+      "strength_clip": 1,
+      "model": [
+        "73",
+        0
+      ],
+      "clip": [
+        "73",
+        1
+      ]
+    },
+    "class_type": "LoraLoader",
+    "_meta": {
+      "title": "加载LoRA 5"
     }
   }
 }
