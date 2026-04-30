@@ -285,8 +285,22 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
         setPoseStrength(c.poseStrength ?? 0.5);
         setDepthStrength(c.depthStrength ?? 0.3);
         setRefOpen(true);
-        if ((c as any).refImageSize) {
-          setRefImageSize((c as any).refImageSize);
+        if (c.refImageWidth && c.refImageHeight) {
+          // 新卡片：直接从配置恢复尺寸
+          setRefImageSize({ width: c.refImageWidth, height: c.refImageHeight });
+          setRatio('original');
+          setCustomWidth(c.refImageWidth);
+          setCustomHeight(c.refImageHeight);
+        } else {
+          // 旧卡片兼容：异步加载参考图获取尺寸
+          const img = new Image();
+          img.onload = () => {
+            setRefImageSize({ width: img.naturalWidth, height: img.naturalHeight });
+            setRatio('original');
+            setCustomWidth(img.naturalWidth);
+            setCustomHeight(img.naturalHeight);
+          };
+          img.src = `/api/workflow/7/ref-image/${c.referenceImage}`;
         }
       } else {
         setReferenceImage(null);
@@ -378,7 +392,7 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
       cfg,
       sampler,
       scheduler,
-      ...(referenceImage ? { referenceImage, poseStrength, depthStrength, useOriginalRatio: ratio === 'original' } : {}),
+      ...(referenceImage ? { referenceImage, poseStrength, depthStrength, useOriginalRatio: ratio === 'original', ...(refImageSize ? { refImageWidth: refImageSize.width, refImageHeight: refImageSize.height } : {}) } : {}),
     };
 
     // Build base name: user input or auto timestamp
