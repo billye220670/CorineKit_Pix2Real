@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
-import { useSettingsStore, type ReversePromptModel, type StartupBehavior, type DropdownMenuStyle } from '../hooks/useSettingsStore.js';
+import { useSettingsStore, type ReversePromptModel, type LlmModel, type StartupBehavior, type DropdownMenuStyle } from '../hooks/useSettingsStore.js';
 import { SegmentedControl } from './SegmentedControl.js';
 
 const REVERSE_PROMPT_MODELS: { value: ReversePromptModel; label: string }[] = [
@@ -14,6 +14,11 @@ const STARTUP_BEHAVIOR_OPTIONS: { value: StartupBehavior; label: string }[] = [
   { value: 'restore', label: '恢复上次' },
   { value: 'new', label: '开新会话' },
   { value: 'welcome', label: '欢迎页' },
+];
+
+const LLM_MODELS: { value: LlmModel; label: string }[] = [
+  { value: 'local', label: '本地(Qwen3)' },
+  { value: 'grok', label: '在线(Grok4)' },
 ];
 
 const DROPDOWN_MENU_STYLE_OPTIONS: { value: DropdownMenuStyle; label: string }[] = [
@@ -80,6 +85,8 @@ export function SettingsModal() {
   const setReversePromptModel = useSettingsStore((s) => s.setReversePromptModel);
   const startupBehavior = useSettingsStore((s) => s.startupBehavior);
   const setStartupBehavior = useSettingsStore((s) => s.setStartupBehavior);
+  const llmModel = useSettingsStore((s) => s.llmModel);
+  const setLlmModel = useSettingsStore((s) => s.setLlmModel);
   const dropdownMenuStyle = useSettingsStore((s) => s.dropdownMenuStyle);
   const setDropdownMenuStyle = useSettingsStore((s) => s.setDropdownMenuStyle);
 
@@ -233,6 +240,19 @@ export function SettingsModal() {
                   options={REVERSE_PROMPT_MODELS}
                   value={reversePromptModel}
                   onChange={(v) => setReversePromptModel(v as ReversePromptModel)}
+                />
+              </div>
+
+              {/* Row: LLM 模型 */}
+              <div style={settingRowStyle}>
+                <div style={{ marginRight: 24 }}>
+                  <div style={settingLabelStyle}>LLM 模型</div>
+                  <div style={settingDescStyle}>提示词助手使用的语言模型</div>
+                </div>
+                <SegmentedControl
+                  options={LLM_MODELS}
+                  value={llmModel}
+                  onChange={(v) => setLlmModel(v as LlmModel)}
                 />
               </div>
 

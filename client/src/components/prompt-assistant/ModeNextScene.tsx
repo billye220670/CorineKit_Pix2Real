@@ -1,15 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Copy, Check } from 'lucide-react';
 import { SYSTEM_PROMPTS } from './systemPrompts.js';
+import { callPromptAssistant } from '../../services/api.js';
 
 async function callAssistant(systemPrompt: string, userPrompt: string): Promise<string> {
-  const res = await fetch('/api/workflow/prompt-assistant', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ systemPrompt, userPrompt }),
-  });
-  if (!res.ok) throw new Error(await res.text());
-  const { text } = await res.json();
+  const { text } = await callPromptAssistant({ systemPrompt, userPrompt });
   return text;
 }
 

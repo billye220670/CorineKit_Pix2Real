@@ -16,6 +16,7 @@ import { useSettingsStore } from '../hooks/useSettingsStore.js';
 import { useAgentStore } from '../hooks/useAgentStore.js';
 import type { ImageItem } from '../types/index.js';
 import { setSessionCover } from '../services/sessionService.js';
+import { callPromptAssistant } from '../services/api.js';
 
 interface ImageCardProps {
   image: ImageItem;
@@ -474,13 +475,7 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
         mode === 'naturalToTags' ? SYSTEM_PROMPTS.naturalToTags :
         mode === 'tagsToNatural' ? SYSTEM_PROMPTS.tagsToNatural :
         SYSTEM_PROMPTS.detailer;
-      const res = await fetch('/api/workflow/prompt-assistant', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ systemPrompt: sysPrompt, userPrompt: text }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const { text: result } = await res.json();
+      const { text: result } = await callPromptAssistant({ systemPrompt: sysPrompt, userPrompt: text });
       setPrompt(image.id, result);
     } catch {
       showToast('提示词助理操作失败');

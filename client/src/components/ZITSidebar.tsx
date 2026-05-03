@@ -9,6 +9,7 @@ import { SYSTEM_PROMPTS } from './prompt-assistant/systemPrompts.js';
 import { ModelSelect, useModelFavorites } from './ModelSelect.js';
 import { useModelMetadata } from '../hooks/useModelMetadata.js';
 import { showToast } from '../hooks/useToast.js';
+import { callPromptAssistant } from '../services/api.js';
 
 const RATIO_PRESETS = [
   { label: '1:1',  width: 1024, height: 1024 },
@@ -360,13 +361,7 @@ export function ZITSidebar({ width }: { width?: number }) {
         mode === 'naturalToTags' ? SYSTEM_PROMPTS.naturalToTags :
         mode === 'tagsToNatural' ? SYSTEM_PROMPTS.tagsToNatural :
         SYSTEM_PROMPTS.detailer;
-      const res = await fetch('/api/workflow/prompt-assistant', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ systemPrompt: sysPrompt, userPrompt: prompt }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const { text: result } = await res.json();
+      const { text: result } = await callPromptAssistant({ systemPrompt: sysPrompt, userPrompt: prompt });
       setPrompt(result);
     } catch {
       // silent fail

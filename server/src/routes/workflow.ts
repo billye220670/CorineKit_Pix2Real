@@ -1214,6 +1214,52 @@ router.post('/prompt-assistant', express.json(), async (req, res) => {
   }
 });
 
+// POST /api/workflow/prompt-assistant-grok
+// Calls Grok cloud API directly for prompt assistant (no ComfyUI dependency)
+router.post('/prompt-assistant-grok', express.json(), async (req, res) => {
+  try {
+    const { systemPrompt, userPrompt } = req.body;
+    if (!systemPrompt || !userPrompt) {
+      res.status(400).json({ error: '缺少 systemPrompt 或 userPrompt 参数' });
+      return;
+    }
+
+    const grokResponse = await fetch('https://api.jiekou.ai/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer sk_4kPU46GrW4F-GLsGzOygbmDVA8hoinn4b1PmgiQFB6s',
+      },
+      body: JSON.stringify({
+        model: 'grok-4-fast-non-reasoning',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        max_tokens: 4096,
+        temperature: 0.7,
+      }),
+    });
+
+    if (!grokResponse.ok) {
+      const errorText = await grokResponse.text();
+      console.error('[Grok Prompt Assistant Error]', grokResponse.status, errorText);
+      res.status(502).json({ error: `Grok API 错误: ${grokResponse.status}` });
+      return;
+    }
+
+    const data = await grokResponse.json() as {
+      choices?: { message?: { content?: string } }[];
+    };
+    const resultText = data.choices?.[0]?.message?.content || '';
+
+    res.json({ text: resultText });
+  } catch (error: any) {
+    console.error('[Grok Prompt Assistant Error]', error);
+    res.status(500).json({ error: error.message || 'Grok 提示词助手请求失败' });
+  }
+});
+
 // POST /api/workflow/mask/auto-recognize — run SAM segmentation and return mask PNG
 router.post('/mask/auto-recognize', upload.single('image'), async (req, res) => {
   try {
