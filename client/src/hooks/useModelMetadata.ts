@@ -159,6 +159,11 @@ export function useModelMetadata() {
     return metadata[modelPath]?.triggerWords ?? null;
   }, [metadata]);
 
+  const getRecommendedStrength = useCallback((modelPath: string): number | null => {
+    const v = metadata[modelPath]?.recommendedStrength;
+    return typeof v === 'number' ? v : null;
+  }, [metadata]);
+
   const setCategory = useCallback(async (modelPath: string, category: string) => {
     try {
       const res = await fetch('/api/models/metadata/category', {
@@ -239,6 +244,7 @@ export function useModelMetadata() {
     setTriggerWords,
     deleteTriggerWords,
     getTriggerWords,
+    getRecommendedStrength,
     setCategory,
     deleteCategory,
     getCategory,

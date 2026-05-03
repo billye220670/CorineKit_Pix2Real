@@ -76,7 +76,7 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
   // Model favorites
   const { favorites: checkpointFavorites, toggleFavorite: toggleCheckpointFavorite } = useModelFavorites('checkpoints');
   const { favorites: loraFavorites, toggleFavorite: toggleLoraFavorite } = useModelFavorites('loras');
-  const { metadata, uploadThumbnail, setNickname, setTriggerWords, getThumbnailUrl, getTriggerWords, getNickname, setCategory, deleteCategory, updateMetadataFields } = useModelMetadata();
+  const { metadata, uploadThumbnail, setNickname, setTriggerWords, getThumbnailUrl, getTriggerWords, getNickname, setCategory, deleteCategory, updateMetadataFields, getRecommendedStrength } = useModelMetadata();
   // LoRA model list
   const [loraModels, setLoraModels] = useState<string[]>([]);
   const [loraListLoading, setLoraListLoading] = useState(false);
@@ -105,11 +105,19 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
   const [model,      setModel]      = useState(() => readDraft().model     ?? '');
   const [loras, setLoras] = useState<LoraSlot[]>(() => readDraft().loras ?? DEFAULT_LORAS);
   const updateLora = (index: number, patch: Partial<LoraSlot>) => {
-    setLoras(prev => prev.map((l, i) => i === index ? { ...l, ...patch } : l));
+    setLoras(prev => prev.map((l, i) => {
+      if (i !== index) return l;
+      const next = { ...l, ...patch };
+      // 用户手动切换 LoRA 模型时，自动应用推荐默认权重（元数据中维护），无则回退为 0.5
+      if (patch.model !== undefined && patch.model !== l.model && patch.strength === undefined) {
+        next.strength = patch.model ? (getRecommendedStrength(patch.model) ?? 0.5) : 0.5;
+      }
+      return next;
+    }));
   };
   const addLora = () => {
     if (loras.length < 5) {
-      setLoras(prev => [...prev, { model: '', enabled: true, strength: 0 }]);
+      setLoras(prev => [...prev, { model: '', enabled: true, strength: 0.5 }]);
     }
   };
   const removeLora = (index: number) => {
