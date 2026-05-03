@@ -19,3 +19,13 @@ export async function callPromptAssistant(params: { systemPrompt: string; userPr
 
   return res.json();
 }
+
+export async function callSmartLora(prompt: string): Promise<{ loras: Array<{ model: string; strength: number }> }> {
+  const res = await fetch('/api/workflow/smart-lora', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt }),
+  });
+  if (!res.ok) throw new Error('智能LoRA推荐请求失败');
+  return res.json();
+}

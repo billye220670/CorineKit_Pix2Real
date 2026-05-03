@@ -3,13 +3,13 @@ import { useWorkflowStore, type Text2ImgConfig } from '../hooks/useWorkflowStore
 import { type LoraSlot } from '../services/sessionService.js';
 import { usePromptAssistantStore } from '../hooks/usePromptAssistantStore.js';
 import { useWebSocket } from '../hooks/useWebSocket.js';
-import { ChevronRight, ChevronDown, Loader, BookText, Hash, AlignLeft, Wand2, Loader2, AlertTriangle, Plus, Trash2, Upload, RefreshCw, X } from 'lucide-react';
+import { ChevronRight, ChevronDown, Loader, BookText, Hash, AlignLeft, Wand2, Loader2, AlertTriangle, Plus, Trash2, Upload, RefreshCw, X, Sparkles } from 'lucide-react';
 import { SYSTEM_PROMPTS } from './prompt-assistant/systemPrompts.js';
 import { ModelSelect, useModelFavorites } from './ModelSelect.js';
 import { useModelMetadata } from '../hooks/useModelMetadata.js';
 import PromptContextMenu from './PromptContextMenu.js';
 import { showToast } from '../hooks/useToast.js';
-import { callPromptAssistant } from '../services/api.js';
+import { callPromptAssistant, callSmartLora } from '../services/api.js';
 
 const RATIO_PRESETS = [
   { label: '1:1',  width: 1024, height: 1024 },
@@ -117,6 +117,32 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
       setLoras(prev => prev.filter((_, i) => i !== index));
     }
   };
+  const handleSmartLora = async () => {
+    if (!prompt.trim()) {
+      showToast('请先输入提示词');
+      return;
+    }
+    setSmartLoraLoading(true);
+    try {
+      const result = await callSmartLora(prompt);
+      if (!result.loras || result.loras.length === 0) {
+        showToast('未找到匹配的 LoRA 推荐');
+        return;
+      }
+      const newLoras = result.loras.map(l => ({
+        model: l.model,
+        enabled: true,
+        strength: l.strength,
+      }));
+      setLoras(newLoras);
+      showToast(`已智能添加 ${newLoras.length} 个 LoRA`);
+    } catch (err) {
+      console.error('Smart LoRA error:', err);
+      showToast('智能推荐失败，请稍后重试');
+    } finally {
+      setSmartLoraLoading(false);
+    }
+  };
   const [prompt,     setPrompt]     = useState(() => readDraft().prompt    ?? '');
   const [negativePrompt, setNegativePrompt] = useState(() => readDraft().negativePrompt ?? '');
   const [ratio,      setRatio]      = useState(() => readDraft().ratio     ?? '3:4');
@@ -136,6 +162,7 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
   const refFileInputRef = useRef<HTMLInputElement>(null);
   const [batchCount, setBatchCount] = useState(1);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [smartLoraLoading, setSmartLoraLoading] = useState(false);
   const [promptFocused, setPromptFocused] = useState(false);
   const [promptBtnHovered, setPromptBtnHovered] = useState(false);
   const [quickActionLoading, setQuickActionLoading] = useState<string | null>(null);
@@ -589,23 +616,60 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
         <div style={{ ...cardStyle, paddingTop: 16, paddingBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
             <div style={{ ...sectionLabelStyle, marginBottom: 0 }}>LoRA</div>
-            {loras.length < 5 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              {/* 智能LoRA推荐按钮 */}
               <button
-                onClick={addLora}
-                title="添加 LoRA"
+                onClick={handleSmartLora}
+                disabled={smartLoraLoading || !prompt.trim()}
+                title="AI 智能推荐 LoRA"
                 style={{
-                  background: 'transparent',
+                  background: 'none',
                   border: 'none',
-                  cursor: 'pointer',
+                  cursor: smartLoraLoading || !prompt.trim() ? 'not-allowed' : 'pointer',
+                  color: smartLoraLoading ? 'var(--accent-color, #7c5cbf)' : 'var(--text-secondary, #888)',
                   padding: 2,
                   display: 'flex',
                   alignItems: 'center',
-                  color: 'var(--color-text-secondary)',
+                  opacity: smartLoraLoading || !prompt.trim() ? 0.5 : 1,
+                  transition: 'color 0.2s, opacity 0.2s',
+                }}
+                onMouseEnter={e => {
+                  if (!smartLoraLoading && prompt.trim()) {
+                    (e.currentTarget as HTMLButtonElement).style.color = 'var(--accent-color, #7c5cbf)';
+                  }
+                }}
+                onMouseLeave={e => {
+                  if (!smartLoraLoading) {
+                    (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary, #888)';
+                  }
                 }}
               >
-                <Plus size={14} />
+                <Sparkles
+                  size={14}
+                  style={smartLoraLoading ? {
+                    animation: 'pulse 1s ease-in-out infinite',
+                  } : undefined}
+                />
               </button>
-            )}
+              {/* 原有的添加 LoRA 按钮 */}
+              {loras.length < 5 && (
+                <button
+                  onClick={addLora}
+                  title="添加 LoRA"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: 2,
+                    display: 'flex',
+                    alignItems: 'center',
+                    color: 'var(--color-text-secondary)',
+                  }}
+                >
+                  <Plus size={14} />
+                </button>
+              )}
+            </div>
           </div>
         {loras.map((lora, i) => (
           <div key={i} style={{ marginBottom: i < loras.length - 1 ? 12 : 0 }}>

@@ -1,5 +1,10 @@
 import fetch from 'node-fetch';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import type { UserPreferenceProfile } from './profileService.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
 
@@ -106,6 +111,56 @@ export async function callLLM(request: LLMRequest): Promise<LLMResponse> {
       },
     })),
   };
+}
+
+// ── 智能 LoRA 推荐系统提示词构建 ──────────────────────────────────────────────
+
+export async function buildSmartLoraPrompt(): Promise<string> {
+  const metadataPath = path.resolve(__dirname, '../../../model_meta/metadata.json');
+  const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf-8')) as Record<string, any>;
+
+  const loraEntries: string[] = [];
+  for (const [filePath, meta] of Object.entries(metadata)) {
+    if (!meta || typeof meta !== 'object') continue;
+    const m = meta as Record<string, any>;
+    // 只包含有 category 字段且 category 不为空的条目（LoRA），排除 checkpoint
+    if (!m.category) continue;
+
+    const parts: string[] = [];
+    parts.push(`- 路径: ${filePath}`);
+    parts.push(`  名称: ${m.nickname || filePath}`);
+    parts.push(`  分类: ${m.category}`);
+    if (m.keywords && Array.isArray(m.keywords) && m.keywords.length > 0) {
+      parts.push(`  关键词: ${m.keywords.join(', ')}`);
+    }
+    if (m.triggerWords) {
+      parts.push(`  触发词: ${m.triggerWords}`);
+    }
+    parts.push(`  推荐权重: ${m.recommendedStrength ?? 0.8}`);
+    loraEntries.push(parts.join('\n'));
+  }
+
+  const loraList = loraEntries.length > 0 ? loraEntries.join('\n') : '暂无可用 LoRA';
+
+  return `你是一个专业的 LoRA 推荐引擎。你的唯一任务是根据用户的图像描述/提示词，从提供的 LoRA 目录中选择最合适的 LoRA 模型。
+
+## 规则
+1. 仅从下方提供的 LoRA 目录中选择，不要编造不存在的 LoRA
+2. 只推荐与用户描述**直接相关**的 LoRA（0-5个）
+3. 同一分类（category）最多选择 1 个 LoRA
+4. 优先匹配：角色名 > 服饰/道具 > 姿势/动作 > 表情 > 风格
+5. 如果用户未明确描述某个方面（如风格、发型），则不要推荐该方面的 LoRA
+6. strength 值参考每个 LoRA 的 recommendedStrength，可根据提示词相关度微调（范围 0~2）
+
+## LoRA 目录
+${loraList}
+
+## 输出格式
+严格输出纯 JSON，不要包含任何 markdown 标记或解释文字：
+{"loras":[{"model":"完整模型路径","strength":推荐权重}]}
+
+若没有合适的 LoRA，返回：
+{"loras":[]}`;
 }
 
 // ── Function Calling 工具定义 ────────────────────────────────────────────────

@@ -11,6 +11,7 @@ import { workflow5Adapter } from '../adapters/Workflow5Adapter.js';
 import { workflow10Adapter } from '../adapters/Workflow10Adapter.js';
 import { uploadImage, uploadVideo, queuePrompt, deleteQueueItem, getSystemStats, getQueue, prioritizeQueueItem, getHistory, getImageBuffer, getCheckpointModels, getUnetModels, getLoraModels } from '../services/comfyui.js';
 import { sessionsBase } from '../services/sessionManager.js';
+import { callLLM, buildSmartLoraPrompt } from '../services/llmService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const releaseMemoryTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-释放内存.json');
@@ -1211,6 +1212,61 @@ router.post('/prompt-assistant', express.json(), async (req, res) => {
   } catch (err: any) {
     console.error('[Prompt Assistant Error]', err);
     res.status(500).json({ error: toFriendlyComfyError(err) });
+  }
+});
+
+// POST /api/workflow/smart-lora
+// Calls Grok LLM to recommend LoRA models based on user prompt
+router.post('/smart-lora', express.json(), async (req, res) => {
+  try {
+    const { prompt } = req.body;
+    if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
+      return res.json({ loras: [] });
+    }
+
+    // 1. 构建系统提示词（含LoRA目录）
+    const systemPrompt = await buildSmartLoraPrompt();
+
+    // 2. 调用 Grok
+    const result = await callLLM({
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: prompt.trim() },
+      ],
+      temperature: 0.3,  // 低温度确保精准匹配
+    });
+
+    // 3. 解析返回的 JSON
+    let text = result.content || '';
+
+    // 容错：尝试从 markdown code block 中提取 JSON
+    const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+    if (codeBlockMatch) {
+      text = codeBlockMatch[1].trim();
+    }
+
+    let parsed: any;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      console.error('[smart-lora] Failed to parse LLM response:', text);
+      return res.json({ loras: [] });
+    }
+
+    // 4. 验证返回的 model 路径在元数据中确实存在
+    const metadata = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../../model_meta/metadata.json'), 'utf-8'));
+    const validLoras = (parsed.loras || [])
+      .filter((l: any) => l.model && metadata[l.model])
+      .map((l: any) => ({
+        model: l.model,
+        strength: typeof l.strength === 'number' ? l.strength : (metadata[l.model]?.recommendedStrength || 0.8),
+      }))
+      .slice(0, 5);  // 最多5个
+
+    res.json({ loras: validLoras });
+  } catch (err: any) {
+    console.error('[smart-lora] Error:', err.message);
+    res.status(500).json({ error: '智能LoRA推荐失败', loras: [] });
   }
 });
 
