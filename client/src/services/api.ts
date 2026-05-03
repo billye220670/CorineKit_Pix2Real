@@ -20,12 +20,22 @@ export async function callPromptAssistant(params: { systemPrompt: string; userPr
   return res.json();
 }
 
-export async function callSmartLora(prompt: string): Promise<{ loras: Array<{ model: string; strength: number }> }> {
+export async function callSmartLora(prompt: string): Promise<{ loras: Array<{ model: string; strength: number }>; modifiedPrompt: string }> {
   const res = await fetch('/api/workflow/smart-lora', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ prompt }),
   });
   if (!res.ok) throw new Error('智能LoRA推荐请求失败');
+  return res.json();
+}
+
+export async function callSmartTriggerInsert(prompt: string, triggerWords: string, loraName: string): Promise<{ modifiedPrompt: string }> {
+  const res = await fetch('/api/workflow/smart-trigger-insert', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt, triggerWords, loraName }),
+  });
+  if (!res.ok) throw new Error('触发词智能插入请求失败');
   return res.json();
 }

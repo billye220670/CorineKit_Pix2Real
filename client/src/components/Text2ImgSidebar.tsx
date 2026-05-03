@@ -9,7 +9,7 @@ import { ModelSelect, useModelFavorites } from './ModelSelect.js';
 import { useModelMetadata } from '../hooks/useModelMetadata.js';
 import PromptContextMenu from './PromptContextMenu.js';
 import { showToast } from '../hooks/useToast.js';
-import { callPromptAssistant, callSmartLora } from '../services/api.js';
+import { callPromptAssistant, callSmartLora, callSmartTriggerInsert } from '../services/api.js';
 
 const RATIO_PRESETS = [
   { label: '1:1',  width: 1024, height: 1024 },
@@ -113,9 +113,42 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
     }
   };
   const removeLora = (index: number) => {
-    if (window.confirm('确定删除此 LoRA？')) {
-      setLoras(prev => prev.filter((_, i) => i !== index));
+    if (!window.confirm('确定删除此 LoRA？')) return;
+    const lora = loras[index];
+    if (lora.enabled) {
+      const words = getLoraWordsArray(lora.model);
+      if (words.length) {
+        setPrompt((prev: string) => removeTriggerWords(prev, words));
+      }
     }
+    setLoras(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // 数据驱动：获取LoRA触发词数组（数据源：metadata）
+  const getLoraWordsArray = (model: string): string[] => {
+    const tw = getTriggerWords(model);
+    return tw ? tw.split(',').map(s => s.trim()).filter(Boolean) : [];
+  };
+
+  // 数据驱动：从提示词中移除指定触发词（按逗号段精确匹配）
+  const removeTriggerWords = (currentPrompt: string, words: string[]): string => {
+    if (!words.length || !currentPrompt.trim()) return currentPrompt;
+    const removeSet = new Set(words.map(w => w.trim().toLowerCase()));
+    return currentPrompt
+      .split(',')
+      .map(s => s.trim())
+      .filter(s => s && !removeSet.has(s.toLowerCase()))
+      .join(', ');
+  };
+
+  // 数据驱动：向提示词追加缺失的触发词
+  const appendMissingTriggerWords = (currentPrompt: string, words: string[]): string => {
+    if (!words.length) return currentPrompt;
+    const promptLower = currentPrompt.toLowerCase();
+    const missing = words.filter(w => !promptLower.includes(w.trim().toLowerCase()));
+    if (!missing.length) return currentPrompt;
+    const base = currentPrompt.trim();
+    return base ? `${base}, ${missing.join(', ')}` : missing.join(', ');
   };
   const handleSmartLora = async () => {
     if (!prompt.trim()) {
@@ -129,18 +162,50 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
         showToast('未找到匹配的 LoRA 推荐');
         return;
       }
-      const newLoras = result.loras.map(l => ({
-        model: l.model,
-        enabled: true,
-        strength: l.strength,
-      }));
-      setLoras(newLoras);
-      showToast(`已智能添加 ${newLoras.length} 个 LoRA`);
+      // 用带 action 的 toast 让用户确认
+      showToast({
+        message: `推荐 ${result.loras.length} 个 LoRA`,
+        action: {
+          label: '应用',
+          onClick: () => {
+            const newLoras = result.loras.map(l => ({
+              model: l.model,
+              enabled: true,
+              strength: l.strength,
+            }));
+            setLoras(newLoras);
+            if (result.modifiedPrompt) {
+              setPrompt(result.modifiedPrompt);
+            }
+          },
+        },
+      });
     } catch (err) {
       console.error('Smart LoRA error:', err);
       showToast('智能推荐失败，请稍后重试');
     } finally {
       setSmartLoraLoading(false);
+    }
+  };
+
+  const handleSmartTriggerInsert = async (lora: LoraSlot, index: number) => {
+    const tw = getTriggerWords(lora.model);
+    if (!tw) return;
+    if (!prompt.trim()) {
+      showToast('请先输入提示词');
+      return;
+    }
+    setTriggerInsertLoadingIndex(index);
+    try {
+      const nickname = getNickname(lora.model) || lora.model;
+      const result = await callSmartTriggerInsert(prompt, tw, nickname);
+      setPrompt(result.modifiedPrompt);
+      showToast('已智能插入触发词');
+    } catch (err) {
+      console.error('Smart trigger insert error:', err);
+      showToast('触发词插入失败');
+    } finally {
+      setTriggerInsertLoadingIndex(null);
     }
   };
   const [prompt,     setPrompt]     = useState(() => readDraft().prompt    ?? '');
@@ -163,6 +228,7 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
   const [batchCount, setBatchCount] = useState(1);
   const [isGenerating, setIsGenerating] = useState(false);
   const [smartLoraLoading, setSmartLoraLoading] = useState(false);
+  const [triggerInsertLoadingIndex, setTriggerInsertLoadingIndex] = useState<number | null>(null);
   const [promptFocused, setPromptFocused] = useState(false);
   const [promptBtnHovered, setPromptBtnHovered] = useState(false);
   const [quickActionLoading, setQuickActionLoading] = useState<string | null>(null);
@@ -683,7 +749,17 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
             >
               {/* Toggle Switch */}
               <div
-                onClick={() => updateLora(i, { enabled: !lora.enabled })}
+                onClick={() => {
+                  const newEnabled = !lora.enabled;
+                  const words = getLoraWordsArray(lora.model);
+                  if (words.length) {
+                    setPrompt((prev: string) => newEnabled
+                      ? appendMissingTriggerWords(prev, words)
+                      : removeTriggerWords(prev, words)
+                    );
+                  }
+                  updateLora(i, { enabled: newEnabled });
+                }}
                 style={{
                   width: 36,
                   height: 20,
@@ -729,9 +805,28 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
                 const anyUsed = words.some(w => promptLower.includes(w.toLowerCase()));
                 if (anyUsed) return null;
                 return (
-                  <span title="未使用触发词，请在提示词区域右键加入" style={{ display: 'inline-flex', marginLeft: 4 }}>
-                    <AlertTriangle size={12} color="#e6a817" />
-                  </span>
+                  <button
+                    onClick={() => handleSmartTriggerInsert(lora, i)}
+                    disabled={triggerInsertLoadingIndex === i}
+                    title="点击智能插入触发词"
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      cursor: triggerInsertLoadingIndex === i ? 'wait' : 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      marginLeft: 4,
+                      padding: 0,
+                    }}
+                  >
+                    <AlertTriangle
+                      size={12}
+                      color="#e6a817"
+                      style={triggerInsertLoadingIndex === i ? {
+                        animation: 'pulse 1s ease-in-out infinite',
+                      } : undefined}
+                    />
+                  </button>
                 );
               })()}
               <button

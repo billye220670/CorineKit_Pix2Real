@@ -11,7 +11,7 @@ import { workflow5Adapter } from '../adapters/Workflow5Adapter.js';
 import { workflow10Adapter } from '../adapters/Workflow10Adapter.js';
 import { uploadImage, uploadVideo, queuePrompt, deleteQueueItem, getSystemStats, getQueue, prioritizeQueueItem, getHistory, getImageBuffer, getCheckpointModels, getUnetModels, getLoraModels } from '../services/comfyui.js';
 import { sessionsBase } from '../services/sessionManager.js';
-import { callLLM, buildSmartLoraPrompt } from '../services/llmService.js';
+import { callLLM, buildSmartLoraPrompt, buildTriggerInsertPrompt } from '../services/llmService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const releaseMemoryTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-释放内存.json');
@@ -1263,10 +1263,56 @@ router.post('/smart-lora', express.json(), async (req, res) => {
       }))
       .slice(0, 5);  // 最多5个
 
-    res.json({ loras: validLoras });
+    res.json({ loras: validLoras, modifiedPrompt: parsed.modifiedPrompt || prompt });
   } catch (err: any) {
     console.error('[smart-lora] Error:', err.message);
     res.status(500).json({ error: '智能LoRA推荐失败', loras: [] });
+  }
+});
+
+// POST /api/workflow/smart-trigger-insert
+// Calls LLM to insert trigger words into user prompt
+router.post('/smart-trigger-insert', express.json(), async (req, res) => {
+  try {
+    const { prompt, triggerWords, loraName } = req.body;
+    if (!prompt || !triggerWords) {
+      return res.json({ modifiedPrompt: prompt || '' });
+    }
+
+    const systemPrompt = buildTriggerInsertPrompt(triggerWords);
+
+    const result = await callLLM({
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: prompt.trim() },
+      ],
+      temperature: 0.2,
+    });
+
+    let modifiedPrompt = result.content || prompt;
+    // 清理可能的 markdown 包裹
+    const codeBlockMatch = modifiedPrompt.match(/```(?:\w*)?\s*\n?([\s\S]*?)\n?```/);
+    if (codeBlockMatch) {
+      modifiedPrompt = codeBlockMatch[1].trim();
+    }
+    // 去掉可能的引号包裹
+    if (modifiedPrompt.startsWith('"') && modifiedPrompt.endsWith('"')) {
+      modifiedPrompt = modifiedPrompt.slice(1, -1);
+    }
+
+    // 规范化：确保逗号分隔格式正确
+    modifiedPrompt = modifiedPrompt
+      .replace(/,\s*/g, ', ')        // 统一逗号后的空格
+      .replace(/\s+,/g, ',')         // 移除逗号前的多余空格
+      .replace(/,\s*,/g, ',')        // 移除连续逗号
+      .replace(/^\s*,\s*/, '')       // 移除开头逗号
+      .replace(/\s*,\s*$/, '')       // 移除末尾逗号
+      .trim();
+
+    res.json({ modifiedPrompt });
+  } catch (err: any) {
+    console.error('[smart-trigger-insert] Error:', err.message);
+    res.status(500).json({ error: '触发词插入失败', modifiedPrompt: req.body?.prompt || '' });
   }
 });
 
