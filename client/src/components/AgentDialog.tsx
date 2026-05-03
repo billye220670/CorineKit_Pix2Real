@@ -1,8 +1,33 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Send, Paperclip, X, AlertCircle, RefreshCw, Loader2, ExternalLink } from 'lucide-react';
-import { useAgentStore, type ChatMessage, type CardDropResult } from '../hooks/useAgentStore.js';
+import { Send, Paperclip, X, AlertCircle, RefreshCw, Loader2, ExternalLink, ChevronDown, Bot, Settings, MessageCircle, Check, Undo2 } from 'lucide-react';
+import { useAgentStore, type ChatMessage, type CardDropResult, type ChatMode, type ConfigSnapshot } from '../hooks/useAgentStore.js';
 import { useWorkflowStore } from '../hooks/useWorkflowStore.js';
 import { useWebSocket } from '../hooks/useWebSocket.js';
+
+function getCurrentSidebarConfig(): { tabId: number; config: any } {
+  const store = useWorkflowStore.getState();
+  const activeTab = store.activeTab;
+  
+  if (activeTab === 9) {
+    // ZIT 配置从 localStorage 读取
+    try {
+      const raw = JSON.parse(localStorage.getItem('zit_draft') ?? '{}');
+      return { tabId: 9, config: raw };
+    } catch { return { tabId: 9, config: {} }; }
+  } else {
+    // Text2Img 配置从 localStorage 读取
+    try {
+      const raw = JSON.parse(localStorage.getItem('t2i_draft') ?? '{}');
+      return { tabId: 7, config: raw };
+    } catch { return { tabId: 7, config: {} }; }
+  }
+}
+
+const CHAT_MODES: Array<{ id: ChatMode; label: string; icon: any; description: string; placeholder: string }> = [
+  { id: 'agent', label: '智能体', icon: Bot, description: '理解需求并自动生成图片', placeholder: '输入你的需求...' },
+  { id: 'config_assistant', label: '配置助理', icon: Settings, description: '调整右侧面板的生成参数', placeholder: '描述你想调整的配置...' },
+  { id: 'smart_qa', label: '智能问答', icon: MessageCircle, description: '回答 AI 绘图相关问题', placeholder: '问我任何问题...' },
+];
 
 export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
   const isOpen = useAgentStore((s) => s.isDialogOpen);
@@ -19,10 +44,15 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
   const removeUploadedImage = useAgentStore((s) => s.removeUploadedImage);
   const clearUploadedImages = useAgentStore((s) => s.clearUploadedImages);
   const agentExecution = useAgentStore((s) => s.agentExecution);
+  const chatMode = useAgentStore((s) => s.chatMode);
+  const setChatMode = useAgentStore((s) => s.setChatMode);
+  const saveConfigSnapshot = useAgentStore((s) => s.saveConfigSnapshot);
+  const clearMessages = useAgentStore((s) => s.clearMessages);
 
   const { sendMessage: wsSendMessage } = useWebSocket();
 
   const [text, setText] = useState('');
+  const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
 
   const [closing, setClosing] = useState(false);
@@ -196,7 +226,7 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
     setSuggestionsLoading(true);
     try {
       const sessionId = useWorkflowStore.getState().sessionId;
-      const res = await fetch(`/api/agent/suggestions?sessionId=${sessionId || 'default'}`);
+      const res = await fetch(`/api/agent/suggestions?sessionId=${sessionId || 'default'}&mode=${useAgentStore.getState().chatMode}`);
       const data = await res.json();
       setWarmUpSuggestions(data.suggestions || []);
     } catch {
@@ -220,6 +250,32 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
       closeDialog();
     }, 180);
   }, [closeDialog]);
+
+  const handleModeChange = useCallback((mode: ChatMode) => {
+    if (mode === chatMode) {
+      setModeMenuOpen(false);
+      return;
+    }
+    setChatMode(mode);
+    clearMessages();
+    setWarmUpSuggestions([]);
+    setFollowUpSuggestions([]);
+    setModeMenuOpen(false);
+    // 重新获取该模式的暖场建议
+    (async () => {
+      setSuggestionsLoading(true);
+      try {
+        const sessionId = useWorkflowStore.getState().sessionId;
+        const res = await fetch(`/api/agent/suggestions?sessionId=${sessionId || 'default'}&mode=${mode}`);
+        const data = await res.json();
+        setWarmUpSuggestions(data.suggestions || []);
+      } catch {
+        setWarmUpSuggestions([]);
+      } finally {
+        setSuggestionsLoading(false);
+      }
+    })();
+  }, [chatMode, setChatMode, clearMessages]);
 
   const executeAgentIntent = useCallback(async (intent: any) => {
     const { clientId, sessionId } = useWorkflowStore.getState();
@@ -601,7 +657,8 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
           messages: historyMessages,
           images,
           hasImage: !!images?.length,
-
+          mode: useAgentStore.getState().chatMode,
+          ...(useAgentStore.getState().chatMode === 'config_assistant' ? { currentConfig: getCurrentSidebarConfig() } : {}),
         }),
       });
 
@@ -612,7 +669,44 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
 
       const data = await response.json();
 
-      if (data.type === 'tool_call') {
+      if (data.type === 'config_change') {
+        // 配置助理模式：自动应用配置变更
+        const snapshotId = crypto.randomUUID();
+        const { tabId, config: currentConfig } = getCurrentSidebarConfig();
+        
+        // 保存当前配置快照（用于还原）
+        saveConfigSnapshot(snapshotId, {
+          id: snapshotId,
+          tabId,
+          config: currentConfig,
+          appliedAt: Date.now(),
+        });
+        
+        // 合并变更到当前配置并应用
+        const mergedConfig = { ...currentConfig, ...data.changes };
+        useWorkflowStore.getState().applyConfigToSidebar(mergedConfig);
+        
+        // 添加带 configAction 的消息
+        addMessage({
+          role: 'assistant',
+          content: data.summary || '已应用配置变更',
+          configAction: {
+            changes: data.changes,
+            snapshotId,
+            status: 'applied',
+          },
+        });
+        
+        // 启动打字机效果
+        const msgs = useAgentStore.getState().messages;
+        const newMsg = msgs[msgs.length - 1];
+        if (newMsg) setTypingMessageId(newMsg.id);
+        
+        // 显示后续建议
+        if (data.suggestions?.length > 0) {
+          setFollowUpSuggestions(data.suggestions);
+        }
+      } else if (data.type === 'tool_call') {
         setExecutionStatus(`正在准备 ${data.intent?.workflowName ?? '工作流'}...`);
         addMessage({
           role: 'assistant',
@@ -679,11 +773,40 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
     sendMessage(lastUserMsg.content, lastUserMsg.images);
   }, [sendMessage]);
 
+  const handleConfirmConfig = useCallback((messageId: string) => {
+    updateMessage(messageId, {
+      configAction: {
+        ...useAgentStore.getState().messages.find(m => m.id === messageId)?.configAction!,
+        status: 'reverted',
+      },
+    });
+  }, [updateMessage]);
+
+  const handleRevertConfig = useCallback((snapshotId: string) => {
+    const snapshot = useAgentStore.getState().getConfigSnapshot(snapshotId);
+    if (!snapshot) return;
+    
+    // 恢复配置
+    useWorkflowStore.getState().applyConfigToSidebar(snapshot.config);
+    
+    // 更新消息状态
+    const messages = useAgentStore.getState().messages;
+    const msg = messages.find(m => m.configAction?.snapshotId === snapshotId);
+    if (msg) {
+      updateMessage(msg.id, {
+        configAction: {
+          ...msg.configAction!,
+          status: 'reverted',
+        },
+      });
+    }
+  }, [updateMessage]);
+
   const refreshFollowUpSuggestions = useCallback(async () => {
     setSuggestionsLoading(true);
     try {
       const sessionId = useWorkflowStore.getState().sessionId;
-      const res = await fetch(`/api/agent/suggestions?sessionId=${sessionId || 'default'}`);
+      const res = await fetch(`/api/agent/suggestions?sessionId=${sessionId || 'default'}&mode=${useAgentStore.getState().chatMode}`);
       const data = await res.json();
       setFollowUpSuggestions(data.suggestions || []);
     } catch {
@@ -907,6 +1030,8 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
               onTypingComplete={() => setTypingMessageId(null)}
               scrollRef={messagesEndRef as React.RefObject<HTMLDivElement>}
               onNavigateToCard={navigateToCard}
+              onRevertConfig={handleRevertConfig}
+              onConfirmConfig={handleConfirmConfig}
             />
             {(followUpSuggestions.length > 0 || suggestionsLoading) && !typingMessageId && index === visibleMessages.length - 1 && msg.role === 'assistant' && !msg.isError && (
               <SuggestionsPanel
@@ -1097,7 +1222,7 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
           onPaste={handlePaste}
           onDrop={handleDrop}
           onDragOver={handleDragOver}
-          placeholder="输入你的需求..."
+          placeholder={CHAT_MODES.find(m => m.id === chatMode)?.placeholder || '输入你的需求...'}
           rows={2}
           style={{
             width: '100%',
@@ -1118,6 +1243,101 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
           marginTop: 4,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            {/* Mode selector dropdown */}
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={() => setModeMenuOpen(!modeMenuOpen)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  padding: '4px 8px',
+                  fontSize: 12,
+                  color: 'var(--color-text-secondary)',
+                  backgroundColor: modeMenuOpen ? 'var(--color-hover, rgba(255,255,255,0.08))' : 'transparent',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s',
+                  whiteSpace: 'nowrap',
+                }}
+                onMouseEnter={(e) => {
+                  if (!modeMenuOpen) e.currentTarget.style.backgroundColor = 'var(--color-hover, rgba(255,255,255,0.05))';
+                }}
+                onMouseLeave={(e) => {
+                  if (!modeMenuOpen) e.currentTarget.style.backgroundColor = 'transparent';
+                }}
+              >
+                {(() => {
+                  const mode = CHAT_MODES.find(m => m.id === chatMode);
+                  const Icon = mode?.icon || Bot;
+                  return <Icon size={14} />;
+                })()}
+                <span>{CHAT_MODES.find(m => m.id === chatMode)?.label}</span>
+                <ChevronDown size={12} style={{ 
+                  transition: 'transform 0.15s',
+                  transform: modeMenuOpen ? 'rotate(180deg)' : 'none',
+                }} />
+              </button>
+              {modeMenuOpen && (
+                <>
+                  <div
+                    style={{ position: 'fixed', inset: 0, zIndex: 999 }}
+                    onClick={() => setModeMenuOpen(false)}
+                  />
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '100%',
+                    left: 0,
+                    marginBottom: 4,
+                    minWidth: 200,
+                    backgroundColor: 'var(--color-bg)',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 8,
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
+                    zIndex: 1000,
+                    overflow: 'hidden',
+                  }}>
+                    {CHAT_MODES.map((mode) => {
+                      const Icon = mode.icon;
+                      const isActive = chatMode === mode.id;
+                      return (
+                        <button
+                          key={mode.id}
+                          onClick={() => handleModeChange(mode.id)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: 10,
+                            width: '100%',
+                            padding: '10px 12px',
+                            border: 'none',
+                            backgroundColor: isActive ? 'var(--color-hover, rgba(255,255,255,0.08))' : 'transparent',
+                            color: 'var(--color-text)',
+                            cursor: 'pointer',
+                            textAlign: 'left',
+                            transition: 'background-color 0.1s',
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!isActive) e.currentTarget.style.backgroundColor = 'var(--color-hover, rgba(255,255,255,0.05))';
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
+                          }}
+                        >
+                          <Icon size={16} style={{ marginTop: 2, flexShrink: 0, color: isActive ? 'var(--color-primary)' : 'var(--color-text-secondary)' }} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: isActive ? 600 : 400 }}>{mode.label}</div>
+                            <div style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginTop: 2 }}>{mode.description}</div>
+                          </div>
+                          {isActive && <Check size={14} style={{ color: 'var(--color-primary)', marginTop: 2, flexShrink: 0 }} />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
             <button
               onClick={() => fileInputRef.current?.click()}
               title="上传图片"
@@ -1223,13 +1443,15 @@ function TypewriterText({ text, speed = 20, onComplete, scrollRef }: {
   );
 }
 
-function MessageBubble({ message, onRetry, isTyping, onTypingComplete, scrollRef, onNavigateToCard }: {
+function MessageBubble({ message, onRetry, isTyping, onTypingComplete, scrollRef, onNavigateToCard, onRevertConfig, onConfirmConfig }: {
   message: ChatMessage;
   onRetry: (msg: ChatMessage) => void;
   isTyping?: boolean;
   onTypingComplete?: () => void;
   scrollRef?: React.RefObject<HTMLDivElement>;
   onNavigateToCard?: (tabId: number, imageId: string) => void;
+  onRevertConfig?: (snapshotId: string) => void;
+  onConfirmConfig?: (messageId: string) => void;
 }) {
   const isUser = message.role === 'user';
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
@@ -1314,6 +1536,74 @@ function MessageBubble({ message, onRetry, isTyping, onTypingComplete, scrollRef
               title="点击跳转到对应卡片"
             />
           ))}
+        </div>
+      )}
+      {/* Config assistant action buttons */}
+      {!isUser && message.configAction && (
+        <div style={{ 
+          marginTop: 8, 
+          paddingTop: 8, 
+          borderTop: '1px solid var(--color-border, rgba(255,255,255,0.1))' 
+        }}>
+          <div style={{ 
+            fontSize: 12, 
+            color: 'var(--color-text-secondary)',
+            marginBottom: 8 
+          }}>
+            {message.configAction.status === 'reverted' 
+              ? '已还原到之前的配置' 
+              : '要保留这些修改吗？'}
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={() => onConfirmConfig?.(message.id)}
+              disabled={message.configAction.status !== 'applied'}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: '5px 12px',
+                fontSize: 12,
+                fontWeight: 500,
+                border: 'none',
+                borderRadius: 6,
+                cursor: message.configAction.status === 'applied' ? 'pointer' : 'default',
+                backgroundColor: message.configAction.status === 'applied' 
+                  ? 'var(--color-primary)' 
+                  : 'var(--color-border)',
+                color: '#fff',
+                opacity: message.configAction.status === 'applied' ? 1 : 0.5,
+                transition: 'all 0.15s',
+              }}
+            >
+              <Check size={12} />
+              {message.configAction.status === 'applied' ? '确认' : '已确认'}
+            </button>
+            <button
+              onClick={() => onRevertConfig?.(message.configAction!.snapshotId)}
+              disabled={message.configAction.status === 'reverted'}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: '5px 12px',
+                fontSize: 12,
+                fontWeight: 500,
+                border: '1px solid var(--color-border)',
+                borderRadius: 6,
+                cursor: message.configAction.status !== 'reverted' ? 'pointer' : 'default',
+                backgroundColor: 'transparent',
+                color: message.configAction.status !== 'reverted' 
+                  ? 'var(--color-text)' 
+                  : 'var(--color-text-secondary)',
+                opacity: message.configAction.status !== 'reverted' ? 1 : 0.5,
+                transition: 'all 0.15s',
+              }}
+            >
+              <Undo2 size={12} />
+              {message.configAction.status !== 'reverted' ? '还原' : '已还原'}
+            </button>
+          </div>
         </div>
       )}
       {/* Action button */}

@@ -1,5 +1,14 @@
 import { create } from 'zustand';
 
+export type ChatMode = 'agent' | 'config_assistant' | 'smart_qa';
+
+export interface ConfigSnapshot {
+  id: string;           // 与消息 ID 绑定
+  tabId: number;        // 7 或 9
+  config: any;          // Text2ImgConfig | ZitConfig（用 any 避免循环依赖）
+  appliedAt: number;
+}
+
 interface FavoriteEntry {
   tabId: number;
   favoritedAt: number;
@@ -22,6 +31,11 @@ export interface ChatMessage {
   imageId?: string;      // 跳转目标卡片 ID
   imageIds?: string[];   // 批量模式下每张图片对应的卡片 ID（与 images 一一对应）
   batchResultId?: string; // 批量生成结果消息标识（用于逐张追加更新）
+  configAction?: {
+    changes: Record<string, any>;  // AI 返回的配置变更
+    snapshotId: string;            // 对应快照 ID
+    status: 'applied' | 'reverted'; // 当前状态
+  };
 }
 
 export interface UploadedImage {
@@ -145,6 +159,15 @@ interface AgentState {
   incrementBatchCompleted: (outputs: string[]) => void;
   failAgentExecution: (error: string) => void;
   clearAgentExecution: () => void;
+
+  // Chat mode
+  chatMode: ChatMode;
+  setChatMode: (mode: ChatMode) => void;
+
+  // Config snapshots (for config_assistant mode revert)
+  configSnapshots: Record<string, ConfigSnapshot>;
+  saveConfigSnapshot: (id: string, snapshot: ConfigSnapshot) => void;
+  getConfigSnapshot: (id: string) => ConfigSnapshot | undefined;
 }
 
 export const useAgentStore = create<AgentState>((set, get) => ({
@@ -267,4 +290,15 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   }),
 
   clearAgentExecution: () => set({ agentExecution: null }),
+
+  // Chat mode
+  chatMode: 'agent',
+  setChatMode: (mode) => set({ chatMode: mode }),
+
+  // Config snapshots
+  configSnapshots: {},
+  saveConfigSnapshot: (id, snapshot) => set((s) => ({
+    configSnapshots: { ...s.configSnapshots, [id]: snapshot },
+  })),
+  getConfigSnapshot: (id) => get().configSnapshots[id],
 }));

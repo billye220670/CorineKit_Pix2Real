@@ -4,7 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { readGenerationLog, appendGenerationLog, readFavorites, writeFavorite, updateGenerationLogFavorite } from '../services/agentService.js';
 import { buildUserProfile } from '../services/profileService.js';
-import { callLLM, buildSystemPrompt, getAgentTools } from '../services/llmService.js';
+import { callLLM, buildSystemPrompt, getAgentTools, buildConfigAssistantPrompt, getConfigAssistantTools, buildSmartQAPrompt, buildSmartLoraPrompt } from '../services/llmService.js';
 import { parseToolCall } from '../services/intentParser.js';
 import { queuePrompt, uploadImage } from '../services/comfyui.js';
 import { getAdapter } from '../adapters/index.js';
@@ -531,13 +531,132 @@ ${profileSummary}
   return [];
 }
 
+// ── 配置助理后续建议生成 ────────────────────────────────────────────────────
+
+async function generateConfigFollowUpSuggestions(changes: any, profile: any, metadata: any): Promise<string[]> {
+  try {
+    const changeDesc = Object.keys(changes).map(k => {
+      if (k === 'loras') return 'LoRA 配置';
+      if (k === 'model') return '基础模型';
+      if (k === 'prompt') return '提示词';
+      if (k === 'negativePrompt') return '负面提示词';
+      if (k === 'steps') return '步数';
+      if (k === 'cfg') return 'CFG';
+      if (k === 'sampler') return '采样器';
+      if (k === 'scheduler') return '调度器';
+      if (k === 'width' || k === 'height') return '尺寸';
+      return k;
+    }).join('、');
+
+    const prompt = `用户刚刚修改了以下生成配置：${changeDesc}。
+请推荐4条后续配置调整建议。
+
+要求：
+- 建议应与刚才的修改相关，帮助用户进一步优化配置
+- 全部中文，简洁自然
+- 每条控制在15字以内
+- 只输出建议文本，每行一条，不要编号
+
+示例：
+把步数调高到40
+换个更适合角色的LoRA
+试试euler_ancestral采样器
+加一些负面提示词`;
+
+    const messages: LLMMessage[] = [
+      { role: 'system', content: '你是一个简洁的配置调整建议生成器。只输出建议文本，不要任何解释。' },
+      { role: 'user', content: prompt },
+    ];
+
+    const result = await callLLM({ messages, temperature: 0.9 });
+
+    if (result.content) {
+      const lines = result.content
+        .split('\n')
+        .map((l: string) => l.trim())
+        .filter((l: string) => l.length > 0 && l.length <= 30)
+        .map((l: string) => l.replace(/^\d+[.、)\]]\s*/, ''))
+        .filter((l: string) => l.length > 0)
+        .slice(0, 4);
+
+      if (lines.length >= 2) return lines;
+    }
+  } catch (err) {
+    console.error('[Agent] Config follow-up suggestion generation failed:', err);
+  }
+
+  // 兜底
+  return [
+    '调整步数提升画质',
+    '试试其他采样器',
+    '换一个风格LoRA',
+    '修改图片尺寸比例',
+  ];
+}
+
+// ── 配置助理暖场建议生成 ────────────────────────────────────────────────────
+
+async function generateConfigWarmUpSuggestions(profile: any, metadata: any): Promise<string[]> {
+  try {
+    // 从用户偏好中提取信息生成有针对性的配置建议
+    const loraPrefs = (profile.loraPreferences || []).slice(0, 3);
+    const loraNames = loraPrefs.map((lp: any) => {
+      const meta = metadata[lp.model];
+      return meta?.nickname || lp.model;
+    });
+
+    const suggestions: string[] = [];
+
+    if (loraNames.length > 0) {
+      suggestions.push(`帮我配置${loraNames[0]}的LoRA`);
+    }
+    suggestions.push('推荐一个适合高质量出图的参数组合');
+    suggestions.push('把步数和CFG调到适合精细出图的值');
+    if (loraNames.length > 1) {
+      suggestions.push(`同时启用${loraNames[0]}和${loraNames[1]}的LoRA`);
+    } else {
+      suggestions.push('帮我选一个适合的基础模型');
+    }
+
+    return suggestions.slice(0, 4);
+  } catch {
+    return [
+      '推荐一组高质量参数配置',
+      '帮我选合适的LoRA',
+      '调整采样器和步数',
+      '优化提示词内容',
+    ];
+  }
+}
+
 const router = Router();
 
 // GET /api/agent/suggestions - 暖场建议
 router.get('/suggestions', async (req, res) => {
   try {
+    const mode = req.query.mode as string || 'agent';
     const profile = buildUserProfile();
     const metadata = getMetadata();
+
+    if (mode === 'config_assistant') {
+      // 配置助理暖场建议
+      const suggestions = await generateConfigWarmUpSuggestions(profile, metadata);
+      res.json({ suggestions });
+      return;
+    }
+
+    if (mode === 'smart_qa') {
+      // 智能问答暖场建议
+      res.json({ suggestions: [
+        '什么是 CFG 值？调高会怎样？',
+        'LoRA 权重一般设多少合适？',
+        '怎么写好英文提示词？',
+        '采样器 euler 和 euler_a 有什么区别？',
+      ]});
+      return;
+    }
+
+    // 默认智能体模式
     const suggestions = await generateWarmUpSuggestions(profile, metadata);
     res.json({ suggestions });
   } catch (err) {
@@ -657,12 +776,14 @@ router.get('/user-profile', (req, res) => {
 // POST /api/agent/chat - AI 对话 + 意图解析
 router.post('/chat', async (req, res) => {
   try {
-    const { sessionId, message, messages: historyMessages, images, hasImage } = req.body as {
+    const { sessionId, message, messages: historyMessages, images, hasImage, mode, currentConfig } = req.body as {
       sessionId?: string;
       message?: string;
       messages?: LLMMessage[];
       images?: string[];
       hasImage?: boolean;
+      mode?: string;
+      currentConfig?: any;
     };
 
     if (!sessionId || !message) {
@@ -675,6 +796,165 @@ router.post('/chat', async (req, res) => {
 
     // 2. 读取模型元数据（带缓存）
     const metadata = getMetadata();
+
+    // ── 配置助理模式 ──
+    if (mode === 'config_assistant') {
+      const systemPrompt = buildConfigAssistantPrompt(profile, metadata, currentConfig || {});
+      const configMessages: LLMMessage[] = [
+        { role: 'system', content: systemPrompt },
+      ];
+
+      // 添加历史上下文（最近几条对话）
+      if (historyMessages && historyMessages.length > 0) {
+        const recentMessages = historyMessages.slice(-6)
+          .filter(m => m.role === 'user' || m.role === 'assistant')
+          .map(m => ({ role: m.role, content: m.content }));
+        configMessages.push(...recentMessages);
+      }
+
+      // 添加当前用户消息
+      configMessages.push({ role: 'user', content: message });
+
+      const tools = getConfigAssistantTools();
+      const llmResponse = await callLLM({ messages: configMessages, tools, toolChoice: 'required' });
+
+      if (llmResponse.toolCalls && llmResponse.toolCalls.length > 0) {
+        const toolCall = llmResponse.toolCalls[0];
+
+        if (toolCall.function.name === 'apply_config') {
+          try {
+            const args = JSON.parse(toolCall.function.arguments);
+            const { summary, ...changes } = args;
+
+            // ── LoRA 自动回退匹配 ──
+            // 当 Grok 返回了 prompt 变更但没有配置 LoRA 时，调用 smart-lora 引擎自动匹配
+            if (changes.prompt && (!changes.loras || changes.loras.length === 0)) {
+              try {
+                const smartLoraPrompt = await buildSmartLoraPrompt();
+                const loraResult = await callLLM({
+                  messages: [
+                    { role: 'system', content: smartLoraPrompt },
+                    { role: 'user', content: changes.prompt },
+                  ],
+                  temperature: 0.3,
+                });
+
+                let loraText = loraResult.content || '';
+                // 容错：从 markdown code block 中提取 JSON
+                const codeBlockMatch = loraText.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+                if (codeBlockMatch) {
+                  loraText = codeBlockMatch[1].trim();
+                }
+
+                try {
+                  const loraParsed = JSON.parse(loraText);
+                  const validLoras = (loraParsed.loras || [])
+                    .filter((l: any) => l.model && metadata[l.model])
+                    .map((l: any) => ({
+                      model: l.model,
+                      enabled: true,
+                      strength: typeof l.strength === 'number' ? l.strength : (metadata[l.model]?.recommendedStrength || 0.8),
+                    }))
+                    .slice(0, 5);
+
+                  if (validLoras.length > 0) {
+                    changes.loras = validLoras;
+                    // 如果 smart-lora 还返回了优化后的提示词（含触发词），使用它
+                    if (loraParsed.modifiedPrompt) {
+                      changes.prompt = loraParsed.modifiedPrompt;
+                    }
+                  }
+                } catch {
+                  console.error('[Config Assistant] Failed to parse smart-lora response');
+                }
+              } catch (err) {
+                console.error('[Config Assistant] Smart LoRA fallback failed:', err);
+              }
+            }
+
+            // 生成后续建议
+            const suggestions = await generateConfigFollowUpSuggestions(changes, profile, metadata);
+
+            res.json({
+              type: 'config_change',
+              changes,
+              summary: summary || '已应用配置变更',
+              suggestions,
+            });
+          } catch (parseErr) {
+            res.json({
+              type: 'text_response',
+              message: '配置解析失败，请重新描述您的需求。',
+            });
+          }
+          return;
+        }
+
+        if (toolCall.function.name === 'text_response') {
+          try {
+            const args = JSON.parse(toolCall.function.arguments);
+            res.json({
+              type: 'text_response',
+              message: args.message || '有什么配置需要调整的吗？',
+            });
+          } catch {
+            res.json({
+              type: 'text_response',
+              message: llmResponse.content || '有什么配置需要调整的吗？',
+            });
+          }
+          return;
+        }
+      }
+
+      res.json({
+        type: 'text_response',
+        message: llmResponse.content || '有什么配置需要调整的吗？',
+      });
+      return;
+    }
+
+    // ── 智能问答模式 ──
+    if (mode === 'smart_qa') {
+      const systemPrompt = buildSmartQAPrompt();
+      const qaMessages: LLMMessage[] = [
+        { role: 'system', content: systemPrompt },
+      ];
+
+      // 添加历史上下文
+      if (historyMessages && historyMessages.length > 0) {
+        const recentMessages = historyMessages.slice(-6)
+          .filter(m => m.role === 'user' || m.role === 'assistant')
+          .map(m => ({ role: m.role, content: m.content }));
+        qaMessages.push(...recentMessages);
+      }
+
+      // 添加当前用户消息（支持图片）
+      if (images && images.length > 0) {
+        qaMessages.push({
+          role: 'user',
+          content: [
+            { type: 'text', text: message || '' },
+            ...images.map((img: string) => ({
+              type: 'image_url',
+              image_url: { url: img },
+            })),
+          ],
+        });
+      } else {
+        qaMessages.push({ role: 'user', content: message || '' });
+      }
+
+      const llmResponse = await callLLM({ messages: qaMessages, temperature: 0.7 });
+
+      res.json({
+        type: 'text_response',
+        message: llmResponse.content || '抱歉，我无法回答这个问题。',
+      });
+      return;
+    }
+
+    // ── 默认智能体模式（以下为现有逻辑，不做修改） ──
 
     // 3. 构建系统提示词
     const systemPrompt = buildSystemPrompt(profile, metadata);

@@ -250,28 +250,35 @@ export function ZITSidebar({ width }: { width?: number }) {
   useEffect(() => {
     if (!pendingApplyConfig) return;
     // Only apply if it's a ZitConfig (has 'unetModel' field)
-    if ('unetModel' in pendingApplyConfig) {
-      const c = pendingApplyConfig as ZitConfig;
-      setUnetModel(c.unetModel ?? '');
-      setLoras(c.loras ?? []);
-      setPrompt(c.prompt ?? '');
-      setShiftEnabled(c.shiftEnabled ?? false);
-      setShift(c.shift ?? 3);
-      setSteps(c.steps ?? 9);
-      setCfg(c.cfg ?? 1);
-      setSampler(c.sampler ?? 'euler');
-      setScheduler(c.scheduler ?? 'simple');
-      // Match ratio preset or keep current
+    const cfg_ = pendingApplyConfig as any;
+    if (!cfg_.unetModel && cfg_.model) return; // Text2Img config, skip
+
+    const c = pendingApplyConfig as ZitConfig;
+
+    // 增量更新：只更新配置中存在的字段
+    if (c.unetModel !== undefined) setUnetModel(c.unetModel);
+    if (c.loras !== undefined) setLoras(c.loras);
+    if (c.prompt !== undefined) setPrompt(c.prompt);
+    if (c.shiftEnabled !== undefined) setShiftEnabled(c.shiftEnabled);
+    if (c.shift !== undefined) setShift(c.shift);
+    if (c.steps !== undefined) setSteps(c.steps);
+    if (c.cfg !== undefined) setCfg(c.cfg);
+    if (c.sampler !== undefined) setSampler(c.sampler);
+    if (c.scheduler !== undefined) setScheduler(c.scheduler);
+    if (c.width !== undefined) setCustomWidth(c.width);
+    if (c.height !== undefined) setCustomHeight(c.height);
+
+    // 如果宽高都有，尝试匹配预设比例
+    if (c.width !== undefined && c.height !== undefined) {
       const matchedPreset = RATIO_PRESETS.find(p => p.width === c.width && p.height === c.height);
       if (matchedPreset) {
         setRatio(matchedPreset.label);
-      } else if (c.width && c.height) {
+      } else {
         setRatio('custom');
       }
-      setCustomWidth(c.width ?? 832);
-      setCustomHeight(c.height ?? 1216);
-      clearPendingApplyConfig();
     }
+
+    clearPendingApplyConfig();
   }, [pendingApplyConfig, clearPendingApplyConfig]);
 
   // Persist to localStorage

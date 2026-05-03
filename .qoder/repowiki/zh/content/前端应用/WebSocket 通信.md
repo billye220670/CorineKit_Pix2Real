@@ -26,6 +26,8 @@
 - 更新进度消息格式：progress 消息包含 stage、stepIndex、stepTotal 字段，提供更详细的执行阶段信息
 - 增强 UI 展示能力：ProgressOverlay 和 ImageCard 组件支持阶段化进度显示
 - 优化服务器端进度计算：基于节点权重的阶段化进度计算，提供更准确的执行状态反馈
+- **新增**：多轮检测和tick计数支持：服务器端实现了基于tick计数的多轮进度检测算法，支持复杂工作流的精确进度跟踪
+- **新增**：Tiled采样器特殊处理：针对UltimateSDUpscale等Tiled采样器节点的特殊进度计算逻辑
 
 ## 目录
 1. [简介](#简介)
@@ -34,19 +36,21 @@
 4. [架构总览](#架构总览)
 5. [详细组件分析](#详细组件分析)
 6. [阶段化进度同步机制](#阶段化进度同步机制)
-7. [AI代理通信架构](#ai代理通信架构)
-8. [竞态条件修复机制](#竞态条件修复机制)
-9. [依赖关系分析](#依赖关系分析)
-10. [性能考量](#性能考量)
-11. [故障排除指南](#故障排除指南)
-12. [结论](#结论)
-13. [附录](#附录)
+7. [多轮检测与Tick计数算法](#多轮检测与tick计数算法)
+8. [AI代理通信架构](#ai代理通信架构)
+9. [竞态条件修复机制](#竞态条件修复机制)
+10. [依赖关系分析](#依赖关系分析)
+11. [性能考量](#性能考量)
+12. [故障排除指南](#故障排除指南)
+13. [结论](#结论)
+14. [附录](#附录)
 
 ## 简介
 本文件系统性阐述本项目中的 WebSocket 实时通信实现与最佳实践，重点覆盖：
 - 连接建立、消息传输、状态同步等核心机制
 - useWebSocket Hook 的连接管理、消息监听、错误处理与重连策略
 - 阶段化进度同步机制，支持客户端与服务器间的详细执行阶段信息同步
+- **新增**：多轮检测与Tick计数算法，支持复杂工作流的精确进度跟踪
 - AI代理通信架构，支持智能对话和工作流执行
 - 服务器端 WebSocket 服务与 ComfyUI 的对接
 - 应用场景：任务进度实时更新、状态同步、输出下载与通知、AI代理智能交互
@@ -54,7 +58,7 @@
 - **新增**：阶段化进度同步机制，提供更精确的执行阶段反馈
 
 ## 项目结构
-前端通过自定义 Hook 统一管理 WebSocket 连接，支持工作流任务和AI代理两种通信模式。服务器端基于 ws 构建 WebSocket 服务，负责与 ComfyUI 交互并将进度/完成/错误事件回传给前端。**新增**：服务器端实现了基于节点权重的阶段化进度计算，前端通过 stage、stepIndex、stepTotal 字段获取详细的执行阶段信息。
+前端通过自定义 Hook 统一管理 WebSocket 连接，支持工作流任务和AI代理两种通信模式。服务器端基于 ws 构建 WebSocket 服务，负责与 ComfyUI 交互并将进度/完成/错误事件回传给前端。**新增**：服务器端实现了基于节点权重的阶段化进度计算，前端通过 stage、stepIndex、stepTotal 字段获取详细的执行阶段信息。**新增**：多轮检测算法支持复杂工作流的精确进度跟踪。
 
 ```mermaid
 graph TB
@@ -70,12 +74,13 @@ H["ProgressOverlay.tsx<br/>阶段化进度显示"]
 I["ImageCard.tsx<br/>任务卡片UI"]
 end
 subgraph "服务器"
-J["server/index.ts<br/>WebSocketServer /ws<br/>阶段化进度计算"]
+J["server/index.ts<br/>WebSocketServer /ws<br/>阶段化进度计算<br/>多轮检测算法"]
 K["server/routes/agent.ts<br/>AI代理路由"]
 L["server/services/agentService.ts<br/>AI代理服务"]
 M["ComfyUI<br/>执行引擎"]
-N["comfyui.ts<br/>ComfyUI连接管理<br/>事件去重机制"]
+N["comfyui.ts<br/>ComfyUI连接管理<br/>事件去重机制<br/>节点权重计算"]
 O["阶段映射表<br/>class_type → 中文阶段名"]
+P["多轮检测算法<br/>Tick计数支持"]
 end
 A --> B
 E --> B
@@ -88,6 +93,7 @@ B --> D
 C --> H
 C --> I
 J --> O
+J --> P
 K --> L
 E --> K
 ```
@@ -119,6 +125,7 @@ E --> K
 - 服务器端：转发客户端注册请求、缓冲事件、回放丢失事件、下载输出并回传
 - AI代理服务：提供智能对话、意图解析、工作流执行和生成历史管理
 - **新增**：阶段映射机制：class_type → 中文阶段名映射，提供用户友好的进度显示
+- **新增**：多轮检测算法：支持复杂工作流的精确进度跟踪，包括Tick计数和节点切换检测
 
 **章节来源**
 - [useWebSocket.ts:10-73](file://client/src/hooks/useWebSocket.ts#L10-L73)
@@ -130,7 +137,7 @@ E --> K
 - [comfyui.ts:127-188](file://server/src/services/comfyui.ts#L127-L188)
 
 ## 架构总览
-WebSocket 通信链路由客户端 Hook 建立，服务器作为代理与 ComfyUI 交互，最终将事件回传至客户端，驱动 UI 实时更新。AI代理通信通过独立的状态管理和对话流程实现智能交互。**新增**：服务器端实现了基于节点权重的阶段化进度计算，提供更精确的执行阶段反馈。
+WebSocket 通信链路由客户端 Hook 建立，服务器作为代理与 ComfyUI 交互，最终将事件回传至客户端，驱动 UI 实时更新。AI代理通信通过独立的状态管理和对话流程实现智能交互。**新增**：服务器端实现了基于节点权重的阶段化进度计算，提供更精确的执行阶段反馈。**新增**：多轮检测算法支持复杂工作流的精确进度跟踪。
 
 ```mermaid
 sequenceDiagram
@@ -140,10 +147,12 @@ participant Srv as "服务器 WebSocket"
 participant Agent as "AI代理服务"
 participant Cfg as "ComfyUI"
 participant StageCalc as "阶段化进度计算"
+participant MultiRound as "多轮检测算法"
 UI->>Hook : 调用 sendMessage(...)
 Hook->>Srv : 发送消息(如注册)
 Srv->>StageCalc : 计算阶段化进度
-StageCalc->>Srv : 返回 stage、stepIndex、stepTotal
+StageCalc->>MultiRound : 检测多轮状态
+MultiRound->>Srv : 返回阶段化进度(含Tick计数)
 Srv->>Cfg : 转发/触发执行
 Cfg-->>Srv : 执行开始/进度(含阶段信息)
 Srv-->>Hook : 回传事件(带 promptId、stage、stepIndex、stepTotal)
@@ -213,6 +222,7 @@ Ignore2 --> End
 - AI代理集成：支持AI代理执行状态的独立进度跟踪
 - **新增**：阶段化进度计算：基于节点权重计算阶段进度，提供 stage、stepIndex、stepTotal 信息
 - **新增**：阶段映射机制：class_type → 中文阶段名映射，提供用户友好的进度显示
+- **新增**：多轮检测算法：支持复杂工作流的精确进度跟踪，包括Tick计数和节点切换检测
 
 ```mermaid
 flowchart TD
@@ -222,7 +232,8 @@ Register --> Buffer["按 promptId 缓存事件"]
 Buffer --> Events{"收到执行事件?"}
 Events --> |execution_start| SendStart["回传 execution_start"]
 Events --> |progress| StageCalc["阶段化进度计算"]
-StageCalc --> SendProgress["回传 progress(stage/stepIndex/stepTotal)"]
+StageCalc --> MultiRound["多轮检测算法"]
+MultiRound --> SendProgress["回传 progress(stage/stepIndex/stepTotal)"]
 Events --> |complete| WaitCheck["竞态条件检查"]
 WaitCheck --> CheckReg{"客户端已注册?"}
 CheckReg --> |是| Download["下载输出到会话目录"]
@@ -341,6 +352,7 @@ AgentStore-->>UI : 显示错误状态
 - AI代理对话：AgentDialog 提供智能对话界面，支持意图解析和工作流执行
 - 生成历史：自动记录生成日志，支持收藏和后续处理
 - **新增**：阶段化进度显示：ProgressOverlay 和 ImageCard 组件展示详细的执行阶段信息
+- **新增**：复杂工作流支持：多轮检测算法支持UltimateSDUpscale等复杂节点的精确进度跟踪
 
 **章节来源**
 - [useWebSocket.ts:91-95](file://client/src/hooks/useWebSocket.ts#L91-L95)
@@ -395,6 +407,76 @@ Emit --> End(["完成"])
 - [index.ts:19-72](file://server/src/index.ts#L19-L72)
 - [index.ts:216-236](file://server/src/index.ts#L216-L236)
 - [useWorkflowStore.ts:452-477](file://client/src/hooks/useWorkflowStore.ts#L452-L477)
+
+## 多轮检测与Tick计数算法
+
+### 多轮检测机制设计
+针对复杂工作流中的多轮执行场景，服务器端实现了基于Tick计数的多轮检测算法：
+
+```mermaid
+flowchart TD
+Start(["收到进度事件"]) --> CheckNode{"节点是否切换?"}
+CheckNode --> |是| ResetState["重置节点状态<br/>nodeTickCount=0<br/>nodeIsMultiRound=false"]
+CheckNode --> |否| CheckRound{"检测多轮状态"}
+CheckRound --> |value回退| MarkMultiRound["标记为多轮节点<br/>nodeIsMultiRound=true"]
+CheckRound --> |max变化| MarkMultiRound
+CheckRound --> |正常| NormalProgress["正常进度更新"]
+MarkMultiRound --> TickCount["nodeTickCount++"]
+NormalProgress --> TickCount
+TickCount --> UpdateProgress["更新currentValue/currentMax"]
+UpdateProgress --> CalcProgress["计算阶段化进度"]
+CalcProgress --> Emit["发送进度消息"]
+Emit --> End(["完成"])
+```
+
+**图表来源**
+- [index.ts:297-320](file://server/src/index.ts#L297-L320)
+
+### Tick计数与预期Tick计算
+服务器端使用Tick计数来精确跟踪多轮节点的执行进度：
+
+```mermaid
+flowchart TD
+Init(["节点开始"]) --> SetExpected["计算预期Tick数<br/>expectedTicks = currentNodeWeight / SAMPLER_STEP_WEIGHT"]
+SetExpected --> ReceiveTick["接收进度事件"]
+ReceiveTick --> CheckMultiRound{"是否多轮节点?"}
+CheckMultiRound --> |是| CalcProgress["nodeProgress = min(0.95, nodeTickCount / expectedTicks)"]
+CheckMultiRound --> |否| CalcProgressSingle["nodeProgress = currentValue / currentMax"]
+CalcProgress --> WeightedCalc["加权进度计算"]
+CalcProgressSingle --> WeightedCalc
+WeightedCalc --> Emit["发送进度消息"]
+Emit --> ReceiveTick
+```
+
+**图表来源**
+- [index.ts:231-247](file://server/src/index.ts#L231-L247)
+
+### Tiled采样器特殊处理
+针对UltimateSDUpscale等Tiled采样器节点，服务器端实现了特殊的进度计算逻辑：
+
+```mermaid
+flowchart TD
+Start(["检测Tiled采样器"]) --> IsTiled{"是否Tiled采样器?"}
+IsTiled --> |是| UseTileLogic["使用Tiled逻辑<br/>nodeProgress = nodeTickCount / (steps × estimatedTiles)"]
+IsTiled --> |否| UseNormalLogic["使用普通逻辑<br/>nodeProgress = currentValue / currentMax"]
+UseTileLogic --> MultiRoundCheck["检查多轮状态"]
+UseNormalLogic --> MultiRoundCheck
+MultiRoundCheck --> CalcWeighted["计算加权进度"]
+CalcWeighted --> Emit["发送进度"]
+Emit --> End(["完成"])
+```
+
+**图表来源**
+- [index.ts:137-142](file://server/src/services/comfyui.ts#L137-L142)
+
+### 前端多轮进度处理
+前端通过ProgressOverlay组件展示多轮节点的详细进度信息：
+
+**章节来源**
+- [index.ts:297-320](file://server/src/index.ts#L297-L320)
+- [index.ts:231-247](file://server/src/index.ts#L231-L247)
+- [index.ts:137-142](file://server/src/services/comfyui.ts#L137-L142)
+- [ProgressOverlay.tsx:76-94](file://client/src/components/ProgressOverlay.tsx#L76-L94)
 
 ## AI代理通信架构
 
@@ -497,12 +579,14 @@ Fallback --> Cleanup
   - App.tsx 在应用入口挂载 useWebSocket，确保全局连接可用
   - QueuePanel.tsx 使用 sendMessage 发送注册消息
   - **新增**：ProgressOverlay 和 ImageCard 依赖阶段化进度信息进行 UI 渲染
+  - **新增**：多轮检测算法依赖comfyui.ts中的节点权重计算
 - 服务器端依赖
   - WebSocketServer 依赖 ws
   - AI代理路由依赖 LLM服务、意图解析、ComfyUI服务
   - 与会话系统协作，将输出保存到会话目录
   - **新增**：阶段映射表依赖节点信息获取，提供用户友好的阶段名称
   - **新增**：ComfyUI连接管理依赖事件去重机制，防止重复触发
+  - **新增**：多轮检测算法依赖SAMPLER_STEP_WEIGHT常量进行预期Tick计算
 
 ```mermaid
 graph LR
@@ -517,11 +601,13 @@ Server["server/index.ts"] --> WS["ws"]
 Server --> Comfy["ComfyUI"]
 Server --> RaceFix["竞态条件修复"]
 Server --> StageMap["阶段映射表"]
+Server --> MultiRound["多轮检测算法"]
 AgentRoute["server/routes/agent.ts"] --> AgentService["server/services/agentService.ts"]
 AgentRoute --> LLM["server/services/llmService.ts"]
 AgentRoute --> Intent["server/services/intentParser.ts"]
 AgentRoute --> Profile["server/services/profileService.ts"]
 ComfyService["server/services/comfyui.ts"] --> EventDedup["事件去重机制"]
+ComfyService --> NodeWeight["节点权重计算"]
 ProgressOverlay["ProgressOverlay.tsx"] --> WFStore
 ImageCard["ImageCard.tsx"] --> ProgressOverlay
 ```
@@ -554,6 +640,7 @@ ImageCard["ImageCard.tsx"] --> ProgressOverlay
 - **新增**：阶段化进度计算的性能影响：基于节点权重的计算增加了服务器端处理开销，但提供了更精确的用户体验
 - **新增**：阶段映射表的内存优化：使用 Map 结构存储映射关系，避免重复计算
 - **新增**：竞态条件修复的性能影响：2秒等待时间对用户体验影响最小，但显著提高了completion事件的可靠性
+- **新增**：多轮检测算法的性能优化：Tick计数算法避免了复杂的进度回溯计算，提高处理效率
 
 ## 故障排除指南
 - 连接无法建立
@@ -585,10 +672,16 @@ ImageCard["ImageCard.tsx"] --> ProgressOverlay
   - 检查服务器端阶段映射表是否正确配置
   - 确认节点类型是否在映射表中
   - 验证前端 ProgressOverlay 组件是否正确接收 stage、stepIndex、stepTotal 参数
+- **新增**：多轮检测相关问题
+  - 检查节点权重配置是否合理
+  - 确认多轮检测算法是否正确识别节点切换
+  - 验证Tick计数是否正常递增
+  - 检查Tiled采样器节点的特殊处理逻辑
 - **新增**：进度计算异常
   - 检查节点权重配置是否合理
   - 确认节点切换事件是否正确触发
   - 验证加权进度计算公式是否正确
+  - 查看预期Tick数计算是否准确
 
 **章节来源**
 - [useWebSocket.ts:53-65](file://client/src/hooks/useWebSocket.ts#L53-L65)
@@ -599,9 +692,11 @@ ImageCard["ImageCard.tsx"] --> ProgressOverlay
 
 **重要更新**：本次阶段化进度同步机制显著提升了系统的透明度和用户体验。通过在服务器端实现基于节点权重的阶段化进度计算，前端能够获得详细的执行阶段信息，包括当前阶段(stage)、步骤索引(stepIndex)和总步骤(stepTotal)。这种精细化的进度反馈让用户能够清楚地了解任务的执行状态，特别是在复杂的多节点工作流中。
 
+**重要更新**：本次多轮检测与Tick计数算法的引入，彻底解决了复杂工作流的进度跟踪难题。通过智能检测节点切换、识别多轮执行场景、使用Tick计数进行精确进度计算，系统能够准确跟踪UltimateSDUpscale等复杂节点的执行进度，避免了传统进度计算方法的局限性。
+
 **重要更新**：本次竞态条件修复显著提升了系统的可靠性。通过在completion事件处理前增加等待机制，确保了客户端注册消息的可靠接收，解决了任务执行过快时的事件丢失问题。这一改进在不影响用户体验的前提下，大幅提高了系统的稳定性。
 
-建议在生产环境中进一步完善心跳、背压与限流策略，并对异常路径进行更细粒度的日志记录与告警。同时，监控阶段化进度计算的效果，确保节点权重配置满足实际业务需求。对于大规模并发场景，可以考虑优化阶段映射表的内存使用和计算效率。
+建议在生产环境中进一步完善心跳、背压与限流策略，并对异常路径进行更细粒度的日志记录与告警。同时，监控多轮检测算法的效果，确保Tick计数和预期Tick计算的准确性。对于大规模并发场景，可以考虑优化阶段映射表的内存使用和计算效率。
 
 ## 附录
 
@@ -639,6 +734,7 @@ ImageCard["ImageCard.tsx"] --> ProgressOverlay
 - 依赖状态管理自动更新 UI，避免手动 DOM 操作
 - AI代理通信通过 AgentDialog 组件进行，支持智能对话和工作流执行
 - **新增**：阶段化进度信息通过 updateProgress 方法自动更新，无需手动处理
+- **新增**：多轮检测算法自动处理复杂节点的进度跟踪
 
 **章节来源**
 - [App.tsx:74](file://client/src/components/App.tsx#L74)
@@ -663,17 +759,22 @@ ImageCard["ImageCard.tsx"] --> ProgressOverlay
 **章节来源**
 - [index.ts:19-72](file://server/src/index.ts#L19-L72)
 
-### 阶段化进度计算算法
-服务器端实现了基于节点权重的加权进度计算算法：
+### 多轮检测算法实现细节
+服务器端实现了完整的多轮检测与Tick计数算法：
 
-1. **节点权重配置**：不同类型的节点具有不同的权重值，采样节点权重通常较高（如 steps 数值），模型加载节点权重固定为 15，VAE 编解码节点权重为 2-3
-2. **进度状态管理**：为每个 promptId 维护独立的进度状态，包括已完成权重、当前节点、当前阶段、节点权重等
-3. **节点切换处理**：当检测到节点切换时，将上一节点的完整权重计入已完成权重，并更新到新节点
-4. **加权进度计算**：使用公式 `(已完成权重 + 当前节点权重 × 当前节点内部进度) / 总权重` 计算全局进度，封顶 99%，100% 留给 complete 确认
-5. **阶段名称映射**：通过 class_type → 中文阶段名映射表提供用户友好的阶段显示
+1. **节点切换检测**：当检测到节点ID变化时，将上一节点的完整权重计入已完成权重
+2. **多轮状态标记**：通过value回退或max变化检测多轮执行场景
+3. **Tick计数管理**：为每个节点维护nodeTickCount，用于多轮场景的精确进度跟踪
+4. **预期Tick计算**：使用公式 expectedTicks = currentNodeWeight / SAMPLER_STEP_WEIGHT 计算预期Tick数
+5. **进度计算逻辑**：
+   - 多轮节点：nodeProgress = min(0.95, nodeTickCount / expectedTicks)
+   - 普通节点：nodeProgress = currentValue / currentMax
+6. **棘轮保护机制**：防止多轮间进度回退，确保用户体验的一致性
 
 **章节来源**
-- [index.ts:173-236](file://server/src/index.ts#L173-L236)
+- [index.ts:297-320](file://server/src/index.ts#L297-L320)
+- [index.ts:231-247](file://server/src/index.ts#L231-L247)
+- [index.ts:137-142](file://server/src/services/comfyui.ts#L137-L142)
 
 ### AI代理通信流程
 - 用户通过 AgentDialog 输入需求

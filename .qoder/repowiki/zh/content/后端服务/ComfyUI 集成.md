@@ -21,11 +21,11 @@
 
 ## 更新摘要
 **所做更改**
-- 新增加权进度计算系统章节，详细介绍 PromptProgressState 管理机制
-- 更新节点权重分析与阶段映射功能说明
-- 增强 WebSocket 进度事件处理与前端展示优化
-- 补充采样器权重计算与动态权重调整机制
-- 更新进度条计算公式与阶段名称映射表
+- 新增平铺采样器集成章节，详细介绍 TILED_SAMPLER_NODE_TYPES 集合和 isTiledSampler 标志支持
+- 更新节点权重分析与阶段映射功能说明，包含 Tiled 采样器的特殊处理机制
+- 增强 WebSocket 进度事件处理与前端展示优化，支持多轮节点和 Tiled 采样器进度计算
+- 补充采样器权重计算与动态权重调整机制，包括 Tiled 采样器的估算算法
+- 更新进度条计算公式与阶段名称映射表，涵盖 SD 放大采样阶段
 
 ## 目录
 1. [简介](#简介)
@@ -34,11 +34,12 @@
 4. [架构总览](#架构总览)
 5. [详细组件分析](#详细组件分析)
 6. [加权进度计算系统](#加权进度计算系统)
-7. [依赖关系分析](#依赖关系分析)
-8. [性能考虑](#性能考虑)
-9. [故障排查指南](#故障排查指南)
-10. [结论](#结论)
-11. [附录](#附录)
+7. [平铺采样器集成](#平铺采样器集成)
+8. [依赖关系分析](#依赖关系分析)
+9. [性能考虑](#性能考虑)
+10. [故障排查指南](#故障排查指南)
+11. [结论](#结论)
+12. [附录](#附录)
 
 ## 简介
 本技术文档面向 CorineKit Pix2Real 的 ComfyUI 集成服务，聚焦于以下方面：
@@ -47,8 +48,9 @@
 - 文件上传下载处理：二进制数据传输、进度监控、内存管理
 - ComfyUI 服务集成流程：认证机制（clientId）、超时处理、性能优化建议
 - **新增** 加权进度计算系统：基于节点权重分析的精确进度估算
+- **新增** 平铺采样器集成：支持 UltimateSDUpscale 等 Tiled 采样器的特殊进度计算
 
-该系统通过适配器模式加载 ComfyUI 工作流模板，统一构建 prompt JSON 并提交队列；后端以单例 WebSocket 代理与 ComfyUI 实时通信，同时在任务完成后将输出文件下载到本地会话目录，供前端按需访问。**最新更新**引入了基于节点权重分析的加权进度计算系统，提供更准确的任务进度估算。
+该系统通过适配器模式加载 ComfyUI 工作流模板，统一构建 prompt JSON 并提交队列；后端以单例 WebSocket 代理与 ComfyUI 实时通信，同时在任务完成后将输出文件下载到本地会话目录，供前端按需访问。**最新更新**引入了基于节点权重分析的加权进度计算系统，提供更准确的任务进度估算，并集成了平铺采样器支持，能够处理分块重复采样的复杂进度计算。
 
 ## 项目结构
 整体采用前后端分离架构：
@@ -70,6 +72,7 @@ BE_Routes["REST 路由<br/>workflow/output/session"]
 BE_Services["ComfyUI 服务层<br/>HTTP/WS 封装"]
 BE_Session["会话管理<br/>sessionsBase"]
 BE_Progress["加权进度计算<br/>PromptProgressState"]
+BE_Tiled["平铺采样器支持<br/>TILED_SAMPLER_NODE_TYPES"]
 end
 subgraph "外部服务"
 COMFY["ComfyUI 服务<br/>HTTP/WS"]
@@ -84,6 +87,7 @@ BE_Routes --> BE_Services
 BE_Routes --> BE_Session
 BE_Services --> BE_Session
 BE_WS --> BE_Progress
+BE_Progress --> BE_Tiled
 ```
 
 **图表来源**
@@ -120,6 +124,10 @@ BE_WS --> BE_Progress
   - PromptProgressState 管理：跟踪任务总节点数、总权重、已完成权重等状态
   - 节点权重分析：基于时间开销的静态权重表和动态采样权重计算
   - 阶段映射：将节点类型映射为用户友好的中文阶段名称
+- **新增** 平铺采样器支持
+  - TILED_SAMPLER_NODE_TYPES 集合：包含 UltimateSDUpscale、UltimateSDUpscaleNoUpscale 等节点类型
+  - isTiledSampler 标志：标记节点是否为 Tiled 采样器，启用特殊进度计算逻辑
+  - 多轮节点处理：支持分块重复采样的 tick 计数机制
 
 **章节来源**
 - [server/src/services/comfyui.ts:1-285](file://server/src/services/comfyui.ts#L1-L285)
@@ -133,7 +141,7 @@ BE_WS --> BE_Progress
 - [client/src/hooks/useWorkflowStore.ts:1-645](file://client/src/hooks/useWorkflowStore.ts#L1-L645)
 
 ## 架构总览
-后端启动时创建 Express 与 WebSocketServer，分别监听 HTTP 与 WS 请求。每个浏览器客户端连接后，后端分配唯一 clientId 并与 ComfyUI 建立 WebSocket 连接，将 ComfyUI 的进度/完成/错误事件转换为统一格式回传给前端。**新增的加权进度计算系统**在事件处理过程中实时计算精确的进度百分比，包括阶段名称、步骤索引和总步骤数。完成事件中包含输出文件信息，后端从 ComfyUI 下载对应二进制并保存到会话目录，随后通知前端。
+后端启动时创建 Express 与 WebSocketServer，分别监听 HTTP 与 WS 请求。每个浏览器客户端连接后，后端分配唯一 clientId 并与 ComfyUI 建立 WebSocket 连接，将 ComfyUI 的进度/完成/错误事件转换为统一格式回传给前端。**新增的加权进度计算系统**在事件处理过程中实时计算精确的进度百分比，包括阶段名称、步骤索引和总步骤数。**新增的平铺采样器支持**能够处理分块重复采样的复杂进度计算，使用 tick 计数和预期 tick 数来估算进度。完成事件中包含输出文件信息，后端从 ComfyUI 下载对应二进制并保存到会话目录，随后通知前端。
 
 ```mermaid
 sequenceDiagram
@@ -141,6 +149,7 @@ participant Browser as "浏览器"
 participant WS_Server as "后端 WebSocket 服务器"
 participant WS_Comfy as "ComfyUI WebSocket"
 participant Progress as "加权进度计算"
+participant Tiled as "平铺采样器支持"
 participant HTTP as "后端 HTTP 服务"
 participant FS as "会话文件系统"
 Browser->>WS_Server : 建立 /ws 连接
@@ -148,6 +157,8 @@ WS_Server->>Browser : 发送 {type : "connected", clientId}
 WS_Server->>WS_Comfy : connectWebSocket(clientId,...)
 WS_Comfy-->>WS_Server : progress/executing/...
 WS_Server->>Progress : 计算加权进度
+WS_Server->>Tiled : 检测 Tiled 采样器节点
+Tiled-->>WS_Server : 返回 isTiledSampler 标志
 Progress-->>WS_Server : {percentage, stage, stepIndex, stepTotal}
 WS_Server-->>Browser : 转发进度/开始/完成/错误
 WS_Server->>HTTP : getHistory(promptId)
@@ -177,7 +188,7 @@ WS_Server-->>Browser : 完成事件 + 输出文件 URL
 - 提交工作流
   - 将适配器构建好的 prompt JSON 通过 /prompt 接口提交
   - 返回 prompt_id，作为后续历史查询与输出下载的标识
-  - **新增**：在提交时自动登记节点信息（class_type、title、weight）
+  - **新增**：在提交时自动登记节点信息（class_type、title、weight、isTiledSampler）
 - 历史与输出
   - 通过 /history/{promptId} 获取输出文件列表
   - 通过 /view 接口下载具体文件为 Buffer
@@ -191,7 +202,7 @@ flowchart TD
 Start(["开始"]) --> Upload["上传图像/视频<br/>返回内部文件名"]
 Upload --> BuildPrompt["适配器构建 prompt JSON"]
 BuildPrompt --> Submit["POST /prompt 提交"]
-Submit --> RegisterNodes["登记节点信息<br/>class_type/title/weight"]
+Submit --> RegisterNodes["登记节点信息<br/>class_type/title/weight/isTiledSampler"]
 RegisterNodes --> Resp{"响应成功?"}
 Resp --> |否| Err["抛出错误"]
 Resp --> |是| SaveId["记录 prompt_id"]
@@ -232,6 +243,9 @@ Save --> Done
   - onExecutionCached：处理缓存命中节点，直接计入已完成权重
   - onExecutingNode：节点切换时更新阶段名称和权重
   - onProgress：实时计算加权进度百分比
+- **新增** 平铺采样器支持
+  - 检测 isTiledSampler 标志，启用特殊进度计算逻辑
+  - 多轮节点处理：使用 nodeTickCount 和预期 tick 数计算进度
 
 ```mermaid
 sequenceDiagram
@@ -239,11 +253,14 @@ participant FE as "前端"
 participant WS as "后端 WS 服务器"
 participant CW as "ComfyUI WS"
 participant PS as "进度状态管理"
+participant TS as "Tiled采样器检测"
 FE->>WS : 建立 /ws 连接
 WS-->>FE : {type : "connected", clientId}
 WS->>CW : connectWebSocket(clientId,...)
 CW-->>WS : progress/executing/...
 WS->>PS : 初始化/更新进度状态
+WS->>TS : 检测 isTiledSampler 标志
+TS-->>WS : 返回 Tiled 采样器信息
 PS-->>WS : 计算加权进度
 WS-->>FE : 转发进度/开始/完成/错误
 FE->>WS : 注册 promptId 映射
@@ -344,11 +361,14 @@ Workflow0Adapter ..|> WorkflowAdapter
 - currentStage：当前阶段名称
 - currentNodeWeight：当前节点权重
 - currentValue/currentMax：当前节点内部进度值
+- **新增** nodeTickCount：统计当前节点收到的 progress 消息总数，用于多轮场景（如 UltimateSDUpscale）
+- **新增** nodeIsMultiRound：标记节点是否为多轮执行
+- **新增** nodeIsTiledSampler：预标记节点是否为 Tiled sampler，始终用 tick 计数
 
 系统通过 getOrInitProgress 函数为每个 promptId 创建和维护独立的进度状态，确保多任务并行时的准确性。
 
 **章节来源**
-- [server/src/index.ts:175-205](file://server/src/index.ts#L175-L205)
+- [server/src/index.ts:175-216](file://server/src/index.ts#L175-L216)
 
 ### 节点权重分析与计算
 **新增** 节点权重系统基于时间开销分析，分为静态权重和动态权重两部分：
@@ -356,28 +376,28 @@ Workflow0Adapter ..|> WorkflowAdapter
 #### 静态权重表（基于节点类型的时间开销）
 - 模型加载类：15 权重（CheckpointLoaderSimple、UNETLoader 等）
 - 文本编码类：2-3 权重（CLIPTextEncode 等）
-- VAE 编解码：3-4 权重（VAEEncode、VAEDecode 等）
+- VAE 编解码：3-4 权重（VAEEncode、VAEDecode、VAEDecodeTiled 等）
 - 放大类：8 权重（ImageUpscaleWithModel 等）
 - IO 类：1 权重（SaveImage、LoadImage 等）
 - 特殊处理：换脸、分割、反推等 8-10 权重
 
 #### 动态权重计算（采样器）
 采样器节点权重根据 steps 参数动态计算：
-- 基础权重：steps × 2.5
-- 默认步骤：20 步（当缺少 steps 时）
+- **标准采样器**：基础权重 = steps × 2.5，当缺少 steps 时使用默认步骤 20
+- **Tiled 采样器**：基础权重 = steps × 估算 tile 数 × 2.5，估算 tile 数为 8
 - 多采样器工作流会自然按采样次数累加权重
 
 **章节来源**
-- [server/src/services/comfyui.ts:57-129](file://server/src/services/comfyui.ts#L57-L129)
+- [server/src/services/comfyui.ts:57-144](file://server/src/services/comfyui.ts#L57-L144)
 
 ### 阶段映射与友好显示
 **新增** 系统提供了节点类型到中文阶段名称的映射表：
 
 - 模型加载：加载主模型、加载 UNET、加载 VAE 等
 - 文本编码：编码提示词
-- VAE 编解码：VAE 编码、VAE 解码
+- VAE 编解码：VAE 编码、VAE 解码、VAE 解码（平铺）
 - 采样：采样中
-- 放大：放大图像、放大潜空间
+- 放大：放大图像、放大潜空间、SD 放大采样
 - 视频：合成视频、加载视频
 - IO：保存图像、预览图像、加载图像
 - 特殊：面部交换、智能分割、反推提示词
@@ -385,13 +405,18 @@ Workflow0Adapter ..|> WorkflowAdapter
 如果节点没有映射，系统会回退到用户在 ComfyUI 中设置的节点标题。
 
 **章节来源**
-- [server/src/index.ts:19-72](file://server/src/index.ts#L19-L72)
+- [server/src/index.ts:19-74](file://server/src/index.ts#L19-L74)
 
 ### 进度计算公式与事件处理
 **新增** 加权进度计算的核心公式：
 ```
 全局进度 = (已完成权重 + 当前节点权重 × 当前节点内部进度) / 总权重 × 100%
 ```
+
+**新增** Tiled 采样器的特殊处理逻辑：
+- 多轮节点检测：通过 nodeTickCount 和预期 tick 数计算进度
+- 预期 tick 数：currentNodeWeight / SAMPLER_STEP_WEIGHT
+- 节点内部进度：min(0.95, nodeTickCount / 预期tick数)
 
 系统通过多个事件处理器实现精确进度跟踪：
 
@@ -401,7 +426,7 @@ Workflow0Adapter ..|> WorkflowAdapter
 - onProgress：实时计算并发送加权进度，支持节点切换时的权重同步
 
 **章节来源**
-- [server/src/index.ts:216-287](file://server/src/index.ts#L216-L287)
+- [server/src/index.ts:216-320](file://server/src/index.ts#L216-L320)
 
 ### 前端进度展示优化
 **新增** 前端 ProgressOverlay 组件现在接收并展示新的进度信息：
@@ -416,6 +441,70 @@ Workflow0Adapter ..|> WorkflowAdapter
 - [client/src/components/ProgressOverlay.tsx:59-94](file://client/src/components/ProgressOverlay.tsx#L59-L94)
 - [client/src/hooks/useWorkflowStore.ts:73](file://client/src/hooks/useWorkflowStore.ts#L73)
 
+## 平铺采样器集成
+
+### TILED_SAMPLER_NODE_TYPES 集合
+**新增** 系统引入了专门的 Tiled 采样器支持，包含以下节点类型：
+
+- UltimateSDUpscale：支持图像放大和分块采样的主要节点
+- UltimateSDUpscaleNoUpscale：仅进行分块采样而不放大图像
+
+这些节点的特点是：
+- 采用分块重复采样的方式处理大图像
+- 实际耗时 = steps × tile 数 × 采样系数
+- tile 数取决于图片尺寸和放大倍率，无法静态精确计算
+
+**章节来源**
+- [server/src/services/comfyui.ts:120-124](file://server/src/services/comfyui.ts#L120-L124)
+
+### isTiledSampler 标志支持
+**新增** 在 PromptNodeInfo 接口中增加了 isTiledSampler 标志：
+
+- 标记节点是否为 Tiled 采样器
+- 在 queuePrompt 时自动检测并设置该标志
+- 影响进度计算和阶段名称映射
+
+**章节来源**
+- [server/src/services/comfyui.ts:51-56](file://server/src/services/comfyui.ts#L51-L56)
+- [server/src/services/comfyui.ts:189-191](file://server/src/services/comfyui.ts#L189-L191)
+
+### ESTIMATED_TILE_COUNT 估算机制
+**新增** 系统使用保守估算的 tile 数：
+
+- 估价值：8（小图约 4，大图可达 100+，取偏下的中值）
+- 作用：避免过度膨胀导致进度条显示不准确
+- 计算公式：Tiled 采样器权重 = steps × 8 × 2.5
+
+这种设计平衡了精度和性能，确保进度估算既不过于乐观也不过于悲观。
+
+**章节来源**
+- [server/src/services/comfyui.ts:124-125](file://server/src/services/comfyui.ts#L124-L125)
+
+### 多轮节点处理机制
+**新增** Tiled 采样器的特殊进度计算：
+
+- nodeTickCount：统计收到的 progress 消息数量
+- 预期 tick 数：currentNodeWeight / SAMPLER_STEP_WEIGHT
+- 节点内部进度：min(0.95, nodeTickCount / 预期tick数)
+- 不受 max 重置影响：线性递增，避免进度回退
+
+这种机制能够准确跟踪分块重复采样的进度，即使 ComfyUI 在不同 tile 之间切换进度值。
+
+**章节来源**
+- [server/src/index.ts:232-239](file://server/src/index.ts#L232-L239)
+- [server/src/index.ts:288-293](file://server/src/index.ts#L288-L293)
+
+### 阶段名称映射
+**新增** Tiled 采样器的阶段名称：
+
+- UltimateSDUpscale：SD 放大采样
+- UltimateSDUpscaleNoUpscale：SD 放大采样
+
+这些阶段名称与普通放大节点区分，让用户清楚地知道正在进行的是分块采样处理。
+
+**章节来源**
+- [server/src/index.ts:55-56](file://server/src/index.ts#L55-L56)
+
 ## 依赖关系分析
 - 路由依赖服务层
   - workflow 路由依赖 comfyui 服务与会话管理
@@ -429,6 +518,11 @@ Workflow0Adapter ..|> WorkflowAdapter
 - **新增** 进度计算依赖
   - index.ts 中的 PromptProgressState 管理
   - comfyui.ts 中的节点权重计算
+  - **新增** Tiled 采样器检测逻辑
+- **新增** 平铺采样器依赖
+  - TILED_SAMPLER_NODE_TYPES 集合
+  - isTiledSampler 标志支持
+  - 多轮节点处理机制
 
 ```mermaid
 graph LR
@@ -441,6 +535,8 @@ FE_WS["useWebSocket.ts"] --> FE_TYPES["types/index.ts"]
 FE_STORE["useWorkflowStore.ts"] --> FE_TYPES
 PROGRESS["加权进度计算"] --> IDX
 PROGRESS --> SVC
+TILED["平铺采样器支持"] --> SVC
+TILED --> IDX
 ```
 
 **图表来源**
@@ -480,6 +576,10 @@ PROGRESS --> SVC
   - 节点权重计算复杂度低，对性能影响可忽略
   - 进度状态缓存使用 Map 结构，内存占用与任务数量线性相关
   - 建议定期清理已完成任务的进度状态以释放内存
+- **新增** Tiled 采样器性能
+  - Tiled 采样器权重估算使用保守值，避免过度计算
+  - 多轮节点处理仅在 Tiled 采样器时启用，减少不必要的计算开销
+  - nodeTickCount 计数器内存占用与节点数量线性相关
 
 ## 故障排查指南
 - ComfyUI 不可用
@@ -495,12 +595,20 @@ PROGRESS --> SVC
   - 现象：WebSocket 无 progress 或 complete
   - 排查：确认客户端已注册 promptId 映射；检查后端事件缓冲与重放逻辑
   - **新增**：检查节点权重计算是否正常，确认 STAGE_NAMES 映射是否存在
+  - **新增**：检查 Tiled 采样器节点的 isTiledSampler 标志是否正确设置
 - 输出文件缺失
   - 现象：完成事件存在但无法下载
   - 排查：检查 /history 返回的输出列表；确认 /view 参数与文件存在；查看后端日志中的下载错误
 - **新增** 进度显示异常
   - 现象：进度百分比不准确或阶段名称显示异常
   - 排查：检查节点权重表配置；确认节点类型映射；验证采样器 steps 参数
+  - **新增**：检查 Tiled 采样器的 ESTIMATED_TILE_COUNT 估算值是否合理
+  - **新增**：验证 nodeTickCount 计数器是否正常递增
+- **新增** Tiled 采样器问题
+  - 现象：SD 放大采样进度异常或停滞
+  - 排查：确认节点类型为 UltimateSDUpscale 或 UltimateSDUpscaleNoUpscale
+  - 排查：检查 steps 参数是否正确设置
+  - 排查：验证预期 tick 数计算是否正确
 
 **章节来源**
 - [server/src/services/comfyui.ts:47-83](file://server/src/services/comfyui.ts#L47-L83)
@@ -508,7 +616,7 @@ PROGRESS --> SVC
 - [server/src/index.ts:92-189](file://server/src/index.ts#L92-L189)
 
 ## 结论
-本系统通过适配器模式与统一的 HTTP/WS 封装，实现了对多种 ComfyUI 工作流的标准化接入。**最新更新**引入的加权进度计算系统显著提升了进度估算的准确性，通过节点权重分析和阶段映射为用户提供了更直观的任务执行状态。前端以单例 WebSocket 与状态库协同，提供实时进度与输出管理；后端负责与 ComfyUI 的桥接与本地文件持久化。建议在生产环境中增强 HTTP 重试与超时、优化大文件处理与内存占用，并完善错误监控与日志追踪。
+本系统通过适配器模式与统一的 HTTP/WS 封装，实现了对多种 ComfyUI 工作流的标准化接入。**最新更新**引入的加权进度计算系统显著提升了进度估算的准确性，通过节点权重分析和阶段映射为用户提供了更直观的任务执行状态。**新增的平铺采样器集成**进一步增强了系统的实用性，能够准确处理分块重复采样的复杂进度计算。前端以单例 WebSocket 与状态库协同，提供实时进度与输出管理；后端负责与 ComfyUI 的桥接与本地文件持久化。建议在生产环境中增强 HTTP 重试与超时、优化大文件处理与内存占用，并完善错误监控与日志追踪。
 
 ## 附录
 

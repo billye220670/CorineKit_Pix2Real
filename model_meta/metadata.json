@@ -1766,5 +1766,245 @@
     "thumbnail": "1c11c2e3-0819-4743-ab16-51bdda4f259c.png",
     "triggerWords": "mai_pose_brushing_teeth,brushing_teeth,holding_toothbrush,foam in mouth",
     "category": "姿势"
+  },
+  "姿势\\口爆.safetensors": {
+    "triggerWords": "cheek bulge, cheeks, blowjob",
+    "nickname": "口爆",
+    "thumbnail": "de6b26b7-ccc1-4725-a3e4-f0db575a794d.png",
+    "category": "姿势"
+  },
+  "姿势\\反省板.safetensors": {
+    "thumbnail": "7783dcb6-d0f6-44a7-89b4-8b42ca55b457.png",
+    "triggerWords": "hansei-ita,bound, bdsm, bondage, ass, stationary restraints,",
+    "category": "姿势"
+  },
+  "姿势\\侧视角触手姦.safetensors": {
+    "thumbnail": "453dafe9-939a-405d-9583-6a0dd0297327.png",
+    "triggerWords": "from side view, top-down bottom-up, knees to chest, toe scrunch, tentacle pit, arms behind back, tentacle fellatio, suspended by tentacles, implied sex, tentacles sucking breasts, tentacles around neck, feet",
+    "category": "姿势"
+  },
+  "姿势\\乳夹板.safetensors": {
+    "thumbnail": "36f1095b-ee8e-4448-b454-7a8a4255accf.png",
+    "category": "姿势",
+    "triggerWords": "btframe,from side,bdsm,nipple piercing,nipple rings,(metal frame:1.2),(gold plate:1.1),nipple pull,(breast bondage:0.2),chain,upper body,<lora:btframe3:1>,spiked,nude,"
+  },
+  "姿势\\侧漏走光.safetensors": {
+    "thumbnail": "12d83f46-5e02-4331-8cc8-c4afca4ce6c2.png",
+    "category": "姿势",
+    "triggerWords": "upshortsILL, upshorts"
+  },
+  "姿势\\内裤塞嘴.safetensors": {
+    "thumbnail": "24fa4fca-1aaf-41af-b6b7-cc5f352d700a.png",
+    "category": "姿势",
+    "triggerWords": "pntygg, panties in mouth, panties, object in mouth, gag, gagged, panty gag, clothes gag, stuffed gag, unworn panties, finger in mouth, 1girl, 1boy, <lora:panty_gag_illustrious:0.7>"
+  },
+  "姿势\\1Bar监禁.safetensors": {
+    "thumbnail": "5d95dd10-9f50-46a5-9c53-fabbb3dba7da.png",
+    "category": "姿势",
+    "triggerWords": "pole_insertion,standing,"
+  },
+  "姿势\\O黑颜.safetensors": {
+    "triggerWords": "ohogao,  puckered lips, trembling, tearing up,  v-shaped eyebrows, rolling eyes, open mouth, tongue out, tongue up",
+    "thumbnail": "cdf5a8e7-3d1e-44ba-8739-e955b480b64e.png",
+    "category": "姿势"
+  },
+  "姿势\\反向伸展拘束.safetensors": {
+    "triggerWords": "reversebridgebondage, arched back,boundwrist,bound ankles,bdsm,bondage",
+    "thumbnail": "8a461bf6-e26c-4e01-8df1-99de032fdaf6.png",
+    "category": "姿势"
+  },
+  "姿势\\吸吮脚趾.safetensors": {
+    "thumbnail": "1e2acdb2-c068-40e3-ab75-364a8cefe257.png",
+    "category": "姿势"
+  },
+  "姿势\\地板束缚.safetensors": {
+    "thumbnail": "58e11acc-744e-4251-b0bd-b31da45c9909.png",
+    "triggerWords": "floor_stock,top-down bottom-up,bound ankles,leather cuffs,arms between legs,chains,mattress,on floor,",
+    "category": "姿势"
+  },
+  "姿势\\手指开口.safetensors": {
+    "triggerWords": "fngrnmthmltpl, finger in mouth, mouth pull, hand in another's mouth, finger sucking, open mouth, finger to mouth, 1girl, multiple boys, pov hands, <lora:finger_in_mouth_multiple_illustrious:0.6>",
+    "thumbnail": "97425df0-8189-4572-8496-d12f001d540f.png",
+    "category": "姿势"
+  },
+  "姿势\\抬腿打屁屁.safetensors": {
+    "thumbnail": "b037bb1e-3d58-4028-8eb2-d8d065b6052e.png",
+    "triggerWords": "legs_up_spanking",
+    "category": "姿势"
+  },
+  "姿势\\抱枕.safetensors": {
+    "triggerWords": "dakimakura_comeon,  from above, dakimakura ,  from above, multiple views, 2 views, bed sheet",
+    "thumbnail": "839ab309-a278-4aa8-a08f-97c75c850c76.png",
+    "category": "姿势"
+  },
+  "姿势\\瑜伽-拉伸A.safetensors": {
+    "thumbnail": "a84d49f6-ca0f-48f3-b760-9dfd743d068e.png",
+    "triggerWords": "cobra pose, upward-facing pose, backbend pose, stretching pose, lying on stomach, arched back, chest forward, head raised,",
+    "category": "姿势"
+  },
+  "姿势\\瑜伽-拉伸B.safetensors": {
+    "thumbnail": "776f0fa9-c40f-4144-bf03-45a96fad086c.png",
+    "triggerWords": "seated forward bend, forward fold, seated yoga pose, hamstring stretch, flexibility, deep stretch",
+    "category": "姿势"
+  },
+  "姿势\\肛门轮廓.safetensors": {
+    "thumbnail": "04af3a31-4fea-41ff-b896-ea6f364bacd4.png",
+    "triggerWords": "covered anus, anus visible through clothes, coveredanusill",
+    "category": "姿势"
+  },
+  "姿势\\胜利女神姿势.safetensors": {
+    "triggerWords": "Standing: nikkestanding, full body, standing  Crouching: nikkecrouching, full body, [kneeling/squatting/one knee]  Aiming: nikkeaiming, full body, from behind, facing away, [kneeling/squatting/one knee]",
+    "thumbnail": "6e43fe8e-df0e-412d-a3aa-184c28e80257.png",
+    "category": "姿势"
+  },
+  "姿势\\虫姦.safetensors": {
+    "thumbnail": "deb20647-f81c-44d0-94d8-a66160f4b860.png",
+    "triggerWords": "Mons22(1-22), creature on back, slime sex, green slime monster, small monster,Abstract creature,vaginally, egg implantation, large pink creature,tentacle sex,short tentacles, giant insect body part, partially covered head",
+    "category": "姿势"
+  },
+  "姿势\\隔衣直入.safetensors": {
+    "thumbnail": "7fffb20c-5513-41e9-abe2-d6a47132a144.png",
+    "category": "姿势",
+    "triggerWords": "analthroughclothesill, anal through clothes, anal,wrinkled pants, taut clothes,"
+  },
+  "姿势\\隔靴搔痒.safetensors": {
+    "thumbnail": "0a08000a-25d3-40cd-91c2-d849b56a4f98.png",
+    "triggerWords": "clomasill, masturbation through clothes, clothed masturbation, female masturbation,",
+    "category": "姿势"
+  },
+  "姿势\\钢管舞.safetensors": {
+    "thumbnail": "7d54c179-b2be-4e76-93af-a35a3fa157a1.png",
+    "triggerWords": "pole dancing,stripper pole,spread legs",
+    "category": "姿势"
+  },
+  "姿势\\首枷.safetensors": {
+    "thumbnail": "67a29c03-0797-4d04-b44e-21df1f500bb3.png",
+    "triggerWords": "mai_bdsm_pillory,pillory",
+    "category": "姿势"
+  },
+  "姿势\\趾铐.safetensors": {
+    "thumbnail": "56630744-0cc4-48dd-9052-3c4983b6ba84.png",
+    "triggerWords": "metal toecuffs,bound toes",
+    "category": "姿势"
+  },
+  "姿势\\自磨.safetensors": {
+    "thumbnail": "2325fab4-cd83-435d-82fc-46e2471462ea.png",
+    "triggerWords": "crotch rub, crotchrubill, grinding,",
+    "category": "姿势"
+  },
+  "角色\\青色大脑.safetensors": {
+    "triggerWords": ",1girl,large breasts,blue hair,short hair,blue eyes,black gloves,elbow gloves,bare shoulders,navel,sideboob,earrings,hairband,",
+    "thumbnail": "e051e4d4-a4e3-419e-acec-1a645e3de3f4.png",
+    "category": "角色"
+  },
+  "角色\\不来方夕莉.safetensors": {
+    "thumbnail": "2c2eddb2-9bdb-439b-82a5-4d09f5703374.png",
+    "triggerWords": "yuri_il,1girl,(black hair:0.8), shorts,black shorts,socks,long hair,thigh strap,boots,black socks,bare shoulders,black footwear,lips,breasts,ribbon,white_short sleeves,shirt,shoulder cutout,clothing cutout,collarbone,bow,breasts,small breasts,belt buckle,(orange_open_clothes:0.8),skindentation,",
+    "category": "角色"
+  },
+  "角色\\合金笠本英里.safetensors": {
+    "thumbnail": "cbeec885-ace5-447b-a930-b2f2d6009e4c.png",
+    "triggerWords": "1girl,brown eyes,blonde hair,long hair,ponytail, bandana, knee pads,shorts,boots,vest,breasts,midriff,crop top,combat boots,short shorts,pouch,belt,medium breasts,cross-laced footwear,brown shorts,hip vent,lace-up boots,open vest,open clothes,tube top,strapless,fanny pack,brown footwear,jacket",
+    "category": "角色"
+  },
+  "角色\\圣女邪教讨伐贝拉.safetensors": {
+    "thumbnail": "02dd1fac-d59e-4b65-a4f6-81a5464d2eb0.png",
+    "triggerWords": "pella_ritualsummon,  blond hair, long hair, asymmetrical bangs, twintails,  amber eyes,  hair ornament, white dress, backless dress, short dress, sleeveless, very long ribbon,  sideboob, side slit,  white gloves, elbow gloves, fingerless gloves,  gold bracelet, gold necklace,   white panties, side-tie panties,  uneven legwear, thighhighs, kneehighs, gold thigh ring,  gold footwear, high heels,",
+    "category": "角色"
+  },
+  "角色\\鬼灭小葵.safetensors": {
+    "thumbnail": "dd3dc680-5bad-4278-9b17-66422e75c95c.png",
+    "triggerWords": "black hair, parted bangs, forehead, butterfly hair ornament, blue eyes, twintails, medium hair, v-shaped eyebrows, white pupils Nurse nur5e, white coat, long coat, blue sash, layered clothes, layered sleeves, short over long sleeves Demon Slayer Corps blue gakuran, blue puffy pants, white belt, turtleneck",
+    "category": "角色"
+  },
+  "角色\\水无月流歌.safetensors": {
+    "thumbnail": "981f30d0-07ec-4b22-b253-3304d1d4147f.png",
+    "category": "角色",
+    "triggerWords": "ruka_IL2,yellow dress,frills,1girl,jewelry,(black pantyhose:1.2),shoes,dress,cleavage,lips,necklace,pendant,sleeveless,collarbone,(grid grain pantyhose:1.2),(white footwear:0.5),(yellow footwear:0.5),blue eyes,lace"
+  },
+  "角色\\城市寄生虫.safetensors": {
+    "triggerWords": "Heroine, blonde hair,long hair,sidelocks,hair between eyes,blue eyes, bare shoulders,off shoulder,cleavage,white shirt,crop top,midriff,long sleeves,holding handgun,large breasts,navel,denim shorts,short shorts,black thighhighs,boots,black footwear",
+    "thumbnail": "48a64f3d-c5dc-4493-a863-572bc7a35b2a.png",
+    "category": "角色"
+  },
+  "角色\\英雄学院-渡我被身子.safetensors": {
+    "thumbnail": "ca1fdb8e-f33d-412c-9135-7bdb1ac32765.png",
+    "triggerWords": "toga himiko, yellow eyes, slit pupils, bags under eyes, blonde hair, sidelocks, blunt bangs, narrowed eyes, double bun, hair bun, messy hair, brown cardigan, blue serafuku, red neckerchief, miniskirt, blue skirt, pleated skirt, black socks, brown shoes",
+    "category": "角色"
+  },
+  "角色\\荆棘修女伊妮莎.safetensors": {
+    "thumbnail": "47666734-6d36-480b-a67e-47506167fdd5.png",
+    "triggerWords": "1girl,skinny,mature female,(aged up:1.2),nun,mai_thornsin_nun,long_hair,large_breasts,red_eyes,eyelashes,lips,cleavage,veil,hair_ornament,hair_flower,red_flower,white elbow gloves,golden eyelashes,lips,pelvic_curtain,black_pantyhose,black leotard,golden high_heels,white parasol,white strapless bra",
+    "category": "角色"
+  },
+  "角色\\裏路地ノ事情Keibi.safetensors": {
+    "thumbnail": "1f4fa73f-40b2-4b7c-bc5e-44152d9890fb.png",
+    "triggerWords": "BackAlleyKeibi,1girl,brown hair,short hair,brown eyes,police uniform,policewoman,hat,necktie,shirt,pencil skirt,miniskirt,black pantyhose,short sleeves,",
+    "category": "角色"
+  },
+  "角色\\Airi罪恶地狱.safetensors": {
+    "thumbnail": "cc3a2b10-f77e-4f4e-9409-707c738c2025.png",
+    "triggerWords": "amazing quality,absurdres,best quality,masterpiece,highres,newest,detailed,detailed body,detailed face,masterpiece,best quality,solo,3d,realistic, GuiltyHell,1girl,solo,thighhighs,high heels,midriff,navel,skirt,long hair,shoes,earrings,jewelry,wings,red hair,<lora:GuiltyHell:0.8>,",
+    "category": "角色"
+  },
+  "角色\\VTuber言之叶.safetensors": {
+    "triggerWords": "cotonoha vee, black bow, black shoes, blonde hair, blue bow, blue eyes, blue ribbon, blue skirt, crown braid, footwear bow, frilled skirt,frilled sleeves, high-waist skirt, kneehighs, long hair, low twintails, platform footwear, puffy long sleeves, white shirt, white socks,",
+    "thumbnail": "5136c72e-8e45-4d18-9ddb-5c710a171d09.png",
+    "category": "角色"
+  },
+  "角色\\AyaBrea寄生之夜.safetensors": {
+    "thumbnail": "8fe2d94d-ff57-44f1-b7a9-ceba2028b32b.png",
+    "triggerWords": "Aya Brea",
+    "category": "角色"
+  },
+  "服饰\\【光辉】【服饰】男士内裤.safetensors": {
+    "thumbnail": "7a8f32cc-a96e-4028-840e-b673fdeff361.png",
+    "nickname": "男士内裤",
+    "triggerWords": "boxer briefs",
+    "category": "服饰"
+  },
+  "服饰\\【光辉】【服饰】高腰内裤.safetensors": {
+    "thumbnail": "f646de6c-fa42-4c0c-b51d-10926b28369e.png",
+    "triggerWords": "highcut underwear",
+    "nickname": "高腰内裤",
+    "category": "服饰"
+  },
+  "服饰\\深圳校服.safetensors": {
+    "triggerWords": "zxfwaitao blue jacket, szxfduanxiu white shirt,  szxfchangxiu white shirt, szxfduanku blue shorts, szxfchangku blue pants, szxfwaitao blue jacket, white jacket, blue jacket, multicolored jacket, szxfduanxiu white shirt, white shirt, short sleeves, szxfchangxiu white shirt, white shirt, long sleeves, szxfduanku blue shorts, blue shorts, szxfchangku blue pants, blue pants"
+  },
+  "性别\\男娘内裤.safetensors": {
+    "thumbnail": "b2588299-ec2d-4fba-a8b4-16d15506362f.png",
+    "triggerWords": "otoko_no_ko, underpants, crotch, femboy panties, crotch bulge",
+    "category": "性别"
+  },
+  "性别\\锁睾环.safetensors": {
+    "thumbnail": "231b6f89-0e70-4f3a-94ee-9846d0db4219.png",
+    "triggerWords": "flat chastity cage, testicles,  red testicles, small testicles, ejaculation",
+    "category": "性别"
+  },
+  "性别\\饼式贞操锁.safetensors": {
+    "thumbnail": "f9541c0a-0f59-4d9b-a5eb-548373955d7e.png",
+    "triggerWords": "flat chastity cage, precum drip, testicles, ejaculation, ejaculating while penetrated, cum",
+    "category": "性别"
+  },
+  "姿势\\淫手缠身.safetensors": {
+    "thumbnail": "a14c6554-6f57-4566-893c-c2cc4d3783e5.png",
+    "category": "姿势",
+    "triggerWords": "disembodied hand, pussy, pants pull, multiple boys, fingering, expressionless, torn clothes, prison clothes, hand on another's chin, black blindfold, grabbing another's breast, bound wrists, groping, restrained, breast grab, bound, clothes pull, grabbing, pussy juice, arms up'"
+  },
+  "姿势\\众手缠身.safetensors": {
+    "thumbnail": "a2146f62-1737-4329-82ba-3aad3aeea85f.png",
+    "triggerWords": "swarming hands, disembodied limb, attached limb, translucent hands, solid hands, few hands, many hands, [part] grab",
+    "category": "姿势"
+  },
+  "姿势\\自靴嗅.safetensors": {
+    "thumbnail": "89a9f8ff-a1a7-4fc9-8a09-465d656185df.png",
+    "triggerWords": "smelling_own_shoe, holding_smelly_shoe, shoes removed, smell, sweat, shiny skin, half-closed eyes, breath",
+    "category": "姿势"
+  },
+  "姿势\\后方骑姦.safetensors": {
+    "thumbnail": "5318a38a-42ad-48f8-8183-89cd661cab59.png",
+    "triggerWords": "sex from behind, standing, standing sex, open mouth, sitting on person, from side, pussy peek, dungeon, bound wrists, cave interior, arms up, chained, groping, nipples, sex slave, nude, pet play, boy on top, implied sex, interspecies, sex",
+    "category": "姿势"
   }
 }

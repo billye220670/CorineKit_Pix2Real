@@ -20,6 +20,7 @@
 - [useDragStore.ts](file://client/src/hooks/useDragStore.ts)
 - [useMaskStore.ts](file://client/src/hooks/useMaskStore.ts)
 - [useModelMetadata.ts](file://client/src/hooks/useModelMetadata.ts)
+- [useSession.ts](file://client/src/hooks/useSession.ts)
 - [sessionService.ts](file://client/src/services/sessionService.ts)
 - [maskConfig.ts](file://client/src/config/maskConfig.ts)
 - [index.ts](file://client/src/types/index.ts)
@@ -42,7 +43,7 @@
 ## 简介
 本项目是一个基于 React 的图像处理与生成工作流前端应用，围绕 App 主组件构建了完整的组件体系。系统通过多 Tab 工作流、拖拽交互、蒙版编辑、实时进度反馈等能力，支撑从图像导入、处理到结果输出的完整流程。本文档将深入解析 App 主组件的设计架构、组件层次结构、状态传递机制与事件处理模式，并详细说明 Sidebar、PhotoWall、DropZone、ImageCard 等核心组件的职责与协作方式。
 
-**更新** 本版本新增了右侧侧边栏可调整大小功能、卡片布局系统、滑块控件改进和切换开关等UI增强功能，以及全新的五状态 StartupOverlay 启动覆盖组件，实现了双门验证系统确保 ComfyUI 服务就绪和 WebSocket 客户端 ID 可用性的双重条件满足。
+**更新** 本版本新增了右侧侧边栏可调整大小功能、卡片布局系统、滑块控件改进和切换开关等UI增强功能，以及全新的五状态 StartupOverlay 启动覆盖组件，实现了双门验证系统确保 ComfyUI 服务就绪和 WebSocket 客户端 ID 可用性的双重条件满足。**新增会话作用域标志系统**，使用 sessionStorage 防止启动覆盖层在同一会话内的重复显示，优化用户体验并提高资源利用率。
 
 ## 项目结构
 客户端采用按功能模块组织的目录结构，核心入口位于 main.tsx，应用根组件为 App.tsx，其余组件分布在 components 目录下，状态管理通过 hooks 中的 Zustand stores 实现，类型定义集中在 types 目录，样式通过全局 CSS 控制。
@@ -68,16 +69,18 @@ Q["package.json<br/>依赖声明"] --> A
 R["ModelSelect.tsx<br/>模型选择器"] --> S["useModelMetadata.ts<br/>模型元数据"]
 T["Text2ImgSidebar.tsx<br/>文生图侧边栏"] --> R
 U["ZITSidebar.tsx<br/>ZIT侧边栏"] --> R
-V["sessionService.ts<br/>会话服务"] --> T
-W["sessionService.ts<br/>会话服务"] --> U
-X["global.css<br/>全局样式"] --> T
-X --> U
+V["useSession.ts<br/>会话管理"] --> T
+W["useSession.ts<br/>会话管理"] --> U
+X["sessionService.ts<br/>会话服务"] --> T
+Y["sessionService.ts<br/>会话服务"] --> U
+Z["global.css<br/>全局样式"] --> T
+Z --> U
 ```
 
 **图表来源**
 - [main.tsx:1-11](file://client/src/main.tsx#L1-L11)
 - [App.tsx:25-196](file://client/src/components/App.tsx#L25-L196)
-- [StartupOverlay.tsx:1-200](file://client/src/components/StartupOverlay.tsx#L1-L200)
+- [StartupOverlay.tsx:1-197](file://client/src/components/StartupOverlay.tsx#L1-L197)
 - [Sidebar.tsx:30-425](file://client/src/components/Sidebar.tsx#L30-L425)
 - [PhotoWall.tsx:103-578](file://client/src/components/PhotoWall.tsx#L103-L578)
 - [DropZone.tsx:39-171](file://client/src/components/DropZone.tsx#L39-L171)
@@ -93,6 +96,7 @@ X --> U
 - [useDragStore.ts:1-17](file://client/src/hooks/useDragStore.ts#L1-L17)
 - [useMaskStore.ts:1-51](file://client/src/hooks/useMaskStore.ts#L1-L51)
 - [useModelMetadata.ts:1-169](file://client/src/hooks/useModelMetadata.ts#L1-L169)
+- [useSession.ts:1-425](file://client/src/hooks/useSession.ts#L1-L425)
 - [sessionService.ts:1-140](file://client/src/services/sessionService.ts#L1-L140)
 - [maskConfig.ts:1-20](file://client/src/config/maskConfig.ts#L1-L20)
 - [index.ts:1-58](file://client/src/types/index.ts#L1-L58)
@@ -106,7 +110,7 @@ X --> U
 ## 核心组件
 本节概述主要组件及其职责：
 - App：应用根容器，负责全局布局、主题切换、欢迎页、拖拽处理、状态持久化与子组件编排，**新增右侧侧边栏可调整大小功能**。
-- **StartupOverlay：全新五状态启动覆盖层**，实现双门验证系统，确保 ComfyUI 服务就绪和 WebSocket 客户端 ID 可用性双重条件满足，提供 CHECKING、WAITING、CONNECTING、READY、HIDDEN 五种状态。
+- **StartupOverlay：全新五状态启动覆盖层**，实现双门验证系统，确保 ComfyUI 服务就绪和 WebSocket 客户端 ID 可用性双重条件满足，提供 CHECKING、WAITING、CONNECTING、READY、HIDDEN 五种状态。**新增会话作用域标志系统**，使用 sessionStorage 防止重复显示启动覆盖层，优化用户体验并提高资源利用率。
 - Sidebar：工作流导航与任务队列管理，支持跨标签拖拽与任务状态指示。
 - PhotoWall：图片墙展示与批量操作，支持懒加载、多选、批量执行与删除，**采用CSS Grid实现响应式卡片布局**。
 - DropZone：通用拖拽导入区域，支持文件夹与文件拖放。
@@ -118,11 +122,11 @@ X --> U
 - Text2ImgSidebar：文生图工作流侧边栏，支持多槽位 LoRA、触发词复制、提示词助手、**自定义切换开关**。
 - ZITSidebar：ZIT工作流侧边栏，支持 UNet 模型选择、多槽位 LoRA、触发词复制、采样算法偏移、**自定义切换开关**。
 
-**更新** 新增了右侧侧边栏可调整大小功能、CSS Grid卡片布局、改进的滑块控件样式和自定义切换开关等UI增强功能，以及全新的五状态 StartupOverlay 启动覆盖组件。
+**更新** 新增了右侧侧边栏可调整大小功能、CSS Grid卡片布局、改进的滑块控件样式和自定义切换开关等UI增强功能，以及全新的五状态 StartupOverlay 启动覆盖组件。**StartupOverlay 现在集成了会话作用域标志系统，使用 sessionStorage 防止启动覆盖层在同一会话内的重复显示**。
 
 **章节来源**
 - [App.tsx:25-196](file://client/src/components/App.tsx#L25-L196)
-- [StartupOverlay.tsx:1-200](file://client/src/components/StartupOverlay.tsx#L1-L200)
+- [StartupOverlay.tsx:1-197](file://client/src/components/StartupOverlay.tsx#L1-L197)
 - [Sidebar.tsx:30-425](file://client/src/components/Sidebar.tsx#L30-L425)
 - [PhotoWall.tsx:103-578](file://client/src/components/PhotoWall.tsx#L103-L578)
 - [DropZone.tsx:39-171](file://client/src/components/DropZone.tsx#L39-L171)
@@ -142,6 +146,7 @@ X --> U
 - 模型元数据通过 useModelMetadata hook 管理，支持触发词、缩略图、昵称等信息的持久化。
 - **新增全局样式系统**，通过 CSS 变量和自定义样式类提供一致的UI体验。
 - **新增双门验证系统**，StartupOverlay 与 useWebSocket 协同确保服务就绪和客户端连接双重验证。
+- **新增会话作用域标志系统**，StartupOverlay 使用 sessionStorage 防止重复显示启动覆盖层。
 
 ```mermaid
 graph TB
@@ -167,6 +172,7 @@ WS["useWebSocket"]
 DRAG["useDragStore"]
 MASK["useMaskStore"]
 MM["useModelMetadata"]
+US["useSession"]
 end
 subgraph "服务层"
 SS["sessionService"]
@@ -197,11 +203,15 @@ T2IS --> MS
 T2IS --> MM
 T2IS --> WFS
 T2IS --> WS
+T2IS --> US
 ZITS --> MS
 ZITS --> MM
 ZITS --> WFS
 ZITS --> WS
+ZITS --> US
 MS --> MM
+US --> T2IS
+US --> ZITS
 SS --> T2IS
 SS --> ZITS
 GC --> T2IS
@@ -210,7 +220,7 @@ GC --> ZITS
 
 **图表来源**
 - [App.tsx:25-196](file://client/src/components/App.tsx#L25-L196)
-- [StartupOverlay.tsx:1-200](file://client/src/components/StartupOverlay.tsx#L1-L200)
+- [StartupOverlay.tsx:1-197](file://client/src/components/StartupOverlay.tsx#L1-L197)
 - [Sidebar.tsx:30-425](file://client/src/components/Sidebar.tsx#L30-L425)
 - [PhotoWall.tsx:103-578](file://client/src/components/PhotoWall.tsx#L103-L578)
 - [FaceSwapPhotoWall.tsx:213-800](file://client/src/components/FaceSwapPhotoWall.tsx#L213-L800)
@@ -226,6 +236,7 @@ GC --> ZITS
 - [useDragStore.ts:1-17](file://client/src/hooks/useDragStore.ts#L1-L17)
 - [useMaskStore.ts:1-51](file://client/src/hooks/useMaskStore.ts#L1-L51)
 - [useModelMetadata.ts:9-169](file://client/src/hooks/useModelMetadata.ts#L9-L169)
+- [useSession.ts:1-425](file://client/src/hooks/useSession.ts#L1-L425)
 - [sessionService.ts:1-140](file://client/src/services/sessionService.ts#L1-L140)
 - [global.css:220-263](file://client/src/styles/global.css#L220-L263)
 
@@ -251,6 +262,7 @@ participant DZ as "DropZone"
 participant WFS as "useWorkflowStore"
 U->>APP : 加载应用
 APP->>SO : 渲染启动覆盖层
+SO->>SO : 检查会话作用域标志
 SO->>SO : 检查 ComfyUI 状态
 SO->>SO : WAITING 状态显示倒计时
 SO->>SO : 连接 WebSocket 获取 clientId
@@ -269,7 +281,7 @@ APP-->>U : 刷新 PhotoWall 显示
 
 **图表来源**
 - [App.tsx:25-196](file://client/src/components/App.tsx#L25-L196)
-- [StartupOverlay.tsx:48-107](file://client/src/components/StartupOverlay.tsx#L48-L107)
+- [StartupOverlay.tsx:11-197](file://client/src/components/StartupOverlay.tsx#L11-L197)
 - [DropZone.tsx:42-73](file://client/src/components/DropZone.tsx#L42-L73)
 - [useWorkflowStore.ts:197-252](file://client/src/hooks/useWorkflowStore.ts#L197-L252)
 
@@ -278,6 +290,15 @@ APP-->>U : 刷新 PhotoWall 显示
 
 ### StartupOverlay 启动覆盖层
 StartupOverlay 是一个全新的五状态状态机组件，实现了双门验证系统：
+
+#### 会话作用域标志系统
+**新增功能**：StartupOverlay 现在集成了会话作用域标志系统，使用 sessionStorage 防止启动覆盖层在同一会话内的重复显示：
+
+- **标志键值**：`pix2real_startup_overlay_shown`
+- **标志逻辑**：组件在挂载时检查 sessionStorage 中的标志值，如果为 '1' 则直接进入 HIDDEN 状态
+- **设置时机**：当双门验证通过（ComfyUI 就绪且 WebSocket clientId 可用）时，组件会设置 sessionStorage 标志
+- **会话隔离**：使用 sessionStorage 而非 localStorage，确保标志仅在当前浏览器会话内有效
+- **用户体验优化**：避免用户在刷新页面或重新进入会话时重复看到启动覆盖层
 
 #### 状态机设计
 - **CHECKING**：初始状态，检测 ComfyUI 服务状态
@@ -311,10 +332,10 @@ CONNECTING --> HIDDEN : 错误状态
 ```
 
 **图表来源**
-- [StartupOverlay.tsx:4-107](file://client/src/components/StartupOverlay.tsx#L4-L107)
+- [StartupOverlay.tsx:6-197](file://client/src/components/StartupOverlay.tsx#L6-L197)
 
 **章节来源**
-- [StartupOverlay.tsx:1-200](file://client/src/components/StartupOverlay.tsx#L1-L200)
+- [StartupOverlay.tsx:1-197](file://client/src/components/StartupOverlay.tsx#L1-L197)
 
 ### Sidebar 侧边导航
 Sidebar 的职责包括：
@@ -522,6 +543,7 @@ Text2ImgSidebar 是文生图工作流的增强侧边栏，具有以下特性：
 - 批量生成：支持批量生成多张图片，支持自定义命名。
 - **新增自定义切换开关**：使用纯 CSS 实现的圆形切换开关，支持平滑过渡动画和视觉反馈。
 - **新增双门验证支持**：Generate 按钮依赖 clientId 状态，确保 WebSocket 连接完成。
+- **新增会话作用域标志系统**：与 StartupOverlay 协同，在同一会话内避免重复显示启动覆盖层。
 
 ```mermaid
 flowchart TD
@@ -552,17 +574,19 @@ ZITSidebar 是 ZIT 工作流的增强侧边栏，具有以下特性：
 - 批量生成：支持批量生成多张图片，支持自定义命名。
 - **新增自定义切换开关**：使用纯 CSS 实现的圆形切换开关，支持启用/禁用采样算法偏移功能。
 - **新增双门验证支持**：Generate 按钮依赖 clientId 状态，确保 WebSocket 连接完成。
+- **新增会话作用域标志系统**：与 StartupOverlay 协同，在同一会话内避免重复显示启动覆盖层。
 
 **章节来源**
 - [ZITSidebar.tsx:57-716](file://client/src/components/ZITSidebar.tsx#L57-L716)
 
 ## 依赖关系分析
 - 组件耦合：容器组件之间低耦合，通过 props 与 stores 通信；展示组件尽量无副作用，提升可测试性。
-- 状态依赖：useWorkflowStore 管理全局工作流状态；useWebSocket 管理 WebSocket 连接和 clientId；useDragStore 管理拖拽上下文；useMaskStore 管理蒙版数据；useModelMetadata 管理模型元数据。
+- 状态依赖：useWorkflowStore 管理全局工作流状态；useWebSocket 管理 WebSocket 连接和 clientId；useDragStore 管理拖拽上下文；useMaskStore 管理蒙版数据；useModelMetadata 管理模型元数据；**useSession 管理会话状态和会话作用域标志**。
 - 类型约束：sessionService.ts 定义了 LoraSlot、Text2ImgConfig、ZitConfig 等核心类型，支持多槽位 LoRA 的配置管理。
 - 外部依赖：lucide-react 提供图标；zustand 提供轻量状态管理；React 19 提供并发与性能优化。
 - **新增样式依赖**：global.css 提供全局样式，包括改进的滑块控件样式和动画效果。
 - **新增双门验证依赖**：StartupOverlay 依赖 useWebSocket 的 clientId 状态，确保服务就绪和连接完成双重验证。
+- **新增会话作用域标志依赖**：StartupOverlay 依赖 sessionStorage API 和 useSession 的会话管理功能。
 
 ```mermaid
 graph LR
@@ -585,11 +609,15 @@ T2IS["Text2ImgSidebar"] --> WFS
 T2IS --> WS
 T2IS --> MM["useModelMetadata"]
 T2IS --> MS["ModelSelect"]
+T2IS --> US["useSession"]
 ZITS["ZITSidebar"] --> WFS
 ZITS --> WS
 ZITS --> MM
 ZITS --> MS
+ZITS --> US
 MS --> MM
+US --> T2IS
+US --> ZITS
 MM --> TYPES["types/index.ts"]
 MM --> SS["sessionService.ts"]
 DRAG --> TYPES
@@ -602,12 +630,13 @@ GC --> ZITS
 
 **图表来源**
 - [App.tsx:25-196](file://client/src/components/App.tsx#L25-L196)
-- [StartupOverlay.tsx:11-107](file://client/src/components/StartupOverlay.tsx#L11-L107)
+- [StartupOverlay.tsx:11-197](file://client/src/components/StartupOverlay.tsx#L11-L197)
 - [useWorkflowStore.ts:96-645](file://client/src/hooks/useWorkflowStore.ts#L96-L645)
 - [useWebSocket.ts:1-225](file://client/src/hooks/useWebSocket.ts#L1-L225)
 - [useDragStore.ts:1-17](file://client/src/hooks/useDragStore.ts#L1-L17)
 - [useMaskStore.ts:1-51](file://client/src/hooks/useMaskStore.ts#L1-L51)
 - [useModelMetadata.ts:9-169](file://client/src/hooks/useModelMetadata.ts#L9-L169)
+- [useSession.ts:1-425](file://client/src/hooks/useSession.ts#L1-L425)
 - [sessionService.ts:1-140](file://client/src/services/sessionService.ts#L1-L140)
 - [index.ts:1-58](file://client/src/types/index.ts#L1-L58)
 - [maskConfig.ts:1-20](file://client/src/config/maskConfig.ts#L1-L20)
@@ -629,7 +658,8 @@ GC --> ZITS
 - **新增滑块控件优化**：通过全局 CSS 样式统一管理 range 输入控件的外观，减少组件内部样式计算。
 - **新增CSS Grid布局**：PhotoWall 使用 CSS Grid 实现响应式布局，相比 JavaScript 计算更高效。
 - **新增侧边栏调整优化**：右侧侧边栏宽度调整使用 requestAnimationFrame 和防抖技术，确保流畅的用户体验。
-- **新增 StartupOverlay 性能优化**：使用防抖和节流技术优化轮询频率，避免过度的 HTTP 请求和 WebSocket 连接尝试。
+- **新增 StartupOverlay 性能优化**：使用防抖和节流技术优化轮询频率，避免过度的 HTTP 请求和 WebSocket 连接尝试。**新增会话作用域标志系统**，通过 sessionStorage 快速判断是否需要显示覆盖层，减少不必要的轮询和 DOM 操作。
+- **新增会话作用域标志系统**：StartupOverlay 在挂载时立即检查 sessionStorage 标志，如果已在当前会话中显示过则直接隐藏，避免重复的初始化过程。
 
 ## 故障排除指南
 - 拖拽无效：检查 App 主区域的 dragover/leave 事件处理与标签页类型限制。
@@ -646,18 +676,20 @@ GC --> ZITS
 - **StartupOverlay 无法隐藏**：检查 ComfyUI 服务状态和 WebSocket 连接是否正常，确认 clientId 是否正确设置。
 - **Generate 按钮不可用**：确认 StartupOverlay 已进入 READY 状态，检查 WebSocket 连接和 clientId 设置。
 - **双门验证失败**：检查 ComfyUI 服务是否完全就绪，确认 WebSocket 'connected' 消息是否正确发送 clientId。
+- **会话作用域标志问题**：检查 sessionStorage 是否正常工作，确认 'pix2real_startup_overlay_shown' 键值是否正确设置和清除。
+- **StartupOverlay 重复显示**：确认 sessionStorage 标志在双门验证通过后正确设置为 '1'，并在会话结束时被清除。
 
 **章节来源**
 - [App.tsx:84-134](file://client/src/components/App.tsx#L84-L134)
 - [ImageCard.tsx:478-580](file://client/src/components/ImageCard.tsx#L478-L580)
 - [useMaskStore.ts:32-50](file://client/src/hooks/useMaskStore.ts#L32-L50)
 - [useModelMetadata.ts:12-21](file://client/src/hooks/useModelMetadata.ts#L12-L21)
-- [StartupOverlay.tsx:88-107](file://client/src/components/StartupOverlay.tsx#L88-L107)
+- [StartupOverlay.tsx:11-197](file://client/src/components/StartupOverlay.tsx#L11-L197)
 
 ## 结论
 该 React 组件体系通过清晰的容器-展示分离、集中式状态管理与完善的拖拽/蒙版/进度反馈机制，实现了复杂图像处理工作流的高效交互。App 主组件作为中枢，协调 Sidebar、PhotoWall、DropZone、ImageCard、FaceSwapPhotoWall、StartupOverlay 等组件，形成高内聚、低耦合的架构。
 
-**更新** 本次更新显著增强了UI交互体验，新增了右侧侧边栏可调整大小功能、CSS Grid响应式卡片布局、改进的滑块控件样式和自定义切换开关等现代化UI增强功能，以及全新的五状态 StartupOverlay 启动覆盖组件。StartupOverlay 通过双门验证系统确保了应用启动的可靠性，通过严格的 ComfyUI 服务就绪和 WebSocket 客户端 ID 双重验证，防止了组件在未完全初始化时的误操作，显著提升了用户体验和系统的稳定性。
+**更新** 本次更新显著增强了UI交互体验，新增了右侧侧边栏可调整大小功能、CSS Grid响应式卡片布局、改进的滑块控件样式和自定义切换开关等现代化UI增强功能，以及全新的五状态 StartupOverlay 启动覆盖组件。**StartupOverlay 通过双门验证系统确保了应用启动的可靠性，通过严格的 ComfyUI 服务就绪和 WebSocket 客户端 ID 双重验证，防止了组件在未完全初始化时的误操作，显著提升了用户体验和系统的稳定性**。**新增的会话作用域标志系统进一步优化了用户体验，通过 sessionStorage 防止启动覆盖层在同一会话内的重复显示，提高了资源利用率并减少了不必要的初始化过程**。
 
 建议在后续迭代中进一步完善类型安全、错误边界与性能监控，以提升可维护性与用户体验。
 
@@ -669,12 +701,14 @@ GC --> ZITS
   - 利用 useModelMetadata hook 管理模型元数据，提供统一的数据访问接口。
   - **新增样式复用**：通过全局 CSS 变量和样式类提供一致的UI设计规范。
   - **新增双门验证模式**：StartupOverlay 展示了严格的状态机验证模式，可作为其他组件状态管理的参考。
+  - **新增会话作用域标志模式**：StartupOverlay 展示了会话级状态管理的最佳实践，可作为其他组件会话状态管理的参考。
 - 组件组合模式
   - PhotoWall 通过 LazyCard 与 ImageCard 组合实现高性能图片墙，**采用CSS Grid实现响应式布局**。
   - ImageCard 内嵌 ThumbnailStrip 与 MaskEditor，形成"卡片内生态"。
   - Text2ImgSidebar 和 ZITSidebar 通过 ModelSelect 组合实现增强的模型管理功能，**集成自定义切换开关**。
   - App 主组件通过条件渲染和动态宽度调整实现灵活的布局系统。
   - **新增 StartupOverlay 组合模式**：StartupOverlay 作为应用的第一个渲染组件，确保服务就绪后再显示主界面。
+  - **新增会话作用域标志组合模式**：StartupOverlay 与 useSession 协同管理会话状态，实现组件间的状态共享。
 - 渲染优化技巧
   - 使用 IntersectionObserver 与占位符高度补偿，减少滚动抖动。
   - 合理拆分状态订阅，避免不必要的组件重渲染。
@@ -685,4 +719,6 @@ GC --> ZITS
   - **新增CSS Grid布局**：使用浏览器原生布局引擎，相比 JavaScript 实现更高效。
   - **新增侧边栏调整优化**：使用防抖和节流技术，确保拖拽过程的流畅性。
   - **新增 StartupOverlay 优化**：通过防抖和节流技术优化轮询频率，减少资源消耗。
+  - **新增 StartupOverlay 会话作用域优化**：通过 sessionStorage 快速判断会话状态，避免重复初始化。
+  - **新增会话作用域标志优化**：StartupOverlay 使用高效的 sessionStorage 检查和设置，确保启动过程的流畅性。
   - **新增双门验证优化**：StartupOverlay 使用高效的轮询策略和状态机管理，确保启动过程的流畅性。

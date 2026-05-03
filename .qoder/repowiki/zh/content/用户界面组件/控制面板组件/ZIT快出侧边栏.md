@@ -3,6 +3,7 @@
 <cite>
 **本文档引用的文件**
 - [ZITSidebar.tsx](file://client/src/components/ZITSidebar.tsx)
+- [ImageCard.tsx](file://client/src/components/ImageCard.tsx)
 - [ModelSelect.tsx](file://client/src/components/ModelSelect.tsx)
 - [PromptContextMenu.tsx](file://client/src/components/PromptContextMenu.tsx)
 - [useWorkflowStore.ts](file://client/src/hooks/useWorkflowStore.ts)
@@ -18,6 +19,11 @@
 
 ## 更新摘要
 **变更内容**
+- **拖拽配置应用功能**：新增拖拽工作流图像卡片到侧边栏容器的功能，支持一键应用卡片配置
+- **拖拽深度跟踪机制**：实现拖拽事件深度跟踪，使用`dragDepthRef`精确控制拖拽状态
+- **视觉反馈指示器**：添加拖拽时的视觉反馈，包括虚线边框和提示文本
+- **配置验证和应用逻辑**：实现配置验证和应用逻辑，支持`applyConfigToSidebar`函数
+- **与工作流存储集成**：与useWorkflowStore深度集成，使用`pendingApplyConfig`状态管理
 - **方面比例按钮系统重构**：采用52x52像素方形按钮设计，包含视觉比例指示器和动画效果
 - **采样算法设置间距标准化**：统一了采样器和调度器按钮的间距配置
 - **与Text2ImgSidebar UI对齐**：实现了与Text2ImgSidebar一致的比例按钮设计和交互体验
@@ -46,6 +52,8 @@ ZIT快出侧边栏组件是 CorineKit Pix2Real 项目中的核心功能模块，
 
 **新增** 本版本特别引入了 LoRA 风格切换开关，将传统的复选框替换为纯 CSS 实现的圆形切换开关，具有平滑的过渡动画和视觉反馈，提升了用户的交互体验。
 
+**新增** 最新版本还集成了拖拽配置应用功能，允许用户通过拖拽工作流图像卡片到侧边栏容器来一键应用卡片配置。该功能包括拖拽深度跟踪、视觉反馈指示器、配置验证和应用逻辑，以及与工作流存储的深度集成。
+
 本组件的主要特点包括：
 - **统一卡片布局**：采用新的卡片设计系统，实现与 Text2ImgSidebar 一致的视觉体验
 - **52x52像素比例按钮**：全新的方形按钮设计，包含视觉比例指示器
@@ -65,100 +73,166 @@ ZIT快出侧边栏组件是 CorineKit Pix2Real 项目中的核心功能模块，
 - **AuraFlow Shift 算法**：高级采样算法偏移功能
 - **纯 CSS 切换开关**：平滑过渡动画和视觉反馈的圆形切换开关
 - **精确文本选择**：基于 useRef 的选择参考系统，实现精确的文本选择状态管理
+- **拖拽配置应用**：支持拖拽工作流图像卡片到侧边栏容器一键应用配置
+- **拖拽深度跟踪**：精确的拖拽事件深度跟踪机制
+- **视觉反馈指示器**：拖拽时的虚线边框和提示文本反馈
+- **配置验证和应用**：完整的配置验证和应用逻辑
 
 ## 项目结构
 
-ZITSidebar 组件位于客户端前端代码结构中，与服务器端工作流适配器和模型元数据管理紧密协作，并集成了新的 PromptContextMenu 组件：
+ZITSidebar 组件位于客户端前端代码结构中，与服务器端工作流适配器和模型元数据管理紧密协作，并集成了新的 PromptContextMenu 组件和拖拽功能：
 
 ```mermaid
 graph TB
 subgraph "客户端前端"
 A[ZITSidebar.tsx]
-B[ModelSelect.tsx]
-C[PromptContextMenu.tsx]
-D[useWorkflowStore.ts]
-E[useModelMetadata.ts]
-F[sessionService.ts - LoraSlot接口]
-G[index.ts - 类型定义]
-H[useModelFavorites Hook]
-I[global.css]
-J[variables.css]
-K[Text2ImgSidebar.tsx]
-L[Text2Img卡片样式]
-M[ZITSidebar卡片样式]
-N[selectionRef - 文本选择引用]
-O[textareaRef - 文本域引用]
-P[LoRA切换开关样式]
-Q[AuraFlow切换开关样式]
-R[52x52比例按钮样式]
-S[视觉比例指示器]
-T[动画过渡效果]
+B[ImageCard.tsx]
+C[ModelSelect.tsx]
+D[PromptContextMenu.tsx]
+E[useWorkflowStore.ts]
+F[useModelMetadata.ts]
+G[sessionService.ts - LoraSlot接口]
+H[index.ts - 类型定义]
+I[useModelFavorites Hook]
+J[global.css]
+K[variables.css]
+L[Text2ImgSidebar.tsx]
+M[Text2Img卡片样式]
+N[ZITSidebar卡片样式]
+O[selectionRef - 文本选择引用]
+P[textareaRef - 文本域引用]
+Q[LoRA切换开关样式]
+R[AuraFlow切换开关样式]
+S[52x52比例按钮样式]
+T[视觉比例指示器]
+U[动画过渡效果]
+V[拖拽深度跟踪]
+W[视觉反馈指示器]
+X[配置应用逻辑]
+Y[拖拽事件处理]
 end
 subgraph "服务器端"
-U[workflow.ts - 路由处理]
-V[Workflow9Adapter.ts]
-W[index.ts - 适配器索引]
-X[modelMeta.ts - 模型元数据路由]
-Y[ComfyUI API模板]
+Z[workflow.ts - 路由处理]
+AA[Workflow9Adapter.ts]
+BB[index.ts - 适配器索引]
+CC[modelMeta.ts - 模型元数据路由]
+DD[ComfyUI API模板]
 end
 subgraph "样式系统"
-Z[CSS变量系统]
-AA[cardStyle统一定义]
-BB[dividerStyle统一定义]
-CC[sectionLabelStyle统一定义]
-DD[切换开关动画]
-EE[文本选择样式]
-FF[比例按钮间距配置]
-GG[视觉指示器样式]
-HH[动画过渡样式]
+EE[CSS变量系统]
+FF[cardStyle统一定义]
+GG[dividerStyle统一定义]
+HH[sectionLabelStyle统一定义]
+II[切换开关动画]
+JJ[文本选择样式]
+KK[比例按钮间距配置]
+LL[视觉指示器样式]
+MM[动画过渡样式]
+NN[拖拽反馈样式]
+OO[拖拽指示器样式]
+PP[配置应用样式]
 end
 A --> B
 A --> C
-B --> D
-B --> F
+A --> D
+B --> E
 C --> E
-D --> U
-E --> X
-I --> Z
-J --> Z
-K --> L
-A --> M
-N --> A
+C --> F
+D --> F
+E --> G
+I --> A
+J --> EE
+K --> EE
+L --> M
+A --> N
 O --> A
 P --> A
 Q --> A
 R --> A
 S --> A
 T --> A
-Z --> AA
-Z --> BB
-Z --> CC
-Z --> DD
-Z --> EE
-Z --> FF
-Z --> GG
-Z --> HH
+U --> A
+V --> A
+W --> A
+X --> A
+Y --> A
+EE --> FF
+EE --> GG
+EE --> HH
+EE --> II
+EE --> JJ
+EE --> KK
+EE --> LL
+EE --> MM
+EE --> NN
+EE --> OO
+EE --> PP
 ```
 
 **图表来源**
-- [ZITSidebar.tsx:1-944](file://client/src/components/ZITSidebar.tsx#L1-L944)
+- [ZITSidebar.tsx:1-1056](file://client/src/components/ZITSidebar.tsx#L1-L1056)
+- [ImageCard.tsx:226-265](file://client/src/components/ImageCard.tsx#L226-L265)
 - [ModelSelect.tsx:1-1005](file://client/src/components/ModelSelect.tsx#L1-L1005)
 - [PromptContextMenu.tsx:1-661](file://client/src/components/PromptContextMenu.tsx#L1-L661)
-- [useWorkflowStore.ts:1-690](file://client/src/hooks/useWorkflowStore.ts#L1-L690)
+- [useWorkflowStore.ts:1-722](file://client/src/hooks/useWorkflowStore.ts#L1-L722)
 - [useModelMetadata.ts:1-215](file://client/src/hooks/useModelMetadata.ts#L1-L215)
-- [sessionService.ts:4-8](file://client/src/services/sessionService.ts#L4-L8)
+- [sessionService.ts:1-157](file://client/src/services/sessionService.ts#L1-L157)
 - [Text2ImgSidebar.tsx:220-419](file://client/src/components/Text2ImgSidebar.tsx#L220-L419)
 
 **章节来源**
-- [ZITSidebar.tsx:1-944](file://client/src/components/ZITSidebar.tsx#L1-L944)
+- [ZITSidebar.tsx:1-1056](file://client/src/components/ZITSidebar.tsx#L1-L1056)
+- [ImageCard.tsx:226-265](file://client/src/components/ImageCard.tsx#L226-L265)
 - [ModelSelect.tsx:1-1005](file://client/src/components/ModelSelect.tsx#L1-L1005)
 - [PromptContextMenu.tsx:1-661](file://client/src/components/PromptContextMenu.tsx#L1-L661)
-- [useWorkflowStore.ts:1-690](file://client/src/hooks/useWorkflowStore.ts#L1-L690)
+- [useWorkflowStore.ts:1-722](file://client/src/hooks/useWorkflowStore.ts#L1-L722)
 - [useModelMetadata.ts:1-215](file://client/src/hooks/useModelMetadata.ts#L1-L215)
+- [sessionService.ts:1-157](file://client/src/services/sessionService.ts#L1-L157)
 
 ## 核心组件
 
 ### ZITSidebar 主要功能特性
+
+#### 拖拽配置应用功能
+**新增** ZITSidebar 组件现在支持通过拖拽工作流图像卡片到侧边栏容器来一键应用卡片配置：
+
+- **拖拽事件处理**：实现完整的拖拽事件处理，包括 `onDragEnter`、`onDragOver`、`onDragLeave`、`onDrop`
+- **拖拽深度跟踪**：使用 `dragDepthRef` 实现精确的拖拽事件深度跟踪
+- **视觉反馈指示器**：拖拽时显示虚线边框和提示文本，提供清晰的视觉反馈
+- **配置验证逻辑**：验证拖拽的卡片是否包含有效的生成配置
+- **配置应用机制**：通过 `applyConfigToSidebar` 函数将配置应用到侧边栏
+- **状态管理集成**：与 `pendingApplyConfig` 状态集成，实现配置的延迟应用
+
+#### 拖拽深度跟踪机制
+**新增** 实现了精确的拖拽事件深度跟踪：
+
+- **深度计数器**：使用 `dragDepthRef` 作为 Ref 对象跟踪拖拽事件的深度
+- **事件深度管理**：在 `onDragEnter` 中增加深度计数，在 `onDragLeave` 中减少深度计数
+- **状态同步**：当深度计数达到1时设置 `isDragOverConfig` 为 true，当深度计数回到0时设置为 false
+- **防抖处理**：避免拖拽事件的重复触发和状态抖动
+
+#### 视觉反馈指示器
+**新增** 提供了丰富的拖拽视觉反馈：
+
+- **拖拽容器高亮**：拖拽时为侧边栏容器添加虚线边框和主色调
+- **提示文本显示**：显示"释放以应用该卡片的生成配置"的提示文本
+- **透明度过渡**：使用 `transition: 'outline-color 0.12s'` 实现平滑的颜色过渡
+- **绝对定位**：提示文本使用绝对定位，确保不会影响其他布局元素
+
+#### 配置验证和应用逻辑
+**新增** 实现了完整的配置验证和应用逻辑：
+
+- **配置提取**：从 `useWorkflowStore.getState().tabData[9]?.zitConfigs?.[imageId]` 中提取配置
+- **存在性检查**：验证配置是否存在，不存在时显示错误提示
+- **应用函数调用**：调用 `applyConfigToSidebar(config)` 将配置应用到侧边栏
+- **状态清理**：应用完成后重置拖拽状态和深度计数器
+
+#### 与工作流存储的集成
+**新增** 与 useWorkflowStore 深度集成了拖拽配置应用功能：
+
+- **状态管理**：使用 `pendingApplyConfig` 状态管理待应用的配置
+- **应用函数**：通过 `applyConfigToSidebar` 函数设置待应用的配置
+- **监听机制**：通过 `useEffect` 监听 `pendingApplyConfig` 状态变化
+- **配置应用**：当检测到配置时，自动应用到侧边栏的各个字段
 
 #### 52x52像素比例按钮系统
 **更新** 采用全新的方面比例按钮设计，实现与 Text2ImgSidebar 一致的视觉体验：
@@ -244,29 +318,49 @@ Z --> HH
 - **状态反馈**：完整的加载状态和错误处理
 
 **章节来源**
-- [ZITSidebar.tsx:679-715](file://client/src/components/ZITSidebar.tsx#L679-L715)
-- [ZITSidebar.tsx:229-251](file://client/src/components/ZITSidebar.tsx#L229-L251)
-- [ZITSidebar.tsx:283-301](file://client/src/components/ZITSidebar.tsx#L283-L301)
-- [ZITSidebar.tsx:306-431](file://client/src/components/ZITSidebar.tsx#L306-L431)
-- [ZITSidebar.tsx:438-590](file://client/src/components/ZITSidebar.tsx#L438-L590)
-- [ZITSidebar.tsx:594-689](file://client/src/components/ZITSidebar.tsx#L594-L689)
-- [ZITSidebar.tsx:741-795](file://client/src/components/ZITSidebar.tsx#L741-L795)
-- [ZITSidebar.tsx:133-134](file://client/src/components/ZITSidebar.tsx#L133-L134)
-- [ZITSidebar.tsx:141-182](file://client/src/components/ZITSidebar.tsx#L141-L182)
+- [ZITSidebar.tsx:195-259](file://client/src/components/ZITSidebar.tsx#L195-L259)
+- [ZITSidebar.tsx:413-452](file://client/src/components/ZITSidebar.tsx#L413-L452)
+- [useWorkflowStore.ts:90-93](file://client/src/hooks/useWorkflowStore.ts#L90-L93)
+- [useWorkflowStore.ts:711-713](file://client/src/hooks/useWorkflowStore.ts#L711-L713)
+- [ImageCard.tsx:1360-1363](file://client/src/components/ImageCard.tsx#L1360-L1363)
 
 ## 架构概览
 
-ZITSidebar 组件采用分层架构设计，实现了清晰的关注点分离，并集成了新的 PromptContextMenu 组件：
+ZITSidebar 组件采用分层架构设计，实现了清晰的关注点分离，并集成了新的 PromptContextMenu 组件和拖拽配置应用功能：
 
 ```mermaid
 sequenceDiagram
 participant U as 用户界面
+participant IC as ImageCard
 participant Z as ZITSidebar
 participant PC as PromptContextMenu
 participant MS as ModelSelect
 participant MM as ModelMetadata Hook
 participant WF as WorkflowStore
 participant S as WebSocket
+U->>IC : 拖拽工作流图像卡片
+IC->>IC : 设置拖拽数据类型 application/x-workflow-image
+IC->>IC : 设置拖拽效果为 copyMove
+IC->>Z : onDragEnter 事件
+Z->>Z : dragDepthRef.current += 1
+Z->>Z : 检查深度计数是否为1
+Z->>Z : 设置 isDragOverConfig 为 true
+Z->>Z : 显示拖拽反馈指示器
+IC->>Z : onDragOver 事件
+Z->>Z : 检查数据类型是否为 application/x-workflow-image
+Z->>Z : 设置 dropEffect 为 copy
+IC->>Z : onDrop 事件
+Z->>Z : 获取拖拽的数据 imageId
+Z->>WF : 从 tabData[9].zitConfigs 中获取配置
+WF-->>Z : 返回配置对象
+Z->>Z : 验证配置是否存在
+Z->>WF : 调用 applyConfigToSidebar(config)
+WF->>WF : 设置 pendingApplyConfig
+Z->>Z : 显示成功提示
+IC->>Z : onDragLeave 事件
+Z->>Z : dragDepthRef.current = Math.max(0, dragDepthRef.current - 1)
+Z->>Z : 检查深度计数是否为0
+Z->>Z : 设置 isDragOverConfig 为 false
 U->>Z : 点击52x52比例按钮
 Z->>Z : 计算视觉比例指示器尺寸
 Z->>Z : 应用激活状态动画
@@ -291,7 +385,8 @@ S-->>Z : 进度更新和完成通知
 ```
 
 **图表来源**
-- [ZITSidebar.tsx:430-434](file://client/src/components/ZITSidebar.tsx#L430-L434)
+- [ZITSidebar.tsx:195-259](file://client/src/components/ZITSidebar.tsx#L195-L259)
+- [ImageCard.tsx:226-265](file://client/src/components/ImageCard.tsx#L226-L265)
 - [PromptContextMenu.tsx:189-395](file://client/src/components/PromptContextMenu.tsx#L189-L395)
 - [ModelSelect.tsx:96-111](file://client/src/components/ModelSelect.tsx#L96-L111)
 - [useModelMetadata.ts:10-215](file://client/src/hooks/useModelMetadata.ts#L10-L215)
@@ -312,8 +407,14 @@ class ZITSidebar {
 +useState contextMenu : object
 +useState selectionRef : object
 +useState textareaRef : object
++useState boolean isDragOverConfig
++useState number dragDepthRef
 +handleGenerate() void
 +handleQuickAction(mode) void
++handleConfigDragEnter(e) void
++handleConfigDragOver(e) void
++handleConfigDragLeave(e) void
++handleConfigDrop(e) void
 +render() JSX.Element
 }
 class PromptContextMenu {
@@ -345,6 +446,9 @@ class WorkflowStore {
 +startTask(imageId, promptId) void
 +setClientId(id) void
 +setSessionId(id) void
++pendingApplyConfig : ZitConfig | null
++applyConfigToSidebar(config) void
++clearPendingApplyConfig() void
 }
 ZITSidebar --> PromptContextMenu : 集成
 ZITSidebar --> ModelSelect : 集成
@@ -356,11 +460,84 @@ ModelSelect --> useModelMetadata : 使用
 ```
 
 **图表来源**
-- [ZITSidebar.tsx:37-944](file://client/src/components/ZITSidebar.tsx#L37-L944)
+- [ZITSidebar.tsx:37-1056](file://client/src/components/ZITSidebar.tsx#L37-L1056)
 - [PromptContextMenu.tsx:6-661](file://client/src/components/PromptContextMenu.tsx#L6-L661)
 - [ModelSelect.tsx:74-1005](file://client/src/components/ModelSelect.tsx#L74-L1005)
 - [sessionService.ts:4-8](file://client/src/services/sessionService.ts#L4-L8)
 - [useModelMetadata.ts:3-215](file://client/src/hooks/useModelMetadata.ts#L3-L215)
+
+### 拖拽配置应用功能
+
+**新增** ZITSidebar 组件现在支持通过拖拽工作流图像卡片到侧边栏容器来一键应用卡片配置：
+
+#### 拖拽事件处理
+- **拖拽容器设置**：在侧边栏容器上设置 `onDragEnter`、`onDragOver`、`onDragLeave`、`onDrop` 事件处理器
+- **数据类型检查**：在拖拽事件中检查 `e.dataTransfer.types.includes('application/x-workflow-image')`
+- **事件阻止**：使用 `e.preventDefault()` 阻止默认行为
+- **拖拽效果设置**：在 `onDragOver` 中设置 `e.dataTransfer.dropEffect = 'copy'`
+
+#### 拖拽深度跟踪
+- **深度计数器**：使用 `dragDepthRef` 作为 Ref 对象跟踪拖拽事件的深度
+- **进入事件处理**：在 `onDragEnter` 中增加深度计数 (`dragDepthRef.current += 1`)
+- **离开事件处理**：在 `onDragLeave` 中减少深度计数 (`dragDepthRef.current = Math.max(0, dragDepthRef.current - 1)`)
+- **状态同步**：当深度计数达到1时设置 `isDragOverConfig` 为 true，当深度计数回到0时设置为 false
+
+#### 视觉反馈指示器
+- **容器高亮**：拖拽时为侧边栏容器添加虚线边框 (`outline: '2px dashed var(--color-primary)'`)
+- **提示文本**：显示"释放以应用该卡片的生成配置"的提示文本
+- **透明度过渡**：使用 `transition: 'outline-color 0.12s'` 实现平滑的颜色过渡
+- **绝对定位**：提示文本使用绝对定位，确保不会影响其他布局元素
+
+#### 配置验证和应用逻辑
+- **配置提取**：从 `useWorkflowStore.getState().tabData[9]?.zitConfigs?.[imageId]` 中提取配置
+- **存在性检查**：验证配置是否存在，不存在时显示错误提示
+- **应用函数调用**：调用 `applyConfigToSidebar(config)` 将配置应用到侧边栏
+- **状态清理**：应用完成后重置拖拽状态和深度计数器
+
+#### 与工作流存储的集成
+- **状态管理**：使用 `pendingApplyConfig` 状态管理待应用的配置
+- **应用函数**：通过 `applyConfigToSidebar` 函数设置待应用的配置
+- **监听机制**：通过 `useEffect` 监听 `pendingApplyConfig` 状态变化
+- **配置应用**：当检测到配置时，自动应用到侧边栏的各个字段
+
+```mermaid
+flowchart TD
+A[用户拖拽工作流图像卡片] --> B{检查数据类型}
+B --> |application/x-workflow-image| C[设置拖拽效果为 copy]
+B --> |其他类型| D[忽略拖拽事件]
+C --> E[onDragEnter 事件]
+E --> F{检查深度计数}
+F --> |深度计数为1| G[设置 isDragOverConfig 为 true]
+G --> H[显示拖拽反馈指示器]
+F --> |深度计数不为1| I[保持当前状态]
+H --> J[onDragOver 事件]
+J --> K[设置 dropEffect 为 copy]
+K --> L[onDrop 事件]
+L --> M{提取 imageId}
+M --> |存在| N[从 tabData[9].zitConfigs 中获取配置]
+M --> |不存在| O[显示错误提示]
+N --> P{配置存在?}
+P --> |是| Q[调用 applyConfigToSidebar(config)]
+P --> |否| O
+Q --> R[显示成功提示]
+R --> S[重置拖拽状态]
+O --> T[显示错误提示]
+T --> S
+S --> U[onDragLeave 事件]
+U --> V{减少深度计数}
+V --> |深度计数为0| W[设置 isDragOverConfig 为 false]
+W --> X[隐藏拖拽反馈指示器]
+```
+
+**图表来源**
+- [ZITSidebar.tsx:195-259](file://client/src/components/ZITSidebar.tsx#L195-L259)
+- [useWorkflowStore.ts:90-93](file://client/src/hooks/useWorkflowStore.ts#L90-L93)
+- [useWorkflowStore.ts:711-713](file://client/src/hooks/useWorkflowStore.ts#L711-L713)
+
+**章节来源**
+- [ZITSidebar.tsx:195-259](file://client/src/components/ZITSidebar.tsx#L195-L259)
+- [useWorkflowStore.ts:90-93](file://client/src/hooks/useWorkflowStore.ts#L90-L93)
+- [useWorkflowStore.ts:711-713](file://client/src/hooks/useWorkflowStore.ts#L711-L713)
 
 ### 52x52像素比例按钮系统
 
@@ -439,10 +616,10 @@ G --> H[触发重新渲染]
 ```
 
 **图表来源**
-- [ZITSidebar.tsx:679-715](file://client/src/components/ZITSidebar.tsx#L679-L715)
+- [ZITSidebar.tsx:792-826](file://client/src/components/ZITSidebar.tsx#L792-L826)
 
 **章节来源**
-- [ZITSidebar.tsx:679-715](file://client/src/components/ZITSidebar.tsx#L679-L715)
+- [ZITSidebar.tsx:792-826](file://client/src/components/ZITSidebar.tsx#L792-L826)
 
 ### 统一卡片布局系统
 
@@ -483,7 +660,7 @@ const sectionLabelStyle: React.CSSProperties = {
 - **宽度控制**：使用 `width: width ?? 260` 支持自定义宽度
 
 **章节来源**
-- [ZITSidebar.tsx:299-316](file://client/src/components/ZITSidebar.tsx#L299-L316)
+- [ZITSidebar.tsx:376-393](file://client/src/components/ZITSidebar.tsx#L376-L393)
 
 ### 纯 CSS 切换开关系统
 
@@ -580,12 +757,12 @@ J --> K[触发重新渲染]
 ```
 
 **图表来源**
-- [ZITSidebar.tsx:402-429](file://client/src/components/ZITSidebar.tsx#L402-L429)
-- [ZITSidebar.tsx:751-778](file://client/src/components/ZITSidebar.tsx#L751-L778)
+- [ZITSidebar.tsx:511-538](file://client/src/components/ZITSidebar.tsx#L511-L538)
+- [ZITSidebar.tsx:891-918](file://client/src/components/ZITSidebar.tsx#L891-L918)
 
 **章节来源**
-- [ZITSidebar.tsx:402-429](file://client/src/components/ZITSidebar.tsx#L402-L429)
-- [ZITSidebar.tsx:751-778](file://client/src/components/ZITSidebar.tsx#L751-L778)
+- [ZITSidebar.tsx:511-538](file://client/src/components/ZITSidebar.tsx#L511-L538)
+- [ZITSidebar.tsx:891-918](file://client/src/components/ZITSidebar.tsx#L891-L918)
 
 ### 基于 useRef 的文本选择系统
 
@@ -659,14 +836,12 @@ P --> Q[更新光标位置]
 ```
 
 **图表来源**
-- [ZITSidebar.tsx:133-134](file://client/src/components/ZITSidebar.tsx#L133-L134)
-- [ZITSidebar.tsx:141-182](file://client/src/components/ZITSidebar.tsx#L141-L182)
-- [ZITSidebar.tsx:869-912](file://client/src/components/ZITSidebar.tsx#L869-L912)
+- [ZITSidebar.tsx:147-193](file://client/src/components/ZITSidebar.tsx#L147-L193)
+- [ZITSidebar.tsx:1009-1051](file://client/src/components/ZITSidebar.tsx#L1009-L1051)
 
 **章节来源**
-- [ZITSidebar.tsx:133-134](file://client/src/components/ZITSidebar.tsx#L133-L134)
-- [ZITSidebar.tsx:141-182](file://client/src/components/ZITSidebar.tsx#L141-L182)
-- [ZITSidebar.tsx:869-912](file://client/src/components/ZITSidebar.tsx#L869-L912)
+- [ZITSidebar.tsx:147-193](file://client/src/components/ZITSidebar.tsx#L147-L193)
+- [ZITSidebar.tsx:1009-1051](file://client/src/components/ZITSidebar.tsx#L1009-L1051)
 
 ### PromptContextMenu 组件详细分析
 
@@ -701,11 +876,11 @@ I --> K[菜单关闭]
 ```
 
 **图表来源**
-- [ZITSidebar.tsx:430-434](file://client/src/components/ZITSidebar.tsx#L430-L434)
+- [ZITSidebar.tsx:637-644](file://client/src/components/ZITSidebar.tsx#L637-L644)
 - [PromptContextMenu.tsx:189-395](file://client/src/components/PromptContextMenu.tsx#L189-L395)
 
 **章节来源**
-- [ZITSidebar.tsx:430-434](file://client/src/components/ZITSidebar.tsx#L430-L434)
+- [ZITSidebar.tsx:637-644](file://client/src/components/ZITSidebar.tsx#L637-L644)
 - [PromptContextMenu.tsx:189-395](file://client/src/components/PromptContextMenu.tsx#L189-L395)
 
 ### ModelSelect 组件详细分析
@@ -942,102 +1117,105 @@ L --> M[更新最终输出]
 graph TB
 subgraph "UI 层"
 A[ZITSidebar]
-B[ModelSelect]
-C[PromptContextMenu]
-D[提示词面板]
-E[进度显示]
-F[Text2ImgSidebar]
-G[卡片样式系统]
-H[统一布局]
-I[LoraSlot接口]
-J[selectionRef引用]
-K[textareaRef引用]
-L[切换开关样式]
-M[文本选择样式]
-N[52x52比例按钮样式]
-O[视觉比例指示器样式]
-P[动画过渡样式]
+B[ImageCard]
+C[ModelSelect]
+D[PromptContextMenu]
+E[提示词面板]
+F[进度显示]
+G[Text2ImgSidebar]
+H[卡片样式系统]
+I[统一布局]
+J[LoraSlot接口]
+K[selectionRef引用]
+L[textareaRef引用]
+M[LoRA切换开关样式]
+N[AuraFlow切换开关样式]
+O[52x52比例按钮样式]
+P[视觉比例指示器样式]
+Q[动画过渡样式]
+R[拖拽深度跟踪]
+S[视觉反馈指示器样式]
+T[配置应用逻辑]
+U[拖拽事件处理]
 end
 subgraph "状态管理层"
-Q[WorkflowStore]
-R[WebSocket Hook]
-S[Prompt Assistant Store]
-T[Model Favorites Hook]
-U[Model Metadata Hook]
+V[WorkflowStore]
+W[WebSocket Hook]
+X[Prompt Assistant Store]
+Y[Model Favorites Hook]
+Z[Model Metadata Hook]
 end
 subgraph "服务层"
-V[Session Service]
-W[ComfyUI 服务]
-X[Model Metadata Service]
-Y[LoRA Models API]
+AA[Session Service]
+BB[ComfyUI 服务]
+CC[Model Metadata Service]
+DD[LoRA Models API]
 end
 subgraph "样式层"
-Z[global.css]
-AA[variables.css]
-BB[CSS变量系统]
-CC[cardStyle定义]
-DD[dividerStyle定义]
-EE[sectionLabelStyle定义]
-FF[切换开关动画]
-GG[文本选择样式]
-HH[比例按钮间距配置]
-II[视觉指示器样式]
-JJ[动画过渡样式]
+EE[global.css]
+FF[variables.css]
+GG[CSS变量系统]
+HH[cardStyle定义]
+II[dividerStyle定义]
+JJ[sectionLabelStyle定义]
+KK[切换开关动画]
+LL[文本选择样式]
+MM[比例按钮间距配置]
+NN[视觉指示器样式]
+OO[动画过渡样式]
+PP[拖拽反馈样式]
+QQ[拖拽指示器样式]
+RR[配置应用样式]
 end
 subgraph "类型定义"
-KK[ImageItem]
-LL[TaskInfo]
-MM[ZitConfig]
-NN[ModelMetadata]
-OO[ModelFavorites]
-PP[ModelMetadata]
-QQ[LoraSlot接口]
-RR[WorkflowAdapter]
-SS[Workflow9Adapter]
-TT[WorkflowInfo]
-UU[SelectionRef类型]
-VV[TextareaRef类型]
+SS[ImageItem]
+TT[TaskInfo]
+UU[ZitConfig]
+VV[ModelMetadata]
+WW[ModelFavorites]
+XX[ModelMetadata]
+YY[LoraSlot接口]
+ZZ[WorkflowAdapter]
+AAA[Workflow9Adapter]
+BBB[WorkflowInfo]
+CCC[SelectionRef类型]
+DDD[TextareaRef类型]
 end
-A --> I
-A --> J
-A --> K
-A --> L
-A --> M
-A --> N
-A --> O
-A --> P
-A --> Q
-A --> R
-A --> S
 A --> B
 A --> C
-B --> T
-B --> U
-C --> U
-Q --> V
-Q --> W
-Q --> X
-A --> KK
-Q --> LL
-Q --> MM
-T --> NN
-U --> OO
-F --> G
-A --> H
-Z --> BB
-AA --> BB
-BB --> CC
-BB --> DD
-BB --> EE
-BB --> FF
-BB --> GG
-BB --> HH
-BB --> II
-BB --> JJ
+A --> D
+B --> V
+C --> V
+C --> Z
+D --> Z
+V --> AA
+V --> BB
+V --> CC
+A --> SS
+V --> TT
+V --> UU
+Y --> VV
+Z --> WW
+G --> H
+A --> I
+EE --> GG
+FF --> GG
+GG --> HH
+GG --> II
+GG --> JJ
+GG --> KK
+GG --> LL
+GG --> MM
+GG --> NN
+GG --> OO
+GG --> PP
+GG --> QQ
+GG --> RR
 ```
 
 **图表来源**
 - [ZITSidebar.tsx:1-10](file://client/src/components/ZITSidebar.tsx#L1-L10)
+- [ImageCard.tsx:226-265](file://client/src/components/ImageCard.tsx#L226-L265)
 - [ModelSelect.tsx:236-260](file://client/src/components/ModelSelect.tsx#L236-L260)
 - [PromptContextMenu.tsx:189-395](file://client/src/components/PromptContextMenu.tsx#L189-L395)
 - [useWorkflowStore.ts:1-6](file://client/src/hooks/useWorkflowStore.ts#L1-L6)
@@ -1142,6 +1320,7 @@ LoRAModelRouter <|-- LoRAModelController
 - **元数据缓存**：useModelMetadata Hook 缓存模型元数据
 - **LoRA 槽位优化**：最多5个槽位限制，避免过度内存占用
 - **引用优化**：useRef 优化文本选择状态管理，避免不必要的重渲染
+- **拖拽状态优化**：使用 Ref 对象跟踪拖拽深度，避免状态抖动
 
 #### 网络优化
 - **并发控制**：逐个发送生成请求，避免服务器过载
@@ -1149,6 +1328,7 @@ LoRAModelRouter <|-- LoRAModelController
 - **状态同步**：通过 WebSocket 实时同步任务状态
 - **API 优化**：模型元数据通过单一 API 获取，减少请求次数
 - **LoRA 链式优化**：服务器端智能重连，避免无效连接
+- **拖拽配置优化**：通过状态管理避免重复应用配置
 
 #### 渲染优化
 - **条件渲染**：根据状态动态显示加载指示器
@@ -1160,6 +1340,7 @@ LoRAModelRouter <|-- LoRAModelController
 - **LoRA 槽位渲染**：动态渲染启用的 LoRA 槽位，避免不必要的 DOM 节点
 - **切换开关动画**：使用 GPU 加速的 transition 属性实现流畅动画
 - **比例按钮优化**：52x52像素按钮设计，减少重绘开销
+- **拖拽反馈优化**：使用 CSS 过渡实现平滑的拖拽状态变化
 
 #### 样式优化
 - **CSS 变量复用**：使用 `var(--color-border)` 等变量确保样式一致性
@@ -1169,6 +1350,7 @@ LoRAModelRouter <|-- LoRAModelController
 - **纯 CSS 切换开关**：避免 JavaScript 动画开销，提升性能表现
 - **比例按钮样式**：统一的52x52像素按钮设计，减少样式计算复杂度
 - **视觉指示器优化**：精确的尺寸计算，避免不必要的重排
+- **拖拽反馈样式**：使用 CSS 边框和透明度实现轻量级视觉反馈
 
 #### 文本选择优化
 - **精确状态管理**：useRef 精确管理文本选择状态，避免状态同步问题
@@ -1183,9 +1365,27 @@ LoRAModelRouter <|-- LoRAModelController
 - **间距标准化**：6像素的统一间距，确保视觉一致性
 - **响应式布局**：flex-wrap 实现自动换行，适应不同屏幕尺寸
 
+#### 拖拽功能优化
+- **深度跟踪优化**：使用 Ref 对象精确跟踪拖拽深度，避免状态抖动
+- **事件处理优化**：使用 useCallback 优化拖拽事件处理器
+- **状态管理优化**：通过状态管理避免重复应用配置
+- **视觉反馈优化**：使用 CSS 过渡实现平滑的拖拽状态变化
+- **内存管理优化**：及时清理拖拽状态和深度计数器
+
 ## 故障排除指南
 
 ### 常见问题及解决方案
+
+#### 拖拽配置应用功能异常
+**症状**：拖拽工作流图像卡片到侧边栏容器无法应用配置
+**解决方案**：
+1. 检查拖拽数据类型是否正确设置为 `application/x-workflow-image`
+2. 验证 `onDragEnter`、`onDragOver`、`onDragLeave`、`onDrop` 事件处理器是否正确绑定
+3. 确认 `dragDepthRef` 的深度计数逻辑是否正确
+4. 检查 `isDragOverConfig` 状态是否正确更新
+5. 验证 `applyConfigToSidebar` 函数是否正确调用
+6. 检查 `pendingApplyConfig` 状态监听是否正常工作
+7. **新增** 验证拖拽反馈指示器的显示和隐藏逻辑
 
 #### 比例按钮显示异常
 **症状**：52x52像素比例按钮显示不正确或布局错乱
@@ -1335,10 +1535,37 @@ LoRAModelRouter <|-- LoRAModelController
 2. 验证 `--color-primary` 和 `--color-text-secondary` 的主题切换
 3. 确认比例按钮的边框颜色在不同主题下的可见性
 4. 检查视觉比例指示器的颜色对比度
-5. **新增** 验证52x52按钮在不同分辨率下的显示效果
+5. **新增** 验证拖拽反馈指示器在不同主题下的可见性
+
+#### 拖拽深度跟踪问题
+**症状**：拖拽深度跟踪不准确或状态抖动
+**解决方案**：
+1. 检查 `dragDepthRef` 的初始化和使用
+2. 验证 `onDragEnter` 和 `onDragLeave` 事件的配对使用
+3. 确认深度计数的增减逻辑是否正确
+4. 检查 `isDragOverConfig` 状态的同步更新
+5. **新增** 验证拖拽事件的防抖处理是否有效
+
+#### 拖拽视觉反馈问题
+**症状**：拖拽时的视觉反馈不正确或消失过快
+**解决方案**：
+1. 检查 CSS 样式 `outline: '2px dashed var(--color-primary)'` 是否正确应用
+2. 验证提示文本的绝对定位和显示逻辑
+3. 确认 `transition: 'outline-color 0.12s'` 动画是否正常
+4. 检查拖拽状态的清理逻辑
+5. **新增** 验证拖拽反馈的 z-index 层级设置
+
+#### 配置应用逻辑问题
+**症状**：拖拽配置应用后侧边栏状态不更新
+**解决方案**：
+1. 检查 `applyConfigToSidebar` 函数的调用是否正确
+2. 验证 `pendingApplyConfig` 状态的监听和处理
+3. 确认配置应用到各个字段的逻辑是否正确
+4. 检查配置验证和错误处理逻辑
+5. **新增** 验证配置应用后的状态清理和提示显示
 
 **章节来源**
-- [ZITSidebar.tsx:142-151](file://client/src/components/ZITSidebar.tsx#L142-L151)
+- [ZITSidebar.tsx:195-259](file://client/src/components/ZITSidebar.tsx#L195-L259)
 - [ModelSelect.tsx:32-42](file://client/src/components/ModelSelect.tsx#L32-L42)
 - [PromptContextMenu.tsx:195-204](file://client/src/components/PromptContextMenu.tsx#L195-L204)
 - [workflow.ts:746-800](file://server/src/routes/workflow.ts#L746-L800)
@@ -1352,7 +1579,7 @@ ZITSidebar 组件作为 CorineKit Pix2Real 项目的核心功能模块，成功�
 
 **增强** 最新版本还引入了强大的 LoRA 槽位系统，支持最多5个独立的 LoRA 模型槽位，每个槽位都可以独立启用/禁用、选择模型和调节权重。服务器端实现了智能的 LoRA 链式连接机制，能够根据启用状态动态重连 LoRA 节点。此外，组件还新增了 AuraFlow 的采样算法偏移功能，进一步提升了生成质量和算法多样性。
 
-**新增** 本版本特别引入了 LoRA 风格切换开关，将传统的复选框替换为纯 CSS 实现的圆形切换开关，具有平滑的过渡动画和视觉反馈，显著提升了用户的交互体验。同时，基于 useRef 的文本选择系统实现了精确的文本状态管理，确保了文本编辑操作的准确性和流畅性。
+**新增** 本版本特别引入了拖拽配置应用功能，这是该组件最重要的更新之一。用户现在可以通过拖拽工作流图像卡片到侧边栏容器来一键应用卡片配置，包括拖拽深度跟踪、视觉反馈指示器、配置验证和应用逻辑，以及与工作流存储的深度集成。这一功能显著提升了用户的工作效率，减少了手动配置的繁琐步骤。
 
 主要优势包括：
 - **统一视觉设计**：采用新的卡片布局系统，实现与 Text2ImgSidebar 一致的视觉体验
@@ -1372,6 +1599,10 @@ ZITSidebar 组件作为 CorineKit Pix2Real 项目的核心功能模块，成功�
 - **智能状态管理**：触发词使用状态的可视化提醒
 - **纯 CSS 切换开关**：平滑过渡动画和视觉反馈的圆形切换开关
 - **精确文本选择**：基于 useRef 的选择参考系统，实现精确的文本选择状态管理
+- **拖拽配置应用**：支持拖拽工作流图像卡片到侧边栏容器一键应用配置
+- **拖拽深度跟踪**：精确的拖拽事件深度跟踪机制
+- **视觉反馈指示器**：拖拽时的虚线边框和提示文本反馈
+- **配置验证和应用**：完整的配置验证和应用逻辑
 
 该组件在整体工作流系统中扮演着关键角色，为其他侧边栏组件提供了统一的集成接口和一致的用户体验。
 
@@ -1384,6 +1615,14 @@ ZITSidebar 组件作为 CorineKit Pix2Real 项目的核心功能模块，成功�
 2. 使用 ModelSelect 组件选择合适的模型和采样器参数
 3. 设置图像尺寸和批量数量
 4. 点击生成按钮开始处理
+
+#### 拖拽配置应用使用技巧
+**新增** 拖拽配置应用功能的使用建议：
+- **拖拽目标**：将工作流图像卡片拖拽到 ZITSidebar 侧边栏容器
+- **视觉反馈**：拖拽时侧边栏容器会出现虚线边框和提示文本
+- **释放应用**：松开鼠标按键时配置会自动应用到侧边栏
+- **状态验证**：应用成功后会显示成功提示，侧边栏状态会相应更新
+- **错误处理**：如果拖拽的卡片没有可用配置，会显示错误提示
 
 #### 52x52像素比例按钮使用技巧
 **更新** 新比例按钮系统的使用建议：
@@ -1449,6 +1688,7 @@ ZITSidebar 组件作为 CorineKit Pix2Real 项目的核心功能模块，成功�
 - 合理设置生成时间间隔避免服务器过载
 - 使用草稿功能保存常用配置
 - 利用 ModelSelect 的收藏夹功能快速选择常用模型
+- **新增** 利用拖拽配置应用功能快速应用工作流卡片配置
 - **新增** 利用 52x52像素比例按钮快速选择标准比例
 - **新增** 利用 PromptContextMenu 的右键插入功能快速添加触发词
 - **新增** 利用 LoRA 状态提醒功能确保触发词被正确使用
@@ -1458,3 +1698,6 @@ ZITSidebar 组件作为 CorineKit Pix2Real 项目的核心功能模块，成功�
 - **新增** 利用纯 CSS 切换开关提升交互体验
 - **新增** 利用精确文本选择系统提升文本编辑效率
 - **新增** 利用标准化的间距配置提升视觉一致性
+- **新增** 利用拖拽深度跟踪机制确保拖拽体验的准确性
+- **新增** 利用视觉反馈指示器提升拖拽操作的可见性
+- **新增** 利用配置验证逻辑确保应用配置的正确性

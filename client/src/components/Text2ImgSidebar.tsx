@@ -170,24 +170,17 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
         showToast('未找到匹配的 LoRA 推荐');
         return;
       }
-      // 用带 action 的 toast 让用户确认
-      showToast({
-        message: `推荐 ${result.loras.length} 个 LoRA`,
-        action: {
-          label: '应用',
-          onClick: () => {
-            const newLoras = result.loras.map(l => ({
-              model: l.model,
-              enabled: true,
-              strength: l.strength,
-            }));
-            setLoras(newLoras);
-            if (result.modifiedPrompt) {
-              setPrompt(result.modifiedPrompt);
-            }
-          },
-        },
-      });
+      // 直接应用推荐的 LoRA
+      const newLoras = result.loras.map(l => ({
+        model: l.model,
+        enabled: true,
+        strength: l.strength,
+      }));
+      setLoras(newLoras);
+      if (result.modifiedPrompt) {
+        setPrompt(result.modifiedPrompt);
+      }
+      showToast(`已推荐 ${result.loras.length} 个 LoRA`);
     } catch (err) {
       console.error('Smart LoRA error:', err);
       showToast('智能推荐失败，请稍后重试');
@@ -365,38 +358,46 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
   useEffect(() => {
     if (!pendingApplyConfig) return;
     // Only apply if it's a Text2ImgConfig (has 'model' field, no 'unetModel')
-    if ('model' in pendingApplyConfig && !('unetModel' in pendingApplyConfig)) {
-      const c = pendingApplyConfig as Text2ImgConfig;
-      setModel(c.model ?? '');
-      setLoras(c.loras ?? []);
-      setPrompt(c.prompt ?? '');
-      setNegativePrompt(c.negativePrompt ?? '');
-      setSteps(c.steps ?? 30);
-      setCfg(c.cfg ?? 6);
-      setSampler(c.sampler ?? 'euler_ancestral');
-      setScheduler(c.scheduler ?? 'normal');
-      // Match ratio preset or keep current
+    const cfg_ = pendingApplyConfig as any;
+    if (cfg_.unetModel && !cfg_.model) return; // ZIT config, skip
+
+    const c = pendingApplyConfig as Text2ImgConfig;
+
+    // 增量更新：只更新配置中存在的字段
+    if (c.model !== undefined) setModel(c.model);
+    if (c.loras !== undefined) setLoras(c.loras);
+    if (c.prompt !== undefined) setPrompt(c.prompt);
+    if (c.negativePrompt !== undefined) setNegativePrompt(c.negativePrompt);
+    if (c.steps !== undefined) setSteps(c.steps);
+    if (c.cfg !== undefined) setCfg(c.cfg);
+    if (c.sampler !== undefined) setSampler(c.sampler);
+    if (c.scheduler !== undefined) setScheduler(c.scheduler);
+    if (c.width !== undefined) setCustomWidth(c.width);
+    if (c.height !== undefined) setCustomHeight(c.height);
+
+    // 如果宽高都有，尝试匹配预设比例
+    if (c.width !== undefined && c.height !== undefined) {
       const matchedPreset = RATIO_PRESETS.find(p => p.width === c.width && p.height === c.height);
       if (matchedPreset) {
         setRatio(matchedPreset.label);
-      } else if (c.width && c.height) {
+      } else {
         setRatio('custom');
       }
-      setCustomWidth(c.width ?? 832);
-      setCustomHeight(c.height ?? 1216);
+    }
+
+    // 参考图处理
+    if (c.referenceImage !== undefined) {
       if (c.referenceImage) {
         setReferenceImage(c.referenceImage);
-        setPoseStrength(c.poseStrength ?? 0.5);
-        setDepthStrength(c.depthStrength ?? 0.3);
+        if (c.poseStrength !== undefined) setPoseStrength(c.poseStrength);
+        if (c.depthStrength !== undefined) setDepthStrength(c.depthStrength);
         setRefOpen(true);
         if (c.refImageWidth && c.refImageHeight) {
-          // 新卡片：直接从配置恢复尺寸
           setRefImageSize({ width: c.refImageWidth, height: c.refImageHeight });
           setRatio('original');
           setCustomWidth(c.refImageWidth);
           setCustomHeight(c.refImageHeight);
         } else {
-          // 旧卡片兼容：异步加载参考图获取尺寸
           const img = new Image();
           img.onload = () => {
             setRefImageSize({ width: img.naturalWidth, height: img.naturalHeight });
@@ -411,11 +412,11 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
         setRefImageSize(null);
         setPoseStrength(0.5);
         setDepthStrength(0.3);
-        // If currently on 'original', switch to default
         setRatio((prev: string) => prev === 'original' ? '3:4' : prev);
       }
-      clearPendingApplyConfig();
     }
+
+    clearPendingApplyConfig();
   }, [pendingApplyConfig, clearPendingApplyConfig]);
 
   // Persist config to localStorage whenever it changes
