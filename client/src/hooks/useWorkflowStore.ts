@@ -92,6 +92,10 @@ interface WorkflowStore {
   applyConfigToSidebar: (config: Text2ImgConfig | ZitConfig) => void;
   clearPendingApplyConfig: () => void;
 
+  // AI Agent 修改提示词后的闪烁信号（递增计数器）
+  agentPromptEditTick: number;
+  bumpAgentPromptEdit: () => void;
+
   // Session restore
   restoreSession: (activeTab: number, tabData: Record<number, SerializedTabData>, restoredImages: Record<number, ImageItem[]>) => void;
 }
@@ -711,6 +715,9 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   pendingApplyConfig: null,
   applyConfigToSidebar: (config) => set({ pendingApplyConfig: config }),
   clearPendingApplyConfig: () => set({ pendingApplyConfig: null }),
+
+  agentPromptEditTick: 0,
+  bumpAgentPromptEdit: () => set((s) => ({ agentPromptEditTick: s.agentPromptEditTick + 1 })),
 
   isProcessing: () => {
     const { activeTab, tabData } = get();

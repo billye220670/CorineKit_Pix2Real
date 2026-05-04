@@ -3,6 +3,7 @@ import { Send, Paperclip, X, AlertCircle, RefreshCw, Loader2, ExternalLink, Chev
 import { useAgentStore, type ChatMessage, type CardDropResult, type ChatMode, type ConfigSnapshot } from '../hooks/useAgentStore.js';
 import { useWorkflowStore } from '../hooks/useWorkflowStore.js';
 import { useWebSocket } from '../hooks/useWebSocket.js';
+import { PromptDiff } from './PromptDiff.js';
 
 function getCurrentSidebarConfig(): { tabId: number; config: any } {
   const store = useWorkflowStore.getState();
@@ -690,6 +691,10 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
         // 合并变更到当前配置并应用
         const mergedConfig = { ...currentConfig, ...data.changes };
         useWorkflowStore.getState().applyConfigToSidebar(mergedConfig);
+        // 若涉及 prompt 改动，触发侧边栏提示词输入框闪烁提示
+        if (typeof data.changes?.prompt === 'string' && data.changes.prompt !== currentConfig?.prompt) {
+          useWorkflowStore.getState().bumpAgentPromptEdit();
+        }
         
         // 添加带 configAction 的消息
         addMessage({
@@ -863,6 +868,10 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
     }
 
     useWorkflowStore.getState().applyConfigToSidebar(mergedConfig);
+    // 若涉及 prompt 改动，触发侧边栏提示词输入框闪烁提示
+    if (typeof mergedConfig.prompt === 'string' && mergedConfig.prompt !== currentConfig?.prompt) {
+      useWorkflowStore.getState().bumpAgentPromptEdit();
+    }
 
     updateMessage(messageId, {
       conflictAction: { ...action, status: 'resolved', resolution, snapshotId },
@@ -1670,6 +1679,11 @@ function MessageBubble({ message, onRetry, isTyping, onTypingComplete, scrollRef
           paddingTop: 8, 
           borderTop: '1px solid var(--color-border, rgba(255,255,255,0.1))' 
         }}>
+          {/* 提示词标签级变化 diff */}
+          <PromptDiffForMessage
+            snapshotId={message.configAction.snapshotId}
+            newPrompt={typeof message.configAction.changes?.prompt === 'string' ? message.configAction.changes.prompt : undefined}
+          />
           <div style={{ 
             fontSize: 12, 
             color: 'var(--color-text-secondary)',
@@ -1809,33 +1823,42 @@ function MessageBubble({ message, onRetry, isTyping, onTypingComplete, scrollRef
               </div>
             </>
           ) : (
-            <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
-              {message.conflictAction.status === 'ignored'
-                ? '已忽略本次操作。'
-                : message.conflictAction.resolution === 'modify_lora'
-                  ? '已同时修改 LoRA 与提示词。'
-                  : message.conflictAction.resolution === 'remove_conflict'
-                    ? '已删除冲突的 LoRA 并更新提示词。'
-                    : '已直接应用提示词（LoRA 保持不变）。'}
-              {message.conflictAction.snapshotId && (
-                <button
-                  onClick={() => onRevertConfig?.(message.conflictAction!.snapshotId!)}
-                  style={{
-                    marginLeft: 8,
-                    padding: '2px 8px',
-                    fontSize: 11,
-                    border: '1px solid var(--color-border)',
-                    borderRadius: 4,
-                    backgroundColor: 'transparent',
-                    color: 'var(--color-text)',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <Undo2 size={10} style={{ marginRight: 2, verticalAlign: 'middle' }} />
-                  还原
-                </button>
+            <>
+              {/* 已解决：若有快照则展示提示词标签级 diff */}
+              {message.conflictAction.status === 'resolved' && message.conflictAction.snapshotId && (
+                <PromptDiffForMessage
+                  snapshotId={message.conflictAction.snapshotId}
+                  newPrompt={message.conflictAction.proposedPrompt}
+                />
               )}
-            </div>
+              <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                {message.conflictAction.status === 'ignored'
+                  ? '已忽略本次操作。'
+                  : message.conflictAction.resolution === 'modify_lora'
+                    ? '已同时修改 LoRA 与提示词。'
+                    : message.conflictAction.resolution === 'remove_conflict'
+                      ? '已删除冲突的 LoRA 并更新提示词。'
+                      : '已直接应用提示词（LoRA 保持不变）。'}
+                {message.conflictAction.snapshotId && (
+                  <button
+                    onClick={() => onRevertConfig?.(message.conflictAction!.snapshotId!)}
+                    style={{
+                      marginLeft: 8,
+                      padding: '2px 8px',
+                      fontSize: 11,
+                      border: '1px solid var(--color-border)',
+                      borderRadius: 4,
+                      backgroundColor: 'transparent',
+                      color: 'var(--color-text)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <Undo2 size={10} style={{ marginRight: 2, verticalAlign: 'middle' }} />
+                    还原
+                  </button>
+                )}
+              </div>
+            </>
           )}
         </div>
       )}
@@ -2027,4 +2050,14 @@ function SuggestionButton({ text, onClick }: { text: string; onClick: () => void
       {text}
     </button>
   );
+}
+
+/**
+ * 从 configSnapshots 中读取旧 prompt，与新 prompt 做标签级 diff 并渲染
+ */
+function PromptDiffForMessage({ snapshotId, newPrompt }: { snapshotId: string; newPrompt?: string }) {
+  const snapshot = useAgentStore((s) => s.configSnapshots[snapshotId]);
+  if (typeof newPrompt !== 'string') return null;
+  const oldPrompt = typeof snapshot?.config?.prompt === 'string' ? snapshot.config.prompt : '';
+  return <PromptDiff oldPrompt={oldPrompt} newPrompt={newPrompt} />;
 }

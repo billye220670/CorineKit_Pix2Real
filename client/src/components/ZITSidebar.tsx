@@ -147,6 +147,23 @@ export function ZITSidebar({ width }: { width?: number }) {
   const selectionRef = useRef({ start: 0, end: 0 });
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // AI Agent 修改提示词后的一次性闪烁反馈
+  // 使用 ref 记录挂载时的 tick 基线，避免 Tab 切换 remount 时因 tick 已 >0 而误闪
+  const agentPromptEditTick = useWorkflowStore((s) => s.agentPromptEditTick);
+  const promptTickBaselineRef = useRef<number | null>(null);
+  const [promptFlashing, setPromptFlashing] = useState(false);
+  useEffect(() => {
+    if (promptTickBaselineRef.current === null) {
+      promptTickBaselineRef.current = agentPromptEditTick;
+      return;
+    }
+    if (agentPromptEditTick <= promptTickBaselineRef.current) return;
+    promptTickBaselineRef.current = agentPromptEditTick;
+    setPromptFlashing(true);
+    const t = window.setTimeout(() => setPromptFlashing(false), 1500);
+    return () => window.clearTimeout(t);
+  }, [agentPromptEditTick]);
+
   // 提示词输入框：根据内容动态调整高度，最小高度保持默认 4 行（80px）
   useLayoutEffect(() => {
     const el = textareaRef.current;
@@ -652,8 +669,11 @@ export function ZITSidebar({ width }: { width?: number }) {
         <div style={{ ...cardStyle, paddingTop: 16, paddingBottom: 16 }}>
           <div style={sectionLabelStyle}>提示词</div>
           <div
-            style={{ position: 'relative' }}
-            className={quickActionLoading ? 'textarea-ai-active' : undefined}
+            style={{ position: 'relative', borderRadius: 6 }}
+            className={[
+              quickActionLoading ? 'textarea-ai-active' : '',
+              promptFlashing ? 'card-flash-anim' : '',
+            ].filter(Boolean).join(' ') || undefined}
           >
             <textarea
               ref={textareaRef}
