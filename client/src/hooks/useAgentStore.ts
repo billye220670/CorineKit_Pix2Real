@@ -36,6 +36,16 @@ export interface ChatMessage {
     snapshotId: string;            // 对应快照 ID
     status: 'applied' | 'reverted'; // 当前状态
   };
+  conflictAction?: {
+    status: 'pending' | 'resolved' | 'ignored';
+    resolution?: 'modify_lora' | 'remove_conflict' | 'apply_prompt_only' | 'ignore';
+    conflicts: Array<{ model: string; name: string; triggerWords: string; reason: string }>;
+    userIntent: string;
+    proposedPrompt: string;
+    proposedLoras: Array<{ model: string; enabled: boolean; strength: number }>;
+    lorasAfterRemoval: Array<{ model: string; enabled: boolean; strength: number }>;
+    snapshotId?: string;           // 若已应用，关联配置快照 ID
+  };
 }
 
 export interface UploadedImage {
@@ -164,10 +174,25 @@ interface AgentState {
   chatMode: ChatMode;
   setChatMode: (mode: ChatMode) => void;
 
+  // Config assistant: 是否允许助理修改 LoRA 列表（关闭后仅修改提示词）
+  allowLoraModification: boolean;
+  setAllowLoraModification: (allow: boolean) => void;
+
   // Config snapshots (for config_assistant mode revert)
   configSnapshots: Record<string, ConfigSnapshot>;
   saveConfigSnapshot: (id: string, snapshot: ConfigSnapshot) => void;
   getConfigSnapshot: (id: string) => ConfigSnapshot | undefined;
+}
+
+const ALLOW_LORA_MOD_KEY = 'agent_allow_lora_modification';
+function loadAllowLoraMod(): boolean {
+  try {
+    const raw = localStorage.getItem(ALLOW_LORA_MOD_KEY);
+    if (raw === null) return true;
+    return raw === 'true';
+  } catch {
+    return true;
+  }
 }
 
 export const useAgentStore = create<AgentState>((set, get) => ({
@@ -294,6 +319,13 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   // Chat mode
   chatMode: 'agent',
   setChatMode: (mode) => set({ chatMode: mode }),
+
+  // Config assistant: 允许修改 LoRA 开关（持久化到 localStorage）
+  allowLoraModification: loadAllowLoraMod(),
+  setAllowLoraModification: (allow) => {
+    try { localStorage.setItem(ALLOW_LORA_MOD_KEY, String(allow)); } catch {}
+    set({ allowLoraModification: allow });
+  },
 
   // Config snapshots
   configSnapshots: {},

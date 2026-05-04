@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Send, Paperclip, X, AlertCircle, RefreshCw, Loader2, ExternalLink, ChevronDown, Bot, Settings, MessageCircle, Check, Undo2 } from 'lucide-react';
+import { Send, Paperclip, X, AlertCircle, RefreshCw, Loader2, ExternalLink, ChevronDown, Bot, Settings, MessageCircle, Check, Undo2, Sparkles, Trash2, FileText, XCircle } from 'lucide-react';
 import { useAgentStore, type ChatMessage, type CardDropResult, type ChatMode, type ConfigSnapshot } from '../hooks/useAgentStore.js';
 import { useWorkflowStore } from '../hooks/useWorkflowStore.js';
 import { useWebSocket } from '../hooks/useWebSocket.js';
@@ -46,6 +46,8 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
   const agentExecution = useAgentStore((s) => s.agentExecution);
   const chatMode = useAgentStore((s) => s.chatMode);
   const setChatMode = useAgentStore((s) => s.setChatMode);
+  const allowLoraModification = useAgentStore((s) => s.allowLoraModification);
+  const setAllowLoraModification = useAgentStore((s) => s.setAllowLoraModification);
   const saveConfigSnapshot = useAgentStore((s) => s.saveConfigSnapshot);
   const clearMessages = useAgentStore((s) => s.clearMessages);
 
@@ -658,7 +660,10 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
           images,
           hasImage: !!images?.length,
           mode: useAgentStore.getState().chatMode,
-          ...(useAgentStore.getState().chatMode === 'config_assistant' ? { currentConfig: getCurrentSidebarConfig() } : {}),
+          ...(useAgentStore.getState().chatMode === 'config_assistant' ? {
+            currentConfig: getCurrentSidebarConfig().config,
+            allowLoraModification: useAgentStore.getState().allowLoraModification,
+          } : {}),
         }),
       });
 
@@ -706,6 +711,23 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
         if (data.suggestions?.length > 0) {
           setFollowUpSuggestions(data.suggestions);
         }
+      } else if (data.type === 'lora_conflict') {
+        // 配置助理模式：检测到 LoRA 冲突，展示 4 个选择按钮
+        addMessage({
+          role: 'assistant',
+          content: data.message || '检测到当前已启用的 LoRA 与你的意图存在冲突。',
+          conflictAction: {
+            status: 'pending',
+            conflicts: data.conflicts || [],
+            userIntent: data.userIntent || '',
+            proposedPrompt: data.proposedPrompt || '',
+            proposedLoras: data.proposedLoras || [],
+            lorasAfterRemoval: data.lorasAfterRemoval || [],
+          },
+        });
+        const msgsC = useAgentStore.getState().messages;
+        const newMsgC = msgsC[msgsC.length - 1];
+        if (newMsgC) setTypingMessageId(newMsgC.id);
       } else if (data.type === 'tool_call') {
         setExecutionStatus(`正在准备 ${data.intent?.workflowName ?? '工作流'}...`);
         addMessage({
@@ -801,6 +823,51 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
       });
     }
   }, [updateMessage]);
+
+  // 处理 LoRA 冲突的 4 种选择
+  const handleResolveConflict = useCallback((
+    messageId: string,
+    resolution: 'modify_lora' | 'remove_conflict' | 'apply_prompt_only' | 'ignore',
+  ) => {
+    const msg = useAgentStore.getState().messages.find(m => m.id === messageId);
+    if (!msg?.conflictAction || msg.conflictAction.status !== 'pending') return;
+    const action = msg.conflictAction;
+
+    // 忽略：仅更新状态，不改配置
+    if (resolution === 'ignore') {
+      updateMessage(messageId, {
+        conflictAction: { ...action, status: 'ignored', resolution },
+      });
+      return;
+    }
+
+    // 保存当前配置快照（用于还原）
+    const { tabId, config: currentConfig } = getCurrentSidebarConfig();
+    const snapshotId = crypto.randomUUID();
+    saveConfigSnapshot(snapshotId, {
+      id: snapshotId,
+      tabId,
+      config: currentConfig,
+      appliedAt: Date.now(),
+    });
+
+    // 根据方案构造变更
+    let mergedConfig: any;
+    if (resolution === 'modify_lora') {
+      mergedConfig = { ...currentConfig, prompt: action.proposedPrompt, loras: action.proposedLoras };
+    } else if (resolution === 'remove_conflict') {
+      mergedConfig = { ...currentConfig, prompt: action.proposedPrompt, loras: action.lorasAfterRemoval };
+    } else {
+      // apply_prompt_only
+      mergedConfig = { ...currentConfig, prompt: action.proposedPrompt };
+    }
+
+    useWorkflowStore.getState().applyConfigToSidebar(mergedConfig);
+
+    updateMessage(messageId, {
+      conflictAction: { ...action, status: 'resolved', resolution, snapshotId },
+    });
+  }, [updateMessage, saveConfigSnapshot]);
 
   const refreshFollowUpSuggestions = useCallback(async () => {
     setSuggestionsLoading(true);
@@ -1032,6 +1099,7 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
               onNavigateToCard={navigateToCard}
               onRevertConfig={handleRevertConfig}
               onConfirmConfig={handleConfirmConfig}
+              onResolveConflict={handleResolveConflict}
             />
             {(followUpSuggestions.length > 0 || suggestionsLoading) && !typingMessageId && index === visibleMessages.length - 1 && msg.role === 'assistant' && !msg.isError && (
               <SuggestionsPanel
@@ -1338,6 +1406,62 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
                 </>
               )}
             </div>
+            {/* LoRA 修改开关 - 仅配置助理模式显示 */}
+            {chatMode === 'config_assistant' && (
+              <button
+                onClick={() => setAllowLoraModification(!allowLoraModification)}
+                title={allowLoraModification
+                  ? '已允许助理修改 LoRA 列表。点击关闭则仅修改提示词，保留当前 LoRA 配置'
+                  : '当前仅修改提示词：助理不会增删 LoRA，也不会删除已启用 LoRA 的触发词'}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  padding: '4px 8px',
+                  marginLeft: 4,
+                  fontSize: 12,
+                  color: allowLoraModification ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                  backgroundColor: allowLoraModification
+                    ? 'rgba(59, 130, 246, 0.12)'
+                    : 'transparent',
+                  border: `1px solid ${allowLoraModification ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <Sparkles size={12} />
+                <span>修改 LoRA</span>
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'flex-start',
+                    width: 22,
+                    height: 12,
+                    padding: 1,
+                    borderRadius: 999,
+                    backgroundColor: allowLoraModification
+                      ? 'var(--color-primary)'
+                      : 'var(--color-border)',
+                    transition: 'background-color 0.15s',
+                  }}
+                >
+                  <span
+                    style={{
+                      display: 'block',
+                      width: 10,
+                      height: 10,
+                      borderRadius: '50%',
+                      backgroundColor: '#fff',
+                      transform: allowLoraModification ? 'translateX(10px)' : 'translateX(0)',
+                      transition: 'transform 0.15s',
+                    }}
+                  />
+                </span>
+              </button>
+            )}
             <button
               onClick={() => fileInputRef.current?.click()}
               title="上传图片"
@@ -1443,7 +1567,7 @@ function TypewriterText({ text, speed = 20, onComplete, scrollRef }: {
   );
 }
 
-function MessageBubble({ message, onRetry, isTyping, onTypingComplete, scrollRef, onNavigateToCard, onRevertConfig, onConfirmConfig }: {
+function MessageBubble({ message, onRetry, isTyping, onTypingComplete, scrollRef, onNavigateToCard, onRevertConfig, onConfirmConfig, onResolveConflict }: {
   message: ChatMessage;
   onRetry: (msg: ChatMessage) => void;
   isTyping?: boolean;
@@ -1452,6 +1576,7 @@ function MessageBubble({ message, onRetry, isTyping, onTypingComplete, scrollRef
   onNavigateToCard?: (tabId: number, imageId: string) => void;
   onRevertConfig?: (snapshotId: string) => void;
   onConfirmConfig?: (messageId: string) => void;
+  onResolveConflict?: (messageId: string, resolution: 'modify_lora' | 'remove_conflict' | 'apply_prompt_only' | 'ignore') => void;
 }) {
   const isUser = message.role === 'user';
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
@@ -1604,6 +1729,114 @@ function MessageBubble({ message, onRetry, isTyping, onTypingComplete, scrollRef
               {message.configAction.status !== 'reverted' ? '还原' : '已还原'}
             </button>
           </div>
+        </div>
+      )}
+      {/* LoRA 冲突决议按钮（竖排 4 个） */}
+      {!isUser && message.conflictAction && (
+        <div style={{
+          marginTop: 8,
+          paddingTop: 8,
+          borderTop: '1px solid var(--color-border, rgba(255,255,255,0.1))',
+        }}>
+          {/* 冲突 LoRA 清单 */}
+          {message.conflictAction.conflicts.length > 0 && (
+            <div style={{
+              fontSize: 11,
+              color: 'var(--color-text-secondary)',
+              marginBottom: 8,
+              padding: '6px 8px',
+              backgroundColor: 'rgba(239, 68, 68, 0.08)',
+              border: '1px solid rgba(239, 68, 68, 0.25)',
+              borderRadius: 6,
+              lineHeight: 1.5,
+            }}>
+              {message.conflictAction.conflicts.map((c, i) => (
+                <div key={i} style={{ display: 'flex', gap: 4 }}>
+                  <span style={{ color: '#ef4444', flexShrink: 0 }}>⚠</span>
+                  <span><strong>{c.name}</strong>：{c.reason}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {message.conflictAction.status === 'pending' ? (
+            <>
+              <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 6 }}>
+                请选择如何处理：
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {[
+                  { key: 'modify_lora' as const, icon: Sparkles, label: '同时修改 LoRA', desc: '移除冲突 LoRA 并启用匹配意图的 LoRA', recommended: true },
+                  { key: 'remove_conflict' as const, icon: Trash2, label: '仅删除冲突的 LoRA', desc: '从 LoRA 列表中移除冲突项，应用新提示词' },
+                  { key: 'apply_prompt_only' as const, icon: FileText, label: '直接应用提示词', desc: '保留所有 LoRA，仅更新提示词（可能存在画面冲突）' },
+                  { key: 'ignore' as const, icon: XCircle, label: '忽略本次操作', desc: '不做任何修改' },
+                ].map(({ key, icon: Icon, label, desc, recommended }) => (
+                  <button
+                    key={key}
+                    onClick={() => onResolveConflict?.(message.id, key)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 8,
+                      padding: '8px 10px',
+                      fontSize: 12,
+                      fontWeight: 500,
+                      textAlign: 'left',
+                      border: recommended ? 'none' : '1px solid var(--color-border)',
+                      borderRadius: 6,
+                      cursor: 'pointer',
+                      backgroundColor: recommended ? 'var(--color-primary)' : 'transparent',
+                      color: recommended ? '#fff' : 'var(--color-text)',
+                      transition: 'all 0.15s',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!recommended) e.currentTarget.style.backgroundColor = 'var(--color-surface-hover, rgba(255,255,255,0.05))';
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!recommended) e.currentTarget.style.backgroundColor = 'transparent';
+                    }}
+                  >
+                    <Icon size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+                    <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                      <span>
+                        {label}
+                        {recommended && <span style={{ marginLeft: 6, fontSize: 10, opacity: 0.9 }}>（推荐）</span>}
+                      </span>
+                      <span style={{ fontSize: 11, opacity: 0.75, fontWeight: 400 }}>{desc}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
+              {message.conflictAction.status === 'ignored'
+                ? '已忽略本次操作。'
+                : message.conflictAction.resolution === 'modify_lora'
+                  ? '已同时修改 LoRA 与提示词。'
+                  : message.conflictAction.resolution === 'remove_conflict'
+                    ? '已删除冲突的 LoRA 并更新提示词。'
+                    : '已直接应用提示词（LoRA 保持不变）。'}
+              {message.conflictAction.snapshotId && (
+                <button
+                  onClick={() => onRevertConfig?.(message.conflictAction!.snapshotId!)}
+                  style={{
+                    marginLeft: 8,
+                    padding: '2px 8px',
+                    fontSize: 11,
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 4,
+                    backgroundColor: 'transparent',
+                    color: 'var(--color-text)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <Undo2 size={10} style={{ marginRight: 2, verticalAlign: 'middle' }} />
+                  还原
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
       {/* Action button */}

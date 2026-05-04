@@ -117,7 +117,7 @@ export function ZITSidebar({ width }: { width?: number }) {
     }));
   };
   const addLora = () => {
-    if (loras.length < 5) {
+    if (loras.length < 7) {
       setLoras(prev => [...prev, { model: '', enabled: true, strength: 0.5 }]);
     }
   };
@@ -508,7 +508,7 @@ export function ZITSidebar({ width }: { width?: number }) {
         <div style={{ ...cardStyle, paddingTop: 16, paddingBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
             <div style={{ ...sectionLabelStyle, marginBottom: 0 }}>LoRA</div>
-            {loras.length < 5 && (
+            {loras.length < 7 && (
               <button
                 onClick={addLora}
                 title="添加 LoRA"

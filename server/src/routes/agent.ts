@@ -755,7 +755,7 @@ router.get('/user-profile', (req, res) => {
 // POST /api/agent/chat - AI 对话 + 意图解析
 router.post('/chat', async (req, res) => {
   try {
-    const { sessionId, message, messages: historyMessages, images, hasImage, mode, currentConfig } = req.body as {
+    const { sessionId, message, messages: historyMessages, images, hasImage, mode, currentConfig, allowLoraModification } = req.body as {
       sessionId?: string;
       message?: string;
       messages?: LLMMessage[];
@@ -763,6 +763,7 @@ router.post('/chat', async (req, res) => {
       hasImage?: boolean;
       mode?: string;
       currentConfig?: any;
+      allowLoraModification?: boolean;
     };
 
     if (!sessionId || !message) {
@@ -778,7 +779,9 @@ router.post('/chat', async (req, res) => {
 
     // ── 配置助理模式 ──
     if (mode === 'config_assistant') {
-      const systemPrompt = buildConfigAssistantPrompt(profile, metadata, currentConfig || {});
+      // 默认允许修改 LoRA；仅当前端显式传入 false 时才锁定
+      const allowLora = allowLoraModification !== false;
+      const systemPrompt = buildConfigAssistantPrompt(profile, metadata, currentConfig || {}, allowLora);
       const configMessages: LLMMessage[] = [
         { role: 'system', content: systemPrompt },
       ];
@@ -794,7 +797,7 @@ router.post('/chat', async (req, res) => {
       // 添加当前用户消息
       configMessages.push({ role: 'user', content: message });
 
-      const tools = getConfigAssistantTools();
+      const tools = getConfigAssistantTools(allowLora);
       const llmResponse = await callLLM({ messages: configMessages, tools, toolChoice: 'required' });
 
       if (llmResponse.toolCalls && llmResponse.toolCalls.length > 0) {
@@ -805,9 +808,106 @@ router.post('/chat', async (req, res) => {
             const args = JSON.parse(toolCall.function.arguments);
             const { summary, ...changes } = args;
 
+            // ── LoRA 锁定时强制过滤掉 loras 字段 ──
+            if (!allowLora && 'loras' in changes) {
+              delete changes.loras;
+            }
+
+            // ── LoRA 锁定时保护已启用 LoRA 的触发词不被删除/改写 ──
+            if (!allowLora && typeof changes.prompt === 'string' && Array.isArray(currentConfig?.loras)) {
+              // 收集所有原子触发词（按逗号拆分到最细粒度）
+              const atoms: string[] = [];
+              for (const lora of currentConfig.loras) {
+                if (!lora?.enabled || !lora?.model) continue;
+                const tw = metadata[lora.model]?.triggerWords;
+                if (tw && typeof tw === 'string' && tw.trim()) {
+                  tw.split(',').map((s: string) => s.trim()).filter(Boolean).forEach((s: string) => {
+                    atoms.push(s);
+                  });
+                }
+              }
+
+              if (atoms.length > 0) {
+                // 归一化函数：小写 + 去除所有非字母数字字符（捕获"同义拆合 / 空格下划线 / 大小写"改写）
+                const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '');
+
+                const promptRaw = changes.prompt;
+                const promptNorm = normalize(promptRaw);
+
+                // 逐条检测
+                const missingExact: string[] = []; // 字面完全缺失
+                const rewritten: string[] = [];    // 归一化能命中但字面缺失（LLM 改写了标点/空格/大小写）
+
+                for (const phrase of atoms) {
+                  // 字面（区分大小写、保留空格标点）精确子串匹配
+                  const literalHit = promptRaw.includes(phrase);
+                  if (literalHit) continue;
+
+                  // 不区分大小写的字面匹配（只修复大小写问题）
+                  const ciHit = promptRaw.toLowerCase().includes(phrase.toLowerCase());
+                  if (ciHit) {
+                    rewritten.push(phrase);
+                    continue;
+                  }
+
+                  // 归一化匹配：若在归一化空间下能找到，说明 LLM 拆合/改标点了
+                  const normHit = promptNorm.includes(normalize(phrase));
+                  if (normHit) {
+                    rewritten.push(phrase);
+                    continue;
+                  }
+
+                  // 完全找不到 → 字面缺失
+                  missingExact.push(phrase);
+                }
+
+                let fixedPrompt = promptRaw;
+
+                // 1) 对于"改写"的情况：使用不区分大小写的正则替换回原样（保守：只替换首次命中）
+                for (const phrase of rewritten) {
+                  // 构建容错正则：按字符拆开，中间允许 0-2 个空格/下划线/连字符
+                  const tokens = phrase.split(/\s+/).filter(Boolean);
+                  if (tokens.length === 0) continue;
+                  // 每个 token 做正则转义
+                  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                  const pattern = tokens
+                    .map(t => esc(t))
+                    .join('[\\s_\\-]*');
+                  try {
+                    const re = new RegExp(pattern, 'i');
+                    if (re.test(fixedPrompt)) {
+                      fixedPrompt = fixedPrompt.replace(re, phrase);
+                      continue;
+                    }
+                  } catch {
+                    // 正则构建失败则降级为追加
+                  }
+                  // 正则未命中（例如被同义替换成完全不同的词）→ 降级为追加
+                  missingExact.push(phrase);
+                }
+
+                // 2) 对于"完全缺失"的情况：在 prompt 末尾补齐
+                if (missingExact.length > 0) {
+                  const trimmed = fixedPrompt.trim();
+                  const needsSep = trimmed.length > 0 && !trimmed.endsWith(',');
+                  const sep = trimmed.length === 0 ? '' : (needsSep ? ', ' : ' ');
+                  fixedPrompt = `${fixedPrompt}${sep}${missingExact.join(', ')}`;
+                }
+
+                if (fixedPrompt !== promptRaw) {
+                  console.log('[Config Assistant][LoRA Lock] Trigger word protection applied:', {
+                    missingExact,
+                    rewritten,
+                  });
+                  changes.prompt = fixedPrompt;
+                }
+              }
+            }
+
             // ── LoRA 自动回退匹配 ──
             // 当 Grok 返回了 prompt 变更但没有配置 LoRA 时，调用 smart-lora 引擎自动匹配
-            if (changes.prompt && (!changes.loras || changes.loras.length === 0)) {
+            // 注意：LoRA 锁定时跳过此回退
+            if (allowLora && changes.prompt && (!changes.loras || changes.loras.length === 0)) {
               try {
                 const smartLoraPrompt = await buildSmartLoraPrompt();
                 const loraResult = await callLLM({
@@ -864,6 +964,55 @@ router.post('/chat', async (req, res) => {
             res.json({
               type: 'text_response',
               message: '配置解析失败，请重新描述您的需求。',
+            });
+          }
+          return;
+        }
+
+        if (toolCall.function.name === 'report_lora_conflict') {
+          try {
+            const args = JSON.parse(toolCall.function.arguments);
+            const conflicts: Array<{ model: string; reason: string }> = Array.isArray(args.conflicts) ? args.conflicts : [];
+
+            // 给冲突项补充昵称与触发词（便于前端展示）
+            const enrichedConflicts = conflicts
+              .filter(c => c?.model)
+              .map(c => ({
+                model: c.model,
+                reason: c.reason || '',
+                name: metadata[c.model]?.nickname || c.model,
+                triggerWords: metadata[c.model]?.triggerWords || '',
+              }));
+
+            // 「仅删除冲突的 lora」方案：从当前 loras 过滤掉冲突项
+            const conflictModelSet = new Set(enrichedConflicts.map(c => c.model));
+            const currentLoras: Array<any> = Array.isArray(currentConfig?.loras) ? currentConfig.loras : [];
+            const lorasAfterRemoval = currentLoras.filter(l => !conflictModelSet.has(l?.model));
+
+            // 「同时修改 lora」方案：使用 LLM 给出的 proposedLoras（做校验过滤）
+            const proposedLoras = Array.isArray(args.proposedLoras)
+              ? args.proposedLoras
+                  .filter((l: any) => l?.model && metadata[l.model])
+                  .map((l: any) => ({
+                    model: l.model,
+                    enabled: l.enabled !== false,
+                    strength: typeof l.strength === 'number' ? l.strength : (metadata[l.model]?.recommendedStrength || 0.8),
+                  }))
+              : [];
+
+            res.json({
+              type: 'lora_conflict',
+              message: args.message || '检测到当前已启用的 LoRA 与你的意图存在冲突。',
+              conflicts: enrichedConflicts,
+              userIntent: args.userIntent || message,
+              proposedPrompt: typeof args.proposedPrompt === 'string' ? args.proposedPrompt : (currentConfig?.prompt || ''),
+              proposedLoras,
+              lorasAfterRemoval,
+            });
+          } catch {
+            res.json({
+              type: 'text_response',
+              message: '冲突解析失败，请重新描述您的需求。',
             });
           }
           return;

@@ -498,7 +498,8 @@
     ],
     "description": "姿势LoRA - 胶水，光辉系列适配",
     "compatibleModels": [
-      "光辉"
+      "光辉",
+      "光辉系列"
     ],
     "recommendedStrength": 0.7,
     "styleTags": [
@@ -1893,9 +1894,14 @@
     "category": "姿势"
   },
   "角色\\青色大脑.safetensors": {
-    "triggerWords": ",1girl,large breasts,blue hair,short hair,blue eyes,black gloves,elbow gloves,bare shoulders,navel,sideboob,earrings,hairband,",
+    "triggerWords": "1girl,large breasts,blue hair,short hair,blue eyes,black gloves,elbow gloves,bare shoulders,navel,sideboob,earrings,hairband",
     "thumbnail": "e051e4d4-a4e3-419e-acec-1a645e3de3f4.png",
-    "category": "角色"
+    "category": "角色",
+    "description": "青色大脑 (角色)",
+    "compatibleModels": [
+      "光辉系列"
+    ],
+    "recommendedStrength": 0.8
   },
   "角色\\不来方夕莉.safetensors": {
     "thumbnail": "2c2eddb2-9bdb-439b-82a5-4d09f5703374.png",
@@ -1915,7 +1921,12 @@
   "角色\\鬼灭小葵.safetensors": {
     "thumbnail": "dd3dc680-5bad-4278-9b17-66422e75c95c.png",
     "triggerWords": "black hair, parted bangs, forehead, butterfly hair ornament, blue eyes, twintails, medium hair, v-shaped eyebrows, white pupils Nurse nur5e, white coat, long coat, blue sash, layered clothes, layered sleeves, short over long sleeves Demon Slayer Corps blue gakuran, blue puffy pants, white belt, turtleneck",
-    "category": "角色"
+    "category": "角色",
+    "description": "鬼灭小葵 (角色)",
+    "compatibleModels": [
+      "光辉系列"
+    ],
+    "recommendedStrength": 0.8
   },
   "角色\\水无月流歌.safetensors": {
     "thumbnail": "981f30d0-07ec-4b22-b253-3304d1d4147f.png",
@@ -2005,6 +2016,10 @@
   "姿势\\后方骑姦.safetensors": {
     "thumbnail": "5318a38a-42ad-48f8-8183-89cd661cab59.png",
     "triggerWords": "sex from behind, standing, standing sex, open mouth, sitting on person, from side, pussy peek, dungeon, bound wrists, cave interior, arms up, chained, groping, nipples, sex slave, nude, pet play, boy on top, implied sex, interspecies, sex",
+    "category": "姿势"
+  },
+  "姿势\\抱脸虫.safetensors": {
+    "triggerWords": "facehugger",
     "category": "姿势"
   }
 }

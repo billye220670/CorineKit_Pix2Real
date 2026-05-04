@@ -116,7 +116,7 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
     }));
   };
   const addLora = () => {
-    if (loras.length < 5) {
+    if (loras.length < 7) {
       setLoras(prev => [...prev, { model: '', enabled: true, strength: 0.5 }]);
     }
   };
@@ -727,7 +727,7 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
                 />
               </button>
               {/* 原有的添加 LoRA 按钮 */}
-              {loras.length < 5 && (
+              {loras.length < 7 && (
                 <button
                   onClick={addLora}
                   title="添加 LoRA"
