@@ -5,7 +5,7 @@ import { useDragStore } from '../hooks/useDragStore.js';
 import { showToast } from '../hooks/useToast.js';
 import { QueuePanel } from './QueuePanel.js';
 import {
-  Wand2, Sparkles, ZoomIn, Scissors, Video, Maximize2, ListOrdered, Palette, ImagePlus, UserRound, Zap, PenSquare,
+  Wand2, Sparkles, ZoomIn, Scissors, Video, Maximize2, ListOrdered, Palette, ImagePlus, UserRound, Zap, PenSquare, Layers,
 } from 'lucide-react';
 import { GROUPS } from '../data/sidebarGroups.js';
 
@@ -14,7 +14,7 @@ const WORKFLOW_ICONS: Record<number, LucideIcon> = {
   1: Sparkles,
   2: ZoomIn,
   3: Video,
-  4: Maximize2,
+  4: Layers,
   5: Scissors,
   6: Palette,
   7: ImagePlus,

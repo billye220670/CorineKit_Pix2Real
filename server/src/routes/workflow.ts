@@ -765,6 +765,7 @@ router.post('/:id/execute', upload.single('image'), async (req, res) => {
     }
 
     const userPrompt = req.body.prompt || '';
+    const options = req.body.options ? JSON.parse(req.body.options) : undefined;
 
     // Upload to ComfyUI
     let comfyFilename: string;
@@ -775,7 +776,7 @@ router.post('/:id/execute', upload.single('image'), async (req, res) => {
     }
 
     // Build prompt JSON
-    const prompt = adapter.buildPrompt(comfyFilename, userPrompt);
+    const prompt = adapter.buildPrompt(comfyFilename, userPrompt, options);
 
     // Queue it
     const result = await queuePrompt(prompt, clientId);
@@ -822,6 +823,7 @@ router.post('/:id/batch', upload.array('images', 50), async (req, res) => {
     } catch {
       prompts = [];
     }
+    const options = req.body.options ? JSON.parse(req.body.options) : undefined;
 
     const results = [];
 
@@ -836,7 +838,7 @@ router.post('/:id/batch', upload.array('images', 50), async (req, res) => {
         comfyFilename = await uploadImage(file.buffer, file.originalname);
       }
 
-      const prompt = adapter.buildPrompt(comfyFilename, userPrompt);
+      const prompt = adapter.buildPrompt(comfyFilename, userPrompt, options);
       const result = await queuePrompt(prompt, clientId);
 
       results.push({

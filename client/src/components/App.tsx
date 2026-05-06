@@ -9,6 +9,8 @@ import { PhotoWall, VIEW_CONFIG, type ViewSize } from './PhotoWall.js';
 import { FaceSwapPhotoWall } from './FaceSwapPhotoWall.js';
 import { Text2ImgSidebar } from './Text2ImgSidebar.js';
 import { ZITSidebar } from './ZITSidebar.js';
+import { VideoGenSidebar } from './VideoGenSidebar.js';
+import { FrameInterpSidebar } from './FrameInterpSidebar.js';
 import { Workflow0SettingsPanel } from './Workflow0SettingsPanel.js';
 import { Workflow2SettingsPanel } from './Workflow2SettingsPanel.js';
 import { ThemeToggle } from './ThemeToggle.js';
@@ -121,7 +123,7 @@ export function App() {
     document.addEventListener('mouseup', handleMouseUp);
   }, []);
 
-  const hasRightSidebar = activeTab === 7 || activeTab === 9 || activeTab === 0 || activeTab === 2;
+  const hasRightSidebar = activeTab === 7 || activeTab === 9 || activeTab === 0 || activeTab === 2 || activeTab === 3 || activeTab === 4;
   const showDropZone = images.length === 0 && activeTab !== 7 && activeTab !== 8 && activeTab !== 9;
   const agentRightOffset = (hasRightSidebar && !showDropZone) ? sidebarWidth + 4 : 0;
 
@@ -316,6 +318,8 @@ export function App() {
                   {activeTab === 9 && <ZITSidebar width={sidebarWidth} />}
                   {activeTab === 0 && <Workflow0SettingsPanel width={sidebarWidth} />}
                   {activeTab === 2 && <Workflow2SettingsPanel width={sidebarWidth} />}
+                  {activeTab === 3 && <VideoGenSidebar width={sidebarWidth} />}
+                  {activeTab === 4 && <FrameInterpSidebar width={sidebarWidth} />}
                 </>
               )}
             </div>

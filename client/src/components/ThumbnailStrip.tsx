@@ -193,7 +193,9 @@ export function ThumbnailStrip({
                   preload="metadata"
                   muted
                   playsInline
-                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                  disablePictureInPicture
+                  controlsList="nodownload nofullscreen noremoteplayback noplaybackrate"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }}
                 />
               ) : (
                 <img

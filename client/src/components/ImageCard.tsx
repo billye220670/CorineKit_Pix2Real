@@ -94,9 +94,11 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
   const { sendMessage } = useWebSocket();
 
   const [isHovered, setIsHovered] = useState(false);
+  const isHoveredRef = useRef(false);
   const [isCardHovered, setIsCardHovered] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const prevVideoEl = useRef<HTMLVideoElement | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressFired = useRef(false);
@@ -162,7 +164,7 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
   const displayOutput = selectedOutputIdx === -1 ? null : (outputs[selectedOutputIdx] ?? null);
 
   // Strip items: original always first, then generated outputs
-  const originalIsVideo = image.file.type.startsWith('video/');
+  const originalIsVideo = image.file?.type?.startsWith('video/') || /\.(mp4|webm|mov)$/i.test(image.originalName);
   const stripItems = outputs.length > 0
     ? [
         { filename: 'original', url: image.previewUrl, isVideo: originalIsVideo },
@@ -202,6 +204,7 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
 
   const handleMouseEnter = useCallback(() => {
     setIsHovered(true);
+    isHoveredRef.current = true;
     if (videoRef.current) {
       videoRef.current.play().catch(() => {});
     }
@@ -209,11 +212,27 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
 
   const handleMouseLeave = useCallback(() => {
     setIsHovered(false);
+    isHoveredRef.current = false;
     if (videoRef.current) {
       videoRef.current.pause();
       videoRef.current.currentTime = 0;
     }
   }, []);
+
+  // When switching between video outputs, pause old video and play new one if hovering
+  useEffect(() => {
+    if (!isVideoWorkflow) return;
+    const prev = prevVideoEl.current;
+    const curr = videoRef.current;
+    if (prev && prev !== curr) {
+      prev.pause();
+      prev.currentTime = 0;
+    }
+    prevVideoEl.current = curr;
+    if (isHoveredRef.current && curr) {
+      curr.play().catch(() => {});
+    }
+  }, [selectedOutputIdx, isVideoWorkflow]);
 
   const handleImageAreaClick = useCallback(() => {
     if (!isMultiSelectMode) return;
@@ -364,6 +383,28 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
     formData.append('image',    image.file);
     formData.append('clientId', clientId);
     formData.append('prompt',   promptValue);
+
+    // Tab 3: pass video generation options from sidebar
+    if (activeTab === 3) {
+      const vCfg = (window as any).__videoGenConfig;
+      if (vCfg) {
+        formData.append('options', JSON.stringify({
+          megapixels: vCfg.megapixels,
+          seconds: vCfg.seconds,
+          fps: vCfg.fps,
+        }));
+      }
+    }
+
+    // Tab 4: pass frame interpolation multiplier from sidebar
+    if (activeTab === 4) {
+      const fCfg = (window as any).__frameInterpConfig;
+      if (fCfg) {
+        formData.append('options', JSON.stringify({
+          multiplier: fCfg.multiplier,
+        }));
+      }
+    }
 
     // Tab 0: pass selected draw model (qwen / klein) from persisted settings
     if (activeTab === 0) {
@@ -540,7 +581,7 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
           }).catch(() => {});
         }}
       >
-        {/* Image area: tab 7 has 3 states; other tabs show placeholder + optional absolute output overlay */}
+        {/* Image area: tab 7 has 3 states; video workflows show video directly; other tabs show placeholder + optional absolute output overlay */}
         {(isTab7 || isTab9) && isProcessing ? (
           <div
             className="shimmer-skeleton"
@@ -559,6 +600,49 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
             style={{ width: '100%', display: 'block' }}
             onDoubleClick={(e) => { e.stopPropagation(); openMaskEditor(); }}
           />
+        ) : isVideoWorkflow ? (
+          /* Video workflow: pre-render all videos, toggle display to prevent flicker on switch */
+          <>
+            {/* Original input (image or video) — visible when no output selected */}
+            {originalIsVideo ? (
+              <video
+                ref={selectedOutputIdx === -1 ? videoRef : undefined}
+                src={image.previewUrl}
+                loop
+                muted
+                playsInline
+                preload="metadata"
+                draggable={false}
+                disablePictureInPicture
+                controlsList="nodownload nofullscreen noremoteplayback noplaybackrate"
+                style={{ width: '100%', display: selectedOutputIdx === -1 ? 'block' : 'none' }}
+              />
+            ) : (
+              <img
+                src={image.previewUrl}
+                alt={image.originalName}
+                loading="lazy"
+                draggable={false}
+                style={{ width: '100%', display: selectedOutputIdx === -1 ? 'block' : 'none' }}
+              />
+            )}
+            {/* All output videos — each stays mounted, only selected one visible */}
+            {outputs.map((output, i) => (
+              <video
+                key={output.url}
+                ref={i === selectedOutputIdx ? videoRef : undefined}
+                src={output.url}
+                loop
+                muted
+                playsInline
+                preload="metadata"
+                draggable={false}
+                disablePictureInPicture
+                controlsList="nodownload nofullscreen noremoteplayback noplaybackrate"
+                style={{ width: '100%', display: i === selectedOutputIdx ? 'block' : 'none' }}
+              />
+            ))}
+          </>
         ) : (
           <img
             src={image.previewUrl}
@@ -567,58 +651,33 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
             draggable={false}
             style={{ width: '100%', display: 'block' }}
             onDoubleClick={(e) => {
-              if (isVideoWorkflow) return;
               e.stopPropagation();
               openMaskEditor();
             }}
           />
         )}
 
-        {/* Output overlay — non-tab-7/9 only (tab 7 & 9 render output as block element above) */}
-        {displayOutput && !isTab7 && !isTab9 && (
-          isVideoWorkflow ? (
-            <video
-              ref={videoRef}
-              src={displayOutput.url}
-              loop
-              muted
-              playsInline
-              preload="auto"
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-                display: 'block',
-                opacity: isHovered ? 1 : 0,
-                transition: 'opacity 0.2s ease',
-                pointerEvents: 'none',
-              }}
-            />
-          ) : (
-            <img
-              src={displayOutput.url}
-              alt="Output"
-              loading="lazy"
-              draggable={false}
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                display: 'block',
-                opacity: 1,
-                pointerEvents: 'none',
-              }}
-              onDoubleClick={(e) => {
-                if (isVideoWorkflow) return;
-                e.stopPropagation();
-                openMaskEditor();
-              }}
-            />
-          )
+        {/* Output overlay — non-tab-7/9, non-video-workflow only */}
+        {displayOutput && !isTab7 && !isTab9 && !isVideoWorkflow && (
+          <img
+            src={displayOutput.url}
+            alt="Output"
+            loading="lazy"
+            draggable={false}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              display: 'block',
+              opacity: 1,
+              pointerEvents: 'none',
+            }}
+            onDoubleClick={(e) => {
+              e.stopPropagation();
+              openMaskEditor();
+            }}
+          />
         )}
         {/* Progress overlay */}
         {(status === 'queued' || status === 'processing') && (

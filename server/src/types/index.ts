@@ -4,7 +4,7 @@ export interface WorkflowAdapter {
   needsPrompt: boolean;
   basePrompt: string;
   outputDir: string;
-  buildPrompt(imageName: string, userPrompt?: string): object;
+  buildPrompt(imageName: string, userPrompt?: string, options?: Record<string, any>): object;
 }
 
 export interface ProgressEvent {

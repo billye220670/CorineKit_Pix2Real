@@ -8,8 +8,8 @@ const WORKFLOWS = [
   { id: 0, name: '二次元转真人', needsPrompt: true },
   { id: 1, name: '真人精修', needsPrompt: true },
   { id: 2, name: '精修放大', needsPrompt: false },
-  { id: 3, name: '快速生成视频', needsPrompt: true },
-  { id: 4, name: '视频放大', needsPrompt: false },
+  { id: 3, name: '图生视频', needsPrompt: true },
+  { id: 4, name: '视频补帧', needsPrompt: false },
   { id: 5, name: '解除装备', needsPrompt: true },
   { id: 6, name: '真人转二次元', needsPrompt: true },
   { id: 7, name: '快速出图', needsPrompt: false },
@@ -495,11 +495,10 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
             const existingOutputs = task.outputs ?? [];
             const allOutputs = [...existingOutputs, ...outputs];
             newTasks[imageId] = { ...task, status: 'done', progress: 100, outputs: allOutputs };
-            // Default to the first output of the new batch; for video workflows prefer 插帧 within new batch
+            // Video workflows always select the last (newest) output; others select first of new batch
             let defaultIdx = existingOutputs.length;
-            if ((tab === 3 || tab === 4) && outputs.length > 1) {
-              const i = outputs.findIndex((o) => o.filename.includes('插帧'));
-              if (i >= 0) defaultIdx = existingOutputs.length + i;
+            if (tab === 3 || tab === 4) {
+              defaultIdx = existingOutputs.length + outputs.length - 1;
             }
             newSelectedOutputIndex[imageId] = defaultIdx;
             changed = true;

@@ -1,0 +1,349 @@
+{
+  "141": {
+    "inputs": {
+      "image": "DesktopImage.jpeg"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像"
+    }
+  },
+  "142": {
+    "inputs": {
+      "vae_name": "wan_2.1_vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "加载VAE"
+    }
+  },
+  "144": {
+    "inputs": {
+      "unet_name": "Wan2.2\\Dasiwa_WAN22-I2V14BSynthseduction_q4High.gguf"
+    },
+    "class_type": "UnetLoaderGGUF",
+    "_meta": {
+      "title": "Unet Loader (GGUF) High Noise"
+    }
+  },
+  "145": {
+    "inputs": {
+      "unet_name": "Wan2.2\\Dasiwa_WAN22-I2V14BSynthseduction_q4Low.gguf"
+    },
+    "class_type": "UnetLoaderGGUF",
+    "_meta": {
+      "title": "Unet Loader (GGUF) Low Noise"
+    }
+  },
+  "146": {
+    "inputs": {
+      "clip_name": "nsfw_wan_umt5-xxl_fp8_scaled.safetensors",
+      "type": "wan",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "加载CLIP"
+    }
+  },
+  "151": {
+    "inputs": {
+      "samples": [
+        "246",
+        0
+      ],
+      "vae": [
+        "142",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE解码"
+    }
+  },
+  "202": {
+    "inputs": {
+      "shift": 5,
+      "model": [
+        "247",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingSD3",
+    "_meta": {
+      "title": "采样算法（SD3）"
+    }
+  },
+  "203": {
+    "inputs": {
+      "add_noise": "enable",
+      "noise_seed": 93139802608628,
+      "steps": 6,
+      "cfg": 1,
+      "sampler_name": "euler_ancestral",
+      "scheduler": "simple",
+      "start_at_step": 0,
+      "end_at_step": 3,
+      "return_with_leftover_noise": "enable",
+      "model": [
+        "202",
+        0
+      ],
+      "positive": [
+        "249",
+        0
+      ],
+      "negative": [
+        "249",
+        1
+      ],
+      "latent_image": [
+        "249",
+        2
+      ]
+    },
+    "class_type": "KSamplerAdvanced",
+    "_meta": {
+      "title": "K采样器（高级）"
+    }
+  },
+  "204": {
+    "inputs": {
+      "add_noise": "disable",
+      "noise_seed": 0,
+      "steps": 6,
+      "cfg": 1,
+      "sampler_name": "euler_ancestral",
+      "scheduler": "simple",
+      "start_at_step": 3,
+      "end_at_step": 10000,
+      "return_with_leftover_noise": "disable",
+      "model": [
+        "241",
+        0
+      ],
+      "positive": [
+        "249",
+        0
+      ],
+      "negative": [
+        "249",
+        1
+      ],
+      "latent_image": [
+        "203",
+        0
+      ]
+    },
+    "class_type": "KSamplerAdvanced",
+    "_meta": {
+      "title": "K采样器（高级）"
+    }
+  },
+  "239": {
+    "inputs": {
+      "text": "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走",
+      "clip": [
+        "146",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "Negative"
+    }
+  },
+  "240": {
+    "inputs": {
+      "text": "疯狂挣扎，表情恐惧瞳孔缩小。身上的手不停用力揉捏拉扯，手用力向外拉扯乳房。",
+      "clip": [
+        "146",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "Positive"
+    }
+  },
+  "241": {
+    "inputs": {
+      "shift": 5,
+      "model": [
+        "255",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingSD3",
+    "_meta": {
+      "title": "采样算法（SD3）"
+    }
+  },
+  "245": {
+    "inputs": {
+      "frame_rate": [
+        "413",
+        0
+      ],
+      "loop_count": 0,
+      "filename_prefix": "Video/Dasiwa-20260506125309",
+      "format": "video/h264-mp4",
+      "pix_fmt": "yuv420p",
+      "crf": 19,
+      "save_metadata": true,
+      "trim_to_audio": false,
+      "pingpong": false,
+      "save_output": true,
+      "images": [
+        "151",
+        0
+      ]
+    },
+    "class_type": "VHS_VideoCombine",
+    "_meta": {
+      "title": "合并为视频"
+    }
+  },
+  "246": {
+    "inputs": {
+      "purge_cache": true,
+      "purge_models": true,
+      "anything": [
+        "204",
+        0
+      ]
+    },
+    "class_type": "LayerUtility: PurgeVRAM V2",
+    "_meta": {
+      "title": "图层工具：清除VRAM V2"
+    }
+  },
+  "247": {
+    "inputs": {
+      "sage_attention": "auto",
+      "allow_compile": false,
+      "model": [
+        "144",
+        0
+      ]
+    },
+    "class_type": "PathchSageAttentionKJ",
+    "_meta": {
+      "title": "SAGE注意力补丁KJ"
+    }
+  },
+  "249": {
+    "inputs": {
+      "width": [
+        "461",
+        0
+      ],
+      "height": [
+        "461",
+        1
+      ],
+      "length": [
+        "262",
+        0
+      ],
+      "batch_size": 1,
+      "positive": [
+        "240",
+        0
+      ],
+      "negative": [
+        "239",
+        0
+      ],
+      "vae": [
+        "142",
+        0
+      ],
+      "start_image": [
+        "458",
+        0
+      ]
+    },
+    "class_type": "WanImageToVideo",
+    "_meta": {
+      "title": "图像到视频（Wan）"
+    }
+  },
+  "255": {
+    "inputs": {
+      "sage_attention": "auto",
+      "allow_compile": false,
+      "model": [
+        "145",
+        0
+      ]
+    },
+    "class_type": "PathchSageAttentionKJ",
+    "_meta": {
+      "title": "SAGE注意力补丁KJ"
+    }
+  },
+  "258": {
+    "inputs": {
+      "value": 4
+    },
+    "class_type": "INTConstant",
+    "_meta": {
+      "title": "秒数"
+    }
+  },
+  "262": {
+    "inputs": {
+      "value": "a*b+1",
+      "a": [
+        "258",
+        0
+      ],
+      "b": [
+        "413",
+        0
+      ]
+    },
+    "class_type": "SimpleMath+",
+    "_meta": {
+      "title": "简易运算"
+    }
+  },
+  "413": {
+    "inputs": {
+      "value": 12
+    },
+    "class_type": "FloatConstant",
+    "_meta": {
+      "title": "帧率"
+    }
+  },
+  "458": {
+    "inputs": {
+      "upscale_method": "bilinear",
+      "megapixels": 1,
+      "resolution_steps": 1,
+      "image": [
+        "141",
+        0
+      ]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {
+      "title": "缩放图像（像素）"
+    }
+  },
+  "461": {
+    "inputs": {
+      "image": [
+        "458",
+        0
+      ]
+    },
+    "class_type": "GetImageSize",
+    "_meta": {
+      "title": "获取图像尺寸"
+    }
+  }
+}
