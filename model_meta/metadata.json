@@ -437,9 +437,12 @@
     "triggerWords": "Jeddtl02",
     "thumbnail": "3c93e21d-a141-4e39-9f29-951f28fc658b.png",
     "category": "风格",
-    "description": "细节增强 (风格)",
+    "description": "细节增强 (风格)，增强画面细节",
     "keywords": [
-      "细节增强"
+      "细节增强",
+      "细节",
+      "画质",
+      "高清"
     ],
     "compatibleModels": [
       "光辉系列"
@@ -797,7 +800,9 @@
     "category": "表情",
     "description": "掌掴 (表情)",
     "keywords": [
-      "掌掴"
+      "掌掴",
+      "掌嘴",
+      "扇耳光"
     ],
     "compatibleModels": [
       "PONY系列"
