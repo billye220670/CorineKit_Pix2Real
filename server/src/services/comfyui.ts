@@ -281,6 +281,25 @@ export function connectWebSocket(
   const startedPrompts = new Set<string>();
   // Guard against double-firing onComplete (executing:null + execution_success may both arrive)
   const completedPrompts = new Set<string>();
+  // Pending onComplete timers triggered by executing:null. Cleared if execution_success
+  // arrives first (preferred signal — fires AFTER ComfyUI commits history to disk).
+  const pendingCompleteTimers = new Map<string, NodeJS.Timeout>();
+  // Grace period: how long to wait for execution_success after executing:null before
+  // falling back to firing onComplete on the older signal alone (older ComfyUI versions
+  // do not emit execution_success at all).
+  const EXECUTION_SUCCESS_GRACE_MS = 500;
+
+  function fireComplete(promptId: string) {
+    if (completedPrompts.has(promptId)) return;
+    const pending = pendingCompleteTimers.get(promptId);
+    if (pending) {
+      clearTimeout(pending);
+      pendingCompleteTimers.delete(promptId);
+    }
+    completedPrompts.add(promptId);
+    startedPrompts.delete(promptId);
+    callbacks.onComplete?.(promptId);
+  }
 
   ws.on('message', (raw) => {
     try {
@@ -314,21 +333,33 @@ export function connectWebSocket(
           }
           callbacks.onExecutingNode?.(data.prompt_id, String(data.node));
         }
-        if (data.node == null && !completedPrompts.has(data.prompt_id)) {
-          completedPrompts.add(data.prompt_id);
-          startedPrompts.delete(data.prompt_id);
-          callbacks.onComplete?.(data.prompt_id);
+        // executing:null fires when the workflow finishes, but in newer ComfyUI versions
+        // history may not be committed to disk yet at this exact moment. Defer onComplete
+        // briefly so execution_success (which fires AFTER history write) can win the race.
+        // This prevents the "card done but empty" bug where getHistory returns empty data.
+        if (data.node == null && !completedPrompts.has(data.prompt_id) && !pendingCompleteTimers.has(data.prompt_id)) {
+          const promptId = data.prompt_id;
+          const timer = setTimeout(() => {
+            pendingCompleteTimers.delete(promptId);
+            fireComplete(promptId);
+          }, EXECUTION_SUCCESS_GRACE_MS);
+          pendingCompleteTimers.set(promptId, timer);
         }
       }
 
-      // Newer ComfyUI versions also send execution_success as an explicit completion signal
-      if (type === 'execution_success' && !completedPrompts.has(data.prompt_id)) {
-        completedPrompts.add(data.prompt_id);
-        startedPrompts.delete(data.prompt_id);
-        callbacks.onComplete?.(data.prompt_id);
+      // Preferred completion signal in newer ComfyUI: fires AFTER history is fully saved.
+      // Cancels any pending executing:null timer to avoid double-firing.
+      if (type === 'execution_success') {
+        fireComplete(data.prompt_id);
       }
 
       if (type === 'execution_error' && callbacks.onError) {
+        // Cancel any pending complete timer — error takes precedence
+        const pending = pendingCompleteTimers.get(data.prompt_id);
+        if (pending) {
+          clearTimeout(pending);
+          pendingCompleteTimers.delete(data.prompt_id);
+        }
         callbacks.onError(data.prompt_id, data.exception_message || 'Unknown error');
       }
     } catch {

@@ -337,16 +337,44 @@ wss.on('connection', (clientWs) => {
       }
 
       try {
+        // Defense in depth: retry getHistory until ComfyUI has committed the history.
+        // Even with the executing:null → execution_success preference in comfyui.ts,
+        // /history/{promptId} may briefly return empty/incomplete on slower disks.
+        // Without this retry, we'd send `complete` with outputs=[] and the card
+        // would appear "done but empty" while the file actually exists in ComfyUI's output/.
+        let history = await getHistory(promptId);
+        let historyRetries = 0;
+        const maxHistoryRetries = 50; // 50 * 200ms = 10s
+        while (
+          (!history || !history.status || history.status.completed !== true) &&
+          historyRetries < maxHistoryRetries
+        ) {
+          await new Promise(r => setTimeout(r, 200));
+          history = await getHistory(promptId);
+          historyRetries++;
+        }
+        if (historyRetries > 0) {
+          console.log(`[WS] Waited ${historyRetries * 200}ms for history of ${promptId} to be committed`);
+        }
+        if (!history || !history.status || history.status.completed !== true) {
+          console.warn(`[WS] History never reached completed=true for ${promptId} after ${maxHistoryRetries * 200}ms; proceeding with whatever data we have`);
+        }
+
         // Download outputs to session output directory
-        const history = await getHistory(promptId);
         const outputs: Array<{ filename: string; url: string }> = [];
         const info = promptWorkflowMap.get(promptId);
 
         if (!info) {
           console.warn(`[WS] No workflow mapping found for promptId ${promptId}, outputs will not be saved to session`);
+        } else if (!info.sessionId) {
+          console.warn(`[WS] Workflow mapping for ${promptId} has empty sessionId; outputs will not be saved to session`);
         }
 
-        if (history && history.outputs) {
+        // Skip downloading entirely when there's no session to save to — saves bandwidth
+        // and avoids confusing logs about "downloaded but discarded" buffers.
+        const canSave = !!(info && info.sessionId);
+
+        if (history && history.outputs && canSave) {
           for (const nodeOutput of Object.values(history.outputs)) {
             // Handle image outputs (only type "output", skip temp/preview)
             if (nodeOutput.images) {
@@ -354,12 +382,8 @@ wss.on('connection', (clientWs) => {
                 if (img.type !== 'output') continue;
                 try {
                   const buffer = await getImageBuffer(img.filename, img.subfolder, img.type);
-                  if (info && info.sessionId) {
-                    const url = saveOutputFile(info.sessionId, info.tabId, img.filename, buffer);
-                    outputs.push({ filename: img.filename, url });
-                  } else if (info && !info.sessionId) {
-                    console.warn(`[WS] Missing sessionId for promptId ${promptId}, output ${img.filename} not saved`);
-                  }
+                  const url = saveOutputFile(info!.sessionId, info!.tabId, img.filename, buffer);
+                  outputs.push({ filename: img.filename, url });
                 } catch (err) {
                   console.error(`[WS] Failed to download output ${img.filename}:`, err);
                 }
@@ -371,19 +395,20 @@ wss.on('connection', (clientWs) => {
               for (const vid of nodeOutput.gifs) {
                 try {
                   const buffer = await getImageBuffer(vid.filename, vid.subfolder, vid.type);
-                  if (info && info.sessionId) {
-                    const url = saveOutputFile(info.sessionId, info.tabId, vid.filename, buffer);
-                    outputs.push({ filename: vid.filename, url });
-                  } else if (info && !info.sessionId) {
-                    console.warn(`[WS] Missing sessionId for promptId ${promptId}, video ${vid.filename} not saved`);
-                  }
+                  const url = saveOutputFile(info!.sessionId, info!.tabId, vid.filename, buffer);
+                  outputs.push({ filename: vid.filename, url });
                 } catch (err) {
                   console.error(`[WS] Failed to download video ${vid.filename}:`, err);
                 }
               }
             }
           }
+        } else if (canSave) {
+          // canSave but history empty — this is the "card empty" symptom.
+          console.warn(`[WS] No outputs in history for ${promptId} despite completed status; card will appear empty. ComfyUI history dump:`, JSON.stringify(history));
         }
+
+        console.log(`[WS] Sending complete for ${promptId}, outputs: ${outputs.length}`, outputs.map(o => o.filename));
 
         if (clientWs.readyState === WebSocket.OPEN) {
           clientWs.send(JSON.stringify({
