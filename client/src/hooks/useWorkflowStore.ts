@@ -130,6 +130,19 @@ interface WorkflowStore {
 
   setSelectedOutputIndex: (imageId: string, index: number) => void;
 
+  // Rename card label + associated assets in-memory (persistence is handled by the caller
+  // via the backend rename-card API; this only updates the store with the returned values).
+  applyCardRename: (
+    tabId: number,
+    imageId: string,
+    payload: {
+      label: string;
+      inputFilename?: string;
+      inputUrl?: string;
+      outputs: Array<{ filename: string; url: string }>;
+    },
+  ) => void;
+
   // Task management
   startTask: (imageId: string, promptId: string) => void;
   startTaskInTab: (tabId: number, imageId: string, promptId: string) => void;
@@ -487,6 +500,34 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
             ...prev,
             selectedOutputIndex: { ...prev.selectedOutputIndex, [imageId]: index },
           },
+        },
+      };
+    });
+  },
+
+  applyCardRename: (tabId, imageId, payload) => {
+    set((state) => {
+      const prev = state.tabData[tabId] || emptyTabData();
+      const newImages = prev.images.map((img) => {
+        if (img.id !== imageId) return img;
+        return {
+          ...img,
+          label: payload.label,
+          inputFilename: payload.inputFilename ?? img.inputFilename,
+          sessionUrl: payload.inputUrl ?? img.sessionUrl,
+        };
+      });
+      let newTasks = prev.tasks;
+      if (payload.outputs.length > 0 && prev.tasks[imageId]) {
+        newTasks = {
+          ...prev.tasks,
+          [imageId]: { ...prev.tasks[imageId], outputs: payload.outputs },
+        };
+      }
+      return {
+        tabData: {
+          ...state.tabData,
+          [tabId]: { ...prev, images: newImages, tasks: newTasks },
         },
       };
     });

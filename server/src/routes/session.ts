@@ -11,6 +11,7 @@ import {
   deleteSession,
   pruneOldSessions,
   saveCover,
+  renameCardAssets,
 } from '../services/sessionManager.js';
 
 const router = Router();
@@ -108,6 +109,25 @@ router.delete('/:sessionId', (req, res) => {
   const sessionId = String(req.params.sessionId);
   deleteSession(sessionId);
   res.json({ ok: true });
+});
+
+// POST /api/session/:sessionId/rename-card
+// Body: JSON { tabId: number, imageId: string, label: string }
+// Renames on-disk assets ({label}_raw{ext}, {label}_1{ext}, ...) and updates session.json.
+router.post('/:sessionId/rename-card', (req, res) => {
+  const sessionId = String(req.params.sessionId);
+  const { tabId, imageId, label } = req.body as { tabId: number; imageId: string; label: string };
+  if (typeof tabId !== 'number' || !imageId || typeof label !== 'string') {
+    res.status(400).json({ error: 'Missing or invalid fields: tabId, imageId, label' });
+    return;
+  }
+  try {
+    const result = renameCardAssets(sessionId, tabId, imageId, label);
+    res.json(result);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    res.status(400).json({ error: msg });
+  }
 });
 
 export default router;

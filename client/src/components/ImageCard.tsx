@@ -1,5 +1,5 @@
 import { useCallback, useState, useRef, useEffect, memo } from 'react';
-import { X, Play, RotateCcw, Check, AlertCircle, Layers, ChevronDown, Flower, Sparkles, Copy, BookText, Hash, AlignLeft, Wand2, Loader2, Heart, FileText, ImagePlus } from 'lucide-react';
+import { X, Play, RotateCcw, Check, AlertCircle, Layers, ChevronDown, Flower, Sparkles, Copy, BookText, Hash, AlignLeft, Wand2, Loader2, Heart, FileText, ImagePlus, Pencil } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useShallow } from 'zustand/react/shallow';
 import { SYSTEM_PROMPTS } from './prompt-assistant/systemPrompts.js';
@@ -15,7 +15,7 @@ import { useDragStore } from '../hooks/useDragStore.js';
 import { useSettingsStore } from '../hooks/useSettingsStore.js';
 import { useAgentStore } from '../hooks/useAgentStore.js';
 import type { ImageItem } from '../types/index.js';
-import { setSessionCover } from '../services/sessionService.js';
+import { setSessionCover, renameCard } from '../services/sessionService.js';
 import { callPromptAssistant } from '../services/api.js';
 import { useVideoFps } from '../hooks/useVideoFps.js';
 
@@ -36,6 +36,8 @@ function arePropsEqual(prev: ImageCardProps, next: ImageCardProps): boolean {
     prev.image.previewUrl === next.image.previewUrl &&
     prev.image.thumbnailUrl === next.image.thumbnailUrl &&
     prev.image.originalName === next.image.originalName &&
+    prev.image.label === next.image.label &&
+    prev.image.sessionUrl === next.image.sessionUrl &&
     prev.isMultiSelectMode === next.isMultiSelectMode &&
     prev.isSelected === next.isSelected &&
     prev.isFlashing === next.isFlashing &&
@@ -58,6 +60,7 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
       setSelectedOutputIndex: s.setSelectedOutputIndex,
       toggleBackPose: s.toggleBackPose,
       removeImage: s.removeImage,
+      applyCardRename: s.applyCardRename,
     }))
   );
 
@@ -90,7 +93,7 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
   );
 
   // Destructure for easier access
-  const { setPrompt, startTask, resetTask, removeImage, setFlashingImage, setSelectedOutputIndex, toggleBackPose } = actions;
+  const { setPrompt, startTask, resetTask, removeImage, setFlashingImage, setSelectedOutputIndex, toggleBackPose, applyCardRename } = actions;
   const { activeTab, workflows, clientId, sessionId } = globalState;
   const { promptValue, task, selectedOutputIdx, text2imgConfig, zitConfig, backPose } = cardData;
   const { sendMessage } = useWebSocket();
@@ -153,7 +156,58 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
   const [quickActionLoading, setQuickActionLoading] = useState<string | null>(null);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const [showConfigPanel, setShowConfigPanel] = useState(false);
+  const [titleHovered, setTitleHovered] = useState(false);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editingNameValue, setEditingNameValue] = useState('');
+  const nameInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (!isEditingName) return;
+    const el = nameInputRef.current;
+    if (!el) return;
+    el.focus();
+    el.select();
+  }, [isEditingName]);
+
+  const currentLabel = image.label || image.originalName.replace(/\.[^.]+$/, '');
+
+  const startEditName = useCallback(() => {
+    setEditingNameValue(currentLabel);
+    setIsEditingName(true);
+  }, [currentLabel]);
+
+  const handleRename = useCallback(async (newLabel: string): Promise<boolean> => {
+    if (!sessionId) {
+      showToast('会话尚未就绪');
+      return false;
+    }
+    try {
+      const result = await renameCard(sessionId, activeTab, image.id, newLabel);
+      applyCardRename(activeTab, image.id, {
+        label: result.label,
+        inputFilename: result.inputFilename,
+        inputUrl: result.inputUrl,
+        outputs: result.outputs,
+      });
+      showToast(`已重命名为 ${result.label}`);
+      return true;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '重命名失败';
+      showToast(msg);
+      return false;
+    }
+  }, [sessionId, activeTab, image.id, applyCardRename]);
+
+  const submitEditName = useCallback(async () => {
+    const v = editingNameValue.trim();
+    if (!v || v === currentLabel) {
+      setIsEditingName(false);
+      return;
+    }
+    const ok = await handleRename(v);
+    if (ok) setIsEditingName(false);
+  }, [editingNameValue, currentLabel, handleRename]);
 
   useEffect(() => {
     const t = textareaRef.current;
@@ -1043,15 +1097,95 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
 
       {/* Card footer */}
       <div style={{ padding: 'var(--spacing-sm)', flexShrink: 0 }}>
-        <div style={{
-          fontSize: '12px',
-          color: 'var(--color-text-secondary)',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-          marginBottom: 'var(--spacing-sm)',
-        }}>
-          {image.originalName}
+        <div
+          onMouseEnter={() => setTitleHovered(true)}
+          onMouseLeave={() => setTitleHovered(false)}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+            fontSize: '12px',
+            color: 'var(--color-text-secondary)',
+            minHeight: 20,
+            marginBottom: 'var(--spacing-sm)',
+            minWidth: 0,
+          }}
+        >
+          {isEditingName ? (
+            <input
+              ref={nameInputRef}
+              type="text"
+              value={editingNameValue}
+              onChange={(e) => setEditingNameValue(e.target.value)}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === 'Enter') { e.preventDefault(); void submitEditName(); }
+                else if (e.key === 'Escape') { e.preventDefault(); setIsEditingName(false); }
+              }}
+              onBlur={() => { void submitEditName(); }}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                fontSize: 12,
+                color: 'var(--color-text-primary, #e0e0e0)',
+                backgroundColor: 'rgba(255,255,255,0.06)',
+                border: '1px solid var(--color-primary, #4a9eff)',
+                borderRadius: 4,
+                padding: '2px 6px',
+                outline: 'none',
+                fontFamily: 'inherit',
+              }}
+            />
+          ) : (
+            <>
+              <span
+                title={currentLabel}
+                onClick={(e) => {
+                  // Allow clicking title to directly enter edit mode (alongside the icon)
+                  e.stopPropagation();
+                  startEditName();
+                }}
+                style={{
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  flex: '0 1 auto',
+                  minWidth: 0,
+                  cursor: 'text',
+                }}
+              >
+                {currentLabel}
+              </span>
+              {titleHovered && (
+                <button
+                  type="button"
+                  title="重命名"
+                  onClick={(e) => { e.stopPropagation(); startEditName(); }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  style={{
+                    flexShrink: 0,
+                    width: 18,
+                    height: 18,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: 0,
+                    color: 'var(--color-text-secondary)',
+                    backgroundColor: 'transparent',
+                    border: 'none',
+                    borderRadius: 3,
+                    cursor: 'pointer',
+                  }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'rgba(255,255,255,0.08)'; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent'; }}
+                >
+                  <Pencil size={12} />
+                </button>
+              )}
+            </>
+          )}
         </div>
 
         <div style={{ display: 'flex', gap: 'var(--spacing-sm)', alignItems: 'flex-start' }}>
@@ -1287,6 +1421,7 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
           x={ctxMenu.x}
           y={ctxMenu.y}
           onViewConfig={() => { setCtxMenu(null); setShowConfigPanel(true); }}
+          onRename={() => { setCtxMenu(null); startEditName(); }}
           onSetCover={async () => {
             setCtxMenu(null);
             // Determine which image URL to use as cover: prefer currently displayed output, fallback to input sessionUrl
@@ -1326,9 +1461,10 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
 
 // ─── CardContextMenu ──────────────────────────────────────────────────
 
-function CardContextMenu({ x, y, onViewConfig, onSetCover, onClose }: {
+function CardContextMenu({ x, y, onViewConfig, onRename, onSetCover, onClose }: {
   x: number; y: number;
   onViewConfig: () => void;
+  onRename: () => void;
   onSetCover: () => void;
   onClose: () => void;
 }) {
@@ -1357,6 +1493,7 @@ function CardContextMenu({ x, y, onViewConfig, onSetCover, onClose }: {
 
   const items = [
     { icon: <FileText size={14} />, label: '查看配置', onClick: onViewConfig },
+    { icon: <Pencil size={14} />, label: '重命名卡片', onClick: onRename },
     { icon: <ImagePlus size={14} />, label: '设为会话封面', onClick: onSetCover },
   ];
 

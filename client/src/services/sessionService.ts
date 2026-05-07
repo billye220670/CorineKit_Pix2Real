@@ -51,6 +51,10 @@ export interface SerializedImage {
   id: string;
   originalName: string;
   ext: string;
+  /** User-assigned display label (overrides originalName for UI display and asset naming). */
+  label?: string;
+  /** Actual filename on disk under input/, if renamed. Defaults to `${id}${ext}` when absent. */
+  inputFilename?: string;
 }
 
 export interface SerializedTask {
@@ -158,4 +162,35 @@ export async function setSessionCover(
   });
   if (!res.ok) throw new Error(`Failed to set session cover: ${res.status}`);
   return res.json() as Promise<{ coverUrl: string }>;
+}
+
+export interface RenameCardResult {
+  label: string;
+  inputFilename?: string;
+  inputUrl?: string;
+  outputs: Array<{ filename: string; url: string }>;
+}
+
+// Rename a card's display label and on-disk assets.
+// Backend renames input → `{label}_raw{ext}` and outputs → `{label}_1{ext}`, `{label}_2{ext}`, ...
+export async function renameCard(
+  sessionId: string,
+  tabId: number,
+  imageId: string,
+  label: string,
+): Promise<RenameCardResult> {
+  const res = await fetch(`/api/session/${sessionId}/rename-card`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tabId, imageId, label }),
+  });
+  if (!res.ok) {
+    let msg = `Failed to rename card: ${res.status}`;
+    try {
+      const body = await res.json() as { error?: string };
+      if (body.error) msg = body.error;
+    } catch { /* ignore */ }
+    throw new Error(msg);
+  }
+  return res.json() as Promise<RenameCardResult>;
 }

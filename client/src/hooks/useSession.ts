@@ -150,6 +150,8 @@ export function useSession(): UseSessionReturn {
           ext: img.originalName.includes('.')
             ? ('.' + img.originalName.split('.').pop()!.toLowerCase())
             : '.png',
+          label: img.label,
+          inputFilename: img.inputFilename,
         })),
         prompts: td.prompts,
         tasks: td.tasks,
@@ -325,7 +327,8 @@ export function useSession(): UseSessionReturn {
 
             const images: ImageItem[] = [];
             for (const imgMeta of td.images) {
-              const sessionUrl = `/api/session-files/${sessionId}/tab-${tab}/input/${imgMeta.id}${imgMeta.ext}`;
+              const inputName = imgMeta.inputFilename ?? `${imgMeta.id}${imgMeta.ext}`;
+              const sessionUrl = `/api/session-files/${sessionId}/tab-${tab}/input/${inputName}`;
               try {
                 const file = await fetchAsFile(sessionUrl, imgMeta.originalName);
                 const blobUrl = URL.createObjectURL(file);
@@ -335,6 +338,8 @@ export function useSession(): UseSessionReturn {
                   previewUrl: blobUrl,
                   originalName: imgMeta.originalName,
                   sessionUrl,
+                  label: imgMeta.label,
+                  inputFilename: imgMeta.inputFilename,
                 });
                 // Mark as already uploaded so we don't re-upload on subscription trigger
                 uploadedImages.current.add(`${tab}:${imgMeta.id}`);

@@ -7,6 +7,10 @@ export interface ImageItem {
   sessionUrl?: string;
   /** Video thumbnail (first frame) data URL, generated asynchronously for video files. */
   thumbnailUrl?: string;
+  /** User-assigned display label. When set, overrides originalName for the card title. */
+  label?: string;
+  /** Actual filename on disk under input/, if renamed. Defaults to `${id}${ext}` when absent. */
+  inputFilename?: string;
 }
 
 export interface WorkflowInfo {

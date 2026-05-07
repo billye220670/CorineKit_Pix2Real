@@ -80,6 +80,10 @@ export interface SerializedImage {
   id: string;
   originalName: string;
   ext: string; // e.g. ".png", ".jpg"
+  /** User-assigned display label (overrides originalName for UI display and asset naming). */
+  label?: string;
+  /** Actual filename on disk under input/, if renamed. Defaults to `${id}${ext}` when absent. */
+  inputFilename?: string;
 }
 
 export interface SerializedTask {
@@ -209,4 +213,130 @@ export function pruneOldSessions(keep = 5): void {
   for (const s of toDelete) {
     deleteSession(s.sessionId);
   }
+}
+
+// ── Card asset rename ──────────────────────────────────────────────────────
+
+export interface RenamedCardResult {
+  label: string;
+  inputFilename?: string;
+  inputUrl?: string;
+  outputs: Array<{ filename: string; url: string }>;
+}
+
+/**
+ * Sanitize a user-provided label so it's safe as a filename prefix on all OSes.
+ * Invalid chars (\/:*?"<>|) are replaced with "_"; leading/trailing whitespace and dots stripped.
+ */
+function sanitizeLabel(input: string): string {
+  let s = input.replace(/[\\/:*?"<>|]/g, '_').trim();
+  // Strip trailing dots/spaces (Windows doesn't allow them)
+  s = s.replace(/[. ]+$/g, '');
+  return s;
+}
+
+/**
+ * Rename a card's on-disk assets under sessions/{sessionId}/tab-{tab}/.
+ * - Input file is renamed to `{label}_raw{ext}`
+ * - Output files (if any) are renamed to `{label}_{1..N}{ext}` preserving order
+ * Updates session.json accordingly and returns the new URLs/filenames.
+ *
+ * Throws if a target path collides with an unrelated existing file.
+ */
+export function renameCardAssets(
+  sessionId: string,
+  tabId: number,
+  imageId: string,
+  newLabel: string,
+): RenamedCardResult {
+  const safeLabel = sanitizeLabel(newLabel);
+  if (!safeLabel) throw new Error('Invalid label');
+
+  const stateFile = path.join(sessionsBase, sessionId, 'session.json');
+  if (!fs.existsSync(stateFile)) throw new Error('Session not found');
+
+  const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8')) as SessionState;
+  const td = state.tabData[tabId];
+  if (!td) throw new Error(`Tab ${tabId} not found in session`);
+
+  const imgIdx = td.images.findIndex((i) => i.id === imageId);
+  const img = imgIdx >= 0 ? td.images[imgIdx] : undefined;
+
+  const inputDir = path.join(sessionsBase, sessionId, `tab-${tabId}`, 'input');
+  const outputDir = path.join(sessionsBase, sessionId, `tab-${tabId}`, 'output');
+
+  // ── Rename input file ────────────────────────────────────────────────
+  let newInputFilename: string | undefined;
+  let newInputUrl: string | undefined;
+  if (img) {
+    const oldInputName = img.inputFilename ?? `${img.id}${img.ext}`;
+    const oldInputPath = path.join(inputDir, oldInputName);
+    const targetInputName = `${safeLabel}_raw${img.ext}`;
+    const targetInputPath = path.join(inputDir, targetInputName);
+
+    if (oldInputPath !== targetInputPath) {
+      // Collision check: target exists and isn't our own old file
+      if (fs.existsSync(targetInputPath)) {
+        throw new Error(`文件名冲突：${targetInputName} 已存在`);
+      }
+      if (fs.existsSync(oldInputPath)) {
+        fs.renameSync(oldInputPath, targetInputPath);
+      }
+    }
+    newInputFilename = targetInputName;
+    newInputUrl = `/api/session-files/${sessionId}/tab-${tabId}/input/${targetInputName}`;
+  }
+
+  // ── Rename output files ──────────────────────────────────────────────
+  const task = td.tasks[imageId];
+  const newOutputs: Array<{ filename: string; url: string }> = [];
+  if (task?.outputs?.length) {
+    // Pre-check all collisions first (before doing any renames)
+    const plannedRenames: Array<{ oldPath: string; newPath: string; newName: string }> = [];
+    for (let i = 0; i < task.outputs.length; i++) {
+      const out = task.outputs[i];
+      const outExt = path.extname(out.filename) || '.png';
+      const newName = `${safeLabel}_${i + 1}${outExt}`;
+      const oldPath = path.join(outputDir, out.filename);
+      const newPath = path.join(outputDir, newName);
+      plannedRenames.push({ oldPath, newPath, newName });
+    }
+    // Collision check across all outputs
+    for (const plan of plannedRenames) {
+      if (plan.oldPath === plan.newPath) continue;
+      if (fs.existsSync(plan.newPath)) {
+        throw new Error(`文件名冲突：${path.basename(plan.newPath)} 已存在`);
+      }
+    }
+    // Perform renames
+    for (const plan of plannedRenames) {
+      if (plan.oldPath !== plan.newPath && fs.existsSync(plan.oldPath)) {
+        fs.renameSync(plan.oldPath, plan.newPath);
+      }
+      newOutputs.push({
+        filename: plan.newName,
+        url: `/api/session-files/${sessionId}/tab-${tabId}/output/${encodeURIComponent(plan.newName)}`,
+      });
+    }
+  }
+
+  // ── Persist changes in session.json ──────────────────────────────────
+  if (img) {
+    img.label = safeLabel;
+    if (newInputFilename) img.inputFilename = newInputFilename;
+    td.images[imgIdx] = img;
+  }
+  if (task && newOutputs.length) {
+    task.outputs = newOutputs;
+    td.tasks[imageId] = task;
+  }
+  state.updatedAt = new Date().toISOString();
+  fs.writeFileSync(stateFile, JSON.stringify(state, null, 2), 'utf-8');
+
+  return {
+    label: safeLabel,
+    inputFilename: newInputFilename,
+    inputUrl: newInputUrl,
+    outputs: newOutputs,
+  };
 }
