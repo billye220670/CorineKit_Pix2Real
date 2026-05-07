@@ -5,6 +5,8 @@ export interface ImageItem {
   originalName: string;
   /** Persistent URL pointing to the session-stored copy of this image (set after session save/restore). */
   sessionUrl?: string;
+  /** Video thumbnail (first frame) data URL, generated asynchronously for video files. */
+  thumbnailUrl?: string;
 }
 
 export interface WorkflowInfo {

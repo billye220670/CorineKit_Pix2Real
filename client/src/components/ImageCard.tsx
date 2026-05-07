@@ -17,6 +17,7 @@ import { useAgentStore } from '../hooks/useAgentStore.js';
 import type { ImageItem } from '../types/index.js';
 import { setSessionCover } from '../services/sessionService.js';
 import { callPromptAssistant } from '../services/api.js';
+import { useVideoFps } from '../hooks/useVideoFps.js';
 
 interface ImageCardProps {
   image: ImageItem;
@@ -33,6 +34,7 @@ function arePropsEqual(prev: ImageCardProps, next: ImageCardProps): boolean {
   return (
     prev.image.id === next.image.id &&
     prev.image.previewUrl === next.image.previewUrl &&
+    prev.image.thumbnailUrl === next.image.thumbnailUrl &&
     prev.image.originalName === next.image.originalName &&
     prev.isMultiSelectMode === next.isMultiSelectMode &&
     prev.isSelected === next.isSelected &&
@@ -79,7 +81,7 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
       return {
         promptValue: tabData?.prompts?.[image.id] || '',
         task: task ?? null,
-        selectedOutputIdx: tabData?.selectedOutputIndex?.[image.id] ?? Math.max(0, outputsLen - 1),
+        selectedOutputIdx: tabData?.selectedOutputIndex?.[image.id] ?? (outputsLen > 0 ? outputsLen - 1 : -1),
         text2imgConfig: tab === 7 ? s.tabData[7]?.text2imgConfigs?.[image.id] : undefined,
         zitConfig: tab === 9 ? s.tabData[9]?.zitConfigs?.[image.id] : undefined,
         backPose: tabData?.backPoseToggles?.[image.id] ?? false,
@@ -167,12 +169,20 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
   const originalIsVideo = image.file?.type?.startsWith('video/') || /\.(mp4|webm|mov)$/i.test(image.originalName);
   const stripItems = outputs.length > 0
     ? [
-        { filename: 'original', url: image.previewUrl, isVideo: originalIsVideo },
+        { filename: 'original', url: image.previewUrl, isVideo: originalIsVideo, thumbnailUrl: image.thumbnailUrl },
         ...outputs.map((o) => ({ ...o, isVideo: isVideoWorkflow })),
       ]
     : [];
   // Map store index (-1 = original) to strip index (0 = original)
   const stripSelectedIndex = selectedOutputIdx === -1 ? 0 : selectedOutputIdx + 1;
+
+  // Tab 4: fps detection for frame interpolation badge
+  const isTab4 = activeTab === 4;
+  const tab4VideoUrl = isTab4 && originalIsVideo ? image.previewUrl : null;
+  const originalFps = useVideoFps(tab4VideoUrl);
+  const frameInterpMultiplier = isTab4 ? ((window as any).__frameInterpConfig?.multiplier ?? 2) : 1;
+  const interpolatedFps = originalFps ? originalFps * frameInterpMultiplier : null;
+  const showFrameInterpBadge = isTab4 && status === 'done' && outputs.length > 0;
   const cancelLongPress = useCallback(() => {
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current);
@@ -605,18 +615,35 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
           <>
             {/* Original input (image or video) — visible when no output selected */}
             {originalIsVideo ? (
-              <video
-                ref={selectedOutputIdx === -1 ? videoRef : undefined}
-                src={image.previewUrl}
-                loop
-                muted
-                playsInline
-                preload="metadata"
-                draggable={false}
-                disablePictureInPicture
-                controlsList="nodownload nofullscreen noremoteplayback noplaybackrate"
-                style={{ width: '100%', display: selectedOutputIdx === -1 ? 'block' : 'none' }}
-              />
+              <>
+                {/* Thumbnail cover: show <img> when thumbnailUrl exists and displaying original input */}
+                {image.thumbnailUrl && selectedOutputIdx === -1 && (
+                  <img
+                    src={image.thumbnailUrl}
+                    alt={image.originalName}
+                    draggable={false}
+                    style={{
+                      width: '100%',
+                      display: 'block',
+                      objectFit: 'contain',
+                    }}
+                  />
+                )}
+                {/* Video element: visible only when no thumbnailUrl fallback, hidden otherwise */}
+                <video
+                  ref={selectedOutputIdx === -1 ? videoRef : undefined}
+                  src={image.previewUrl}
+                  loop
+                  muted
+                  playsInline
+                  preload="metadata"
+                  draggable={false}
+                  disablePictureInPicture
+                  controlsList="nodownload nofullscreen noremoteplayback noplaybackrate"
+                  style={{ width: '100%', display: (selectedOutputIdx === -1 && !image.thumbnailUrl) ? 'block' : 'none' }}
+                  onLoadedData={(e) => { (e.target as HTMLVideoElement).currentTime = 0.001; }}
+                />
+              </>
             ) : (
               <img
                 src={image.previewUrl}
@@ -635,11 +662,12 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
                 loop
                 muted
                 playsInline
-                preload="metadata"
+                preload={i === selectedOutputIdx ? 'auto' : 'none'}
                 draggable={false}
                 disablePictureInPicture
                 controlsList="nodownload nofullscreen noremoteplayback noplaybackrate"
                 style={{ width: '100%', display: i === selectedOutputIdx ? 'block' : 'none' }}
+                onLoadedData={(e) => { (e.target as HTMLVideoElement).currentTime = 0.001; }}
               />
             ))}
           </>
@@ -689,6 +717,49 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
             stepTotal={task?.stepTotal}
             onCancel={status === 'queued' ? handleCancelQueue : undefined}
           />
+        )}
+
+        {/* Frame interpolation badge (Tab 4) */}
+        {showFrameInterpBadge && (
+          <div style={{
+            position: 'absolute',
+            top: 6,
+            left: 6,
+            padding: '2px 6px',
+            borderRadius: 4,
+            background: 'rgba(99, 102, 241, 0.85)',
+            color: 'white',
+            fontSize: 11,
+            fontWeight: 500,
+            pointerEvents: 'none',
+            zIndex: 5,
+            lineHeight: 1.4,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'flex-start',
+          }}>
+            <span>已补帧</span>
+            {interpolatedFps && <span>{interpolatedFps}fps</span>}
+          </div>
+        )}
+
+        {/* Original fps badge (Tab 4, before completion) */}
+        {isTab4 && originalFps && !showFrameInterpBadge && (
+          <div style={{
+            position: 'absolute',
+            top: 6,
+            left: 6,
+            padding: '2px 6px',
+            borderRadius: 4,
+            background: 'rgba(0, 0, 0, 0.7)',
+            color: 'white',
+            fontSize: 11,
+            fontWeight: 500,
+            pointerEvents: 'none',
+            zIndex: 5,
+          }}>
+            {originalFps}fps
+          </div>
         )}
 
         {/* Error badge */}
@@ -897,8 +968,8 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
           </div>
         )}
 
-        {/* Thumbnail strip: original + generated outputs — hidden for tab 7 */}
-        {stripItems.length > 0 && !isTab7 && !isTab9 && (
+        {/* Thumbnail strip: original + generated outputs — hidden for tab 7/9/4 */}
+        {stripItems.length > 0 && !isTab7 && !isTab9 && activeTab !== 4 && (
           <ThumbnailStrip
             items={stripItems}
             selectedIndex={stripSelectedIndex}

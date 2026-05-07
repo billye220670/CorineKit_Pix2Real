@@ -5,6 +5,7 @@ interface StripItem {
   filename: string;
   url: string;
   isVideo: boolean;
+  thumbnailUrl?: string;
 }
 
 interface ThumbnailStripProps {
@@ -190,12 +191,14 @@ export function ThumbnailStrip({
                 <video
                   draggable={false}
                   src={item.url}
-                  preload="metadata"
+                  poster={item.thumbnailUrl || undefined}
+                  preload="auto"
                   muted
                   playsInline
                   disablePictureInPicture
                   controlsList="nodownload nofullscreen noremoteplayback noplaybackrate"
                   style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }}
+                  onLoadedData={(e) => { (e.target as HTMLVideoElement).currentTime = 0.001; }}
                 />
               ) : (
                 <img

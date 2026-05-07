@@ -16,6 +16,7 @@ interface SessionCard {
   name: string;
   previewUrl: string | null;
   imageCount: number;
+  isCoverVideo: boolean;
 }
 
 interface WelcomePageProps {
@@ -33,11 +34,14 @@ function formatRelativeTime(iso: string): string {
   return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
 }
 
-async function resolveSessionInfo(sessionId: string, meta?: SessionMeta): Promise<{ previewUrl: string | null; imageCount: number }> {
+const isVideoUrl = (url: string) => /\.(mp4|webm|mov|avi)(\?.*)?$/i.test(url);
+
+async function resolveSessionInfo(sessionId: string, meta?: SessionMeta): Promise<{ previewUrl: string | null; imageCount: number; isCoverVideo: boolean }> {
   try {
     // If the user has manually set a cover, use it directly
     if (meta?.manualCover && meta.coverExt) {
       const coverUrl = `/api/session-files/${sessionId}/cover${meta.coverExt}`;
+      const isCoverVideo = isVideoUrl(coverUrl);
       const session = await getSession(sessionId);
       let imageCount = 0;
       if (session) {
@@ -50,10 +54,10 @@ async function resolveSessionInfo(sessionId: string, meta?: SessionMeta): Promis
           }
         }
       }
-      return { previewUrl: coverUrl, imageCount };
+      return { previewUrl: coverUrl, imageCount, isCoverVideo };
     }
     const session = await getSession(sessionId);
-    if (!session) return { previewUrl: null, imageCount: 0 };
+    if (!session) return { previewUrl: null, imageCount: 0, isCoverVideo: false };
     let previewUrl: string | null = null;
     let imageCount = 0;
     // Count all images and find preview
@@ -78,9 +82,10 @@ async function resolveSessionInfo(sessionId: string, meta?: SessionMeta): Promis
         break;
       }
     }
-    return { previewUrl, imageCount };
+    const isCoverVideo = previewUrl ? isVideoUrl(previewUrl) : false;
+    return { previewUrl, imageCount, isCoverVideo };
   } catch {
-    return { previewUrl: null, imageCount: 0 };
+    return { previewUrl: null, imageCount: 0, isCoverVideo: false };
   }
 }
 
@@ -111,6 +116,7 @@ export function WelcomePage({ onNewSession, onEnterApp }: WelcomePageProps) {
               name: names[meta.sessionId] ?? formatRelativeTime(meta.updatedAt),
               previewUrl: info.previewUrl,
               imageCount: info.imageCount,
+              isCoverVideo: info.isCoverVideo,
             };
           })
         );
@@ -364,12 +370,26 @@ export function WelcomePage({ onNewSession, onEnterApp }: WelcomePageProps) {
                     backgroundColor: 'var(--color-surface-hover)',
                   }}>
                     {card.previewUrl ? (
-                      <img
-                        src={card.previewUrl}
-                        alt=""
-                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                      />
+                      card.isCoverVideo ? (
+                        <video
+                          src={card.previewUrl}
+                          muted
+                          playsInline
+                          preload="metadata"
+                          disablePictureInPicture
+                          controlsList="nodownload nofullscreen noremoteplayback noplaybackrate"
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                          onLoadedData={(e) => { (e.target as HTMLVideoElement).currentTime = 0.1; }}
+                          onError={(e) => { (e.target as HTMLVideoElement).style.display = 'none'; }}
+                        />
+                      ) : (
+                        <img
+                          src={card.previewUrl}
+                          alt=""
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                        />
+                      )
                     ) : (
                       <div style={{
                         width: '100%',

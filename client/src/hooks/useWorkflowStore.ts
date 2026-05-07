@@ -4,6 +4,70 @@ import type { SerializedTabData, Text2ImgConfig, ZitConfig } from '../services/s
 import { DEFAULT_TAB } from '../data/sidebarGroups.js';
 export type { Text2ImgConfig, ZitConfig };
 
+/** Extract the first frame of a video file as a JPEG data URL for use as thumbnail/poster. */
+function generateVideoThumbnail(file: File): Promise<string | null> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.muted = true;
+    video.playsInline = true;
+    video.src = url;
+
+    const timeout = setTimeout(() => {
+      cleanup();
+      resolve(null);
+    }, 5000);
+
+    function cleanup() {
+      clearTimeout(timeout);
+      video.removeEventListener('seeked', onSeeked);
+      video.removeEventListener('error', onError);
+      video.src = '';
+      video.load();
+      URL.revokeObjectURL(url);
+    }
+
+    function onSeeked() {
+      try {
+        if (video.videoWidth === 0 || video.videoHeight === 0) {
+          cleanup();
+          resolve(null);
+          return;
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(video, 0, 0);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+          cleanup();
+          resolve(dataUrl);
+        } else {
+          cleanup();
+          resolve(null);
+        }
+      } catch {
+        cleanup();
+        resolve(null);
+      }
+    }
+
+    function onError() {
+      cleanup();
+      resolve(null);
+    }
+
+    video.addEventListener('seeked', onSeeked, { once: true });
+    video.addEventListener('error', onError, { once: true });
+    video.addEventListener('loadeddata', () => {
+      setTimeout(() => { video.currentTime = 0.1; }, 50);
+    }, { once: true });
+    video.load();
+  });
+}
+
 const WORKFLOWS = [
   { id: 0, name: '二次元转真人', needsPrompt: true },
   { id: 1, name: '真人精修', needsPrompt: true },
@@ -215,6 +279,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       previewUrl: URL.createObjectURL(file),
       originalName: file.name,
     }));
+    const capturedTab = get().activeTab;
     set((state) => {
       const tab = state.activeTab;
       const prev = state.tabData[tab] || emptyTabData();
@@ -225,6 +290,18 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         },
       };
     });
+    // Async: generate video thumbnails
+    for (const img of newImages) {
+      if (img.file.type.startsWith('video/')) {
+        generateVideoThumbnail(img.file).then((thumb) => {
+          if (thumb) set((state) => {
+            const prev = state.tabData[capturedTab];
+            if (!prev) return state;
+            return { tabData: { ...state.tabData, [capturedTab]: { ...prev, images: prev.images.map((i) => i.id === img.id ? { ...i, thumbnailUrl: thumb } : i) } } };
+          });
+        });
+      }
+    }
   },
 
   addImagesGetIds: (files) => {
@@ -234,6 +311,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       previewUrl: URL.createObjectURL(file),
       originalName: file.name,
     }));
+    const currentTab = get().activeTab;
     set((state) => {
       const tab = state.activeTab;
       const prev = state.tabData[tab] || emptyTabData();
@@ -244,6 +322,18 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         },
       };
     });
+    // Async: generate video thumbnails
+    for (const img of newImages) {
+      if (img.file.type.startsWith('video/')) {
+        generateVideoThumbnail(img.file).then((thumb) => {
+          if (thumb) set((state) => {
+            const prev = state.tabData[currentTab];
+            if (!prev) return state;
+            return { tabData: { ...state.tabData, [currentTab]: { ...prev, images: prev.images.map((i) => i.id === img.id ? { ...i, thumbnailUrl: thumb } : i) } } };
+          });
+        });
+      }
+    }
     return newImages.map((img) => img.id);
   },
 
@@ -263,6 +353,18 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         },
       };
     });
+    // Async: generate video thumbnails (use tabId param directly, not state.activeTab)
+    for (const img of newImages) {
+      if (img.file.type.startsWith('video/')) {
+        generateVideoThumbnail(img.file).then((thumb) => {
+          if (thumb) set((state) => {
+            const prev = state.tabData[tabId];
+            if (!prev) return state;
+            return { tabData: { ...state.tabData, [tabId]: { ...prev, images: prev.images.map((i) => i.id === img.id ? { ...i, thumbnailUrl: thumb } : i) } } };
+          });
+        });
+      }
+    }
   },
 
   removeImage: (id) => {
@@ -709,6 +811,34 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       };
     }
     set({ activeTab, tabData: newTabData });
+
+    // 恢复后，为视频文件重新生成缩略图（解决 session 持久化竞态问题）
+    for (const [tabIdStr, images] of Object.entries(restoredImages)) {
+      const tabId = Number(tabIdStr);
+      for (const img of images) {
+        if (img.file && img.file.type.startsWith('video/')) {
+          generateVideoThumbnail(img.file).then((thumb) => {
+            if (thumb) {
+              set((state) => {
+                const prev = state.tabData[tabId];
+                if (!prev) return state;
+                return {
+                  tabData: {
+                    ...state.tabData,
+                    [tabId]: {
+                      ...prev,
+                      images: prev.images.map((i) =>
+                        i.id === img.id ? { ...i, thumbnailUrl: thumb } : i
+                      ),
+                    },
+                  },
+                };
+              });
+            }
+          });
+        }
+      }
+    }
   },
 
   pendingApplyConfig: null,
