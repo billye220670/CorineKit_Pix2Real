@@ -173,9 +173,13 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
   const currentLabel = image.label || image.originalName.replace(/\.[^.]+$/, '');
 
   const startEditName = useCallback(() => {
+    if (isProcessing) {
+      showToast('任务正在执行中，完成后再重命名');
+      return;
+    }
     setEditingNameValue(currentLabel);
     setIsEditingName(true);
-  }, [currentLabel]);
+  }, [currentLabel, isProcessing]);
 
   const handleRename = useCallback(async (newLabel: string): Promise<boolean> => {
     if (!sessionId) {

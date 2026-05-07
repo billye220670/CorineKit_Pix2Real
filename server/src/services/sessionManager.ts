@@ -262,6 +262,13 @@ export function renameCardAssets(
   const imgIdx = td.images.findIndex((i) => i.id === imageId);
   const img = imgIdx >= 0 ? td.images[imgIdx] : undefined;
 
+  // Refuse renaming while a task is in-flight: rename vs. WebSocket 'complete' writes
+  // would race on the output/ folder and leave task.outputs with mixed naming schemes.
+  const taskCheck = td.tasks[imageId];
+  if (taskCheck && !['idle', 'done', 'error'].includes(String(taskCheck.status))) {
+    throw new Error('任务正在执行中，请等待完成后再重命名');
+  }
+
   const inputDir = path.join(sessionsBase, sessionId, `tab-${tabId}`, 'input');
   const outputDir = path.join(sessionsBase, sessionId, `tab-${tabId}`, 'output');
 
@@ -339,4 +346,181 @@ export function renameCardAssets(
     inputUrl: newInputUrl,
     outputs: newOutputs,
   };
+}
+
+// ── Batch card asset rename (transactional) ───────────────────────────────
+
+export interface BatchRenameItem {
+  imageId: string;
+  label: string;
+}
+
+export interface BatchRenamedCardResult {
+  imageId: string;
+  result: RenamedCardResult;
+}
+
+/**
+ * Batch version of renameCardAssets with all-or-nothing semantics.
+ * - Pre-validates all items (label sanity, task status, filename collisions — both
+ *   against existing files and within the batch itself)
+ * - Only after all pre-checks pass does it perform fs.renameSync and persist session.json
+ * - Throws on any issue, leaving the filesystem untouched
+ */
+export function renameCardAssetsBatch(
+  sessionId: string,
+  tabId: number,
+  items: BatchRenameItem[],
+): BatchRenamedCardResult[] {
+  if (!Array.isArray(items) || items.length === 0) return [];
+
+  const stateFile = path.join(sessionsBase, sessionId, 'session.json');
+  if (!fs.existsSync(stateFile)) throw new Error('Session not found');
+
+  const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8')) as SessionState;
+  const td = state.tabData[tabId];
+  if (!td) throw new Error(`Tab ${tabId} not found in session`);
+
+  const inputDir = path.join(sessionsBase, sessionId, `tab-${tabId}`, 'input');
+  const outputDir = path.join(sessionsBase, sessionId, `tab-${tabId}`, 'output');
+
+  // ── Phase 1: Plan all renames, detecting every possible conflict ───────
+  interface Plan {
+    imageId: string;
+    safeLabel: string;
+    imgIdx: number;
+    // input rename (may be undefined if image not found, though we require it)
+    inputOld?: string;
+    inputNew?: string;
+    inputOldPath?: string;
+    inputNewPath?: string;
+    // output renames
+    outputPlans: Array<{ oldPath: string; newPath: string; newName: string }>;
+  }
+
+  const plans: Plan[] = [];
+  // Track in-batch target paths to detect collisions between items (e.g. two
+  // cards both targeting "same_raw.png") — would otherwise overwrite each other.
+  const batchTargetPaths = new Set<string>();
+  const batchSourcePaths = new Set<string>(); // paths that will be renamed away
+
+  for (const item of items) {
+    const safeLabel = sanitizeLabel(item.label);
+    if (!safeLabel) throw new Error(`Invalid label for image ${item.imageId}`);
+
+    const imgIdx = td.images.findIndex((i) => i.id === item.imageId);
+    if (imgIdx < 0) throw new Error(`Image ${item.imageId} not found in tab ${tabId}`);
+    const img = td.images[imgIdx];
+
+    const task = td.tasks[item.imageId];
+    if (task && !['idle', 'done', 'error'].includes(String(task.status))) {
+      throw new Error(`任务正在执行中，无法重命名（imageId=${item.imageId}）`);
+    }
+
+    const plan: Plan = { imageId: item.imageId, safeLabel, imgIdx, outputPlans: [] };
+
+    // Plan input rename
+    const oldInputName = img.inputFilename ?? `${img.id}${img.ext}`;
+    const targetInputName = `${safeLabel}_raw${img.ext}`;
+    plan.inputOld = oldInputName;
+    plan.inputNew = targetInputName;
+    plan.inputOldPath = path.join(inputDir, oldInputName);
+    plan.inputNewPath = path.join(inputDir, targetInputName);
+    batchSourcePaths.add(plan.inputOldPath);
+
+    // Plan output renames
+    if (task?.outputs?.length) {
+      for (let i = 0; i < task.outputs.length; i++) {
+        const out = task.outputs[i];
+        const outExt = path.extname(out.filename) || '.png';
+        const newName = `${safeLabel}_${i + 1}${outExt}`;
+        const oldPath = path.join(outputDir, out.filename);
+        const newPath = path.join(outputDir, newName);
+        plan.outputPlans.push({ oldPath, newPath, newName });
+        batchSourcePaths.add(oldPath);
+      }
+    }
+
+    plans.push(plan);
+  }
+
+  // Collision checks: (a) within batch, (b) against existing unrelated files
+  const checkCollision = (newPath: string, label: string) => {
+    if (batchTargetPaths.has(newPath)) {
+      throw new Error(`批内文件名冲突：${path.basename(newPath)}（${label}）`);
+    }
+    batchTargetPaths.add(newPath);
+    // Against existing files: only a problem if the file exists AND is not one of the
+    // sources being renamed away in this same batch (swaps are allowed in principle,
+    // though a two-step rename would be required — currently we just reject).
+    if (fs.existsSync(newPath) && !batchSourcePaths.has(newPath)) {
+      throw new Error(`文件名冲突：${path.basename(newPath)} 已存在`);
+    }
+  };
+
+  for (const plan of plans) {
+    if (plan.inputOldPath && plan.inputNewPath && plan.inputOldPath !== plan.inputNewPath) {
+      checkCollision(plan.inputNewPath, plan.safeLabel);
+    }
+    for (const op of plan.outputPlans) {
+      if (op.oldPath !== op.newPath) {
+        checkCollision(op.newPath, plan.safeLabel);
+      }
+    }
+  }
+
+  // ── Phase 2: Execute all renames (still throw on unexpected fs errors) ──
+  // Because we validated collisions up-front, fs.renameSync failures here
+  // would be truly exceptional (e.g. EPERM/EBUSY) and are surfaced as-is.
+  const results: BatchRenamedCardResult[] = [];
+
+  for (const plan of plans) {
+    const img = td.images[plan.imgIdx];
+    let newInputFilename: string | undefined;
+    let newInputUrl: string | undefined;
+
+    if (plan.inputOldPath && plan.inputNewPath && plan.inputOldPath !== plan.inputNewPath) {
+      if (fs.existsSync(plan.inputOldPath)) {
+        fs.renameSync(plan.inputOldPath, plan.inputNewPath);
+      }
+    }
+    newInputFilename = plan.inputNew;
+    newInputUrl = `/api/session-files/${sessionId}/tab-${tabId}/input/${plan.inputNew}`;
+
+    const newOutputs: Array<{ filename: string; url: string }> = [];
+    for (const op of plan.outputPlans) {
+      if (op.oldPath !== op.newPath && fs.existsSync(op.oldPath)) {
+        fs.renameSync(op.oldPath, op.newPath);
+      }
+      newOutputs.push({
+        filename: op.newName,
+        url: `/api/session-files/${sessionId}/tab-${tabId}/output/${encodeURIComponent(op.newName)}`,
+      });
+    }
+
+    // Mutate session state in-place (persist once after the loop)
+    img.label = plan.safeLabel;
+    if (newInputFilename) img.inputFilename = newInputFilename;
+    td.images[plan.imgIdx] = img;
+    const task = td.tasks[plan.imageId];
+    if (task && newOutputs.length) {
+      task.outputs = newOutputs;
+      td.tasks[plan.imageId] = task;
+    }
+
+    results.push({
+      imageId: plan.imageId,
+      result: {
+        label: plan.safeLabel,
+        inputFilename: newInputFilename,
+        inputUrl: newInputUrl,
+        outputs: newOutputs,
+      },
+    });
+  }
+
+  state.updatedAt = new Date().toISOString();
+  fs.writeFileSync(stateFile, JSON.stringify(state, null, 2), 'utf-8');
+
+  return results;
 }

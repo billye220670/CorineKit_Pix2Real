@@ -510,8 +510,23 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       const prev = state.tabData[tabId] || emptyTabData();
       const newImages = prev.images.map((img) => {
         if (img.id !== imageId) return img;
+        // Rebuild File object so that external drag-to-desktop uses the new
+        // filename as the default download name (browsers read File.name).
+        let newFile = img.file;
+        if (payload.inputFilename && img.file) {
+          try {
+            newFile = new File([img.file], payload.inputFilename, {
+              type: img.file.type,
+              lastModified: img.file.lastModified,
+            });
+          } catch {
+            /* Fall back to original File if rebuilding fails (very old browsers). */
+            newFile = img.file;
+          }
+        }
         return {
           ...img,
+          file: newFile,
           label: payload.label,
           inputFilename: payload.inputFilename ?? img.inputFilename,
           sessionUrl: payload.inputUrl ?? img.sessionUrl,

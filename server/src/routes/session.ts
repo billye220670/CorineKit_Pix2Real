@@ -12,6 +12,7 @@ import {
   pruneOldSessions,
   saveCover,
   renameCardAssets,
+  renameCardAssetsBatch,
 } from '../services/sessionManager.js';
 
 const router = Router();
@@ -124,6 +125,34 @@ router.post('/:sessionId/rename-card', (req, res) => {
   try {
     const result = renameCardAssets(sessionId, tabId, imageId, label);
     res.json(result);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    res.status(400).json({ error: msg });
+  }
+});
+
+// POST /api/session/:sessionId/rename-cards-batch
+// Body: JSON { tabId: number, items: Array<{ imageId: string; label: string }> }
+// Atomic/transactional batch rename: pre-validates every item for collisions and
+// in-flight task status, then performs all fs renames in one go. Throws on any issue,
+// leaving the filesystem untouched so the caller gets either full success or no change.
+router.post('/:sessionId/rename-cards-batch', (req, res) => {
+  const sessionId = String(req.params.sessionId);
+  const { tabId, items } = req.body as { tabId: number; items: Array<{ imageId: string; label: string }> };
+  if (typeof tabId !== 'number' || !Array.isArray(items)) {
+    res.status(400).json({ error: 'Missing or invalid fields: tabId, items' });
+    return;
+  }
+  // Validate every item shape
+  for (const it of items) {
+    if (!it || typeof it.imageId !== 'string' || typeof it.label !== 'string') {
+      res.status(400).json({ error: 'Every item must have imageId (string) and label (string)' });
+      return;
+    }
+  }
+  try {
+    const results = renameCardAssetsBatch(sessionId, tabId, items);
+    res.json({ results });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
     res.status(400).json({ error: msg });

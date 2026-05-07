@@ -194,3 +194,37 @@ export async function renameCard(
   }
   return res.json() as Promise<RenameCardResult>;
 }
+
+export interface BatchRenameItemPayload {
+  imageId: string;
+  label: string;
+}
+
+export interface BatchRenameItemResult {
+  imageId: string;
+  result: RenameCardResult;
+}
+
+// Transactional batch rename: all items validated & applied together, or nothing.
+// Backend throws (HTTP 400) on any collision / in-flight task — filesystem stays unchanged.
+export async function renameCardsBatch(
+  sessionId: string,
+  tabId: number,
+  items: BatchRenameItemPayload[],
+): Promise<BatchRenameItemResult[]> {
+  const res = await fetch(`/api/session/${sessionId}/rename-cards-batch`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tabId, items }),
+  });
+  if (!res.ok) {
+    let msg = `Failed to batch rename cards: ${res.status}`;
+    try {
+      const body = await res.json() as { error?: string };
+      if (body.error) msg = body.error;
+    } catch { /* ignore */ }
+    throw new Error(msg);
+  }
+  const body = await res.json() as { results: BatchRenameItemResult[] };
+  return body.results;
+}

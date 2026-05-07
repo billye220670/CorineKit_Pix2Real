@@ -4,8 +4,10 @@ import { useMaskStore } from '../hooks/useMaskStore.js';
 import { useDragStore } from '../hooks/useDragStore.js';
 import { maskKey } from '../config/maskConfig.js';
 import { ImageCard } from './ImageCard.js';
-import { Play, Trash2, Type, Check, Minus, Eraser } from 'lucide-react';
+import { Play, Trash2, Type, Check, Minus, Eraser, Pencil } from 'lucide-react';
 import { useWebSocket } from '../hooks/useWebSocket.js';
+import { showToast } from '../hooks/useToast.js';
+import { renameCardsBatch } from '../services/sessionService.js';
 
 export type ViewSize = 'small' | 'medium' | 'large';
 
@@ -114,6 +116,7 @@ export function PhotoWall({ viewSize }: PhotoWallProps) {
   const toggleImageSelection = useWorkflowStore((s) => s.toggleImageSelection);
   const clearSelection = useWorkflowStore((s) => s.clearSelection);
   const flashingImageId = useWorkflowStore((s) => s.flashingImageId);
+  const applyCardRename = useWorkflowStore((s) => s.applyCardRename);
   const deleteMask = useMaskStore((s) => s.deleteMask);
   const masks = useMaskStore((s) => s.masks);
   const backPoseToggles = useWorkflowStore((s) => s.tabData[s.activeTab]?.backPoseToggles ?? {});
@@ -122,6 +125,8 @@ export function PhotoWall({ viewSize }: PhotoWallProps) {
   const { sendMessage } = useWebSocket();
 
   const [bulkPrompt, setBulkPrompt] = useState('');
+  const [bulkRenameBase, setBulkRenameBase] = useState('');
+  const [isBulkRenaming, setIsBulkRenaming] = useState(false);
   const [isOverDeleteZone, setIsOverDeleteZone] = useState(false);
   const deleteZoneDragCount = useRef(0);
 
@@ -294,6 +299,60 @@ export function PhotoWall({ viewSize }: PhotoWallProps) {
     setPrompts(updates);
   }, [bulkPrompt, selectedImageIds, setPrompts]);
 
+  const handleBulkRename = useCallback(async () => {
+    const base = bulkRenameBase.trim();
+    if (!base) {
+      showToast('请先输入基础名称');
+      return;
+    }
+    if (!sessionId) {
+      showToast('会话尚未就绪');
+      return;
+    }
+    if (selectedImageIds.length === 0) return;
+
+    const selectedSet = new Set(selectedImageIds);
+    const ordered = images.filter((img) => selectedSet.has(img.id));
+
+    // Pre-flight: warn if any selected card has an in-flight task — backend
+    // will reject the whole batch, so surface this before the confirm dialog.
+    const busy = ordered.filter((img) => {
+      const st = tasks[img.id]?.status;
+      return st && st !== 'idle' && st !== 'done' && st !== 'error';
+    });
+    if (busy.length > 0) {
+      showToast(`${busy.length} 张所选卡片任务进行中，请等待完成后再重命名`);
+      return;
+    }
+
+    if (!window.confirm(
+      `确认将所选 ${ordered.length} 张卡片重命名为 ${base}_1_*、${base}_2_* …？\n（事务化：任一失败将全部回滚，不会出现半状态）`,
+    )) return;
+
+    const payload = ordered.map((img, i) => ({ imageId: img.id, label: `${base}_${i + 1}` }));
+
+    setIsBulkRenaming(true);
+    try {
+      const results = await renameCardsBatch(sessionId, activeTab, payload);
+      for (const entry of results) {
+        applyCardRename(activeTab, entry.imageId, {
+          label: entry.result.label,
+          inputFilename: entry.result.inputFilename,
+          inputUrl: entry.result.inputUrl,
+          outputs: entry.result.outputs,
+        });
+      }
+      showToast(`批量重命名完成：${results.length} 张`);
+      setBulkRenameBase('');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '批量重命名失败';
+      showToast(`批量重命名失败：${msg}`);
+      console.error('Bulk rename failed:', err);
+    } finally {
+      setIsBulkRenaming(false);
+    }
+  }, [bulkRenameBase, sessionId, selectedImageIds, images, tasks, activeTab, applyCardRename]);
+
   const handleBatchDeleteMasks = useCallback(() => {
     const keysToDelete = Object.keys(masks).filter((k) =>
       selectedImageIds.some((id) => k === maskKey(id, -1) || k.startsWith(id + ':'))
@@ -431,6 +490,65 @@ export function PhotoWall({ viewSize }: PhotoWallProps) {
               >
                 <Type size={12} />
                 批量替换
+              </button>
+            </>
+          )}
+
+          {/* 分割线（批量替换 与 批量重命名 之间，仅非 tab7 时才有替换 UI） */}
+          {isMultiSelectMode && activeTab !== 7 && (
+            <div style={{ width: 1, height: 20, backgroundColor: 'var(--color-border)', marginLeft: 4, marginRight: 4 }} />
+          )}
+
+          {/* 批量重命名（所有 tab 均可用） */}
+          {isMultiSelectMode && (
+            <>
+              <input
+                type="text"
+                placeholder="批量重命名为..."
+                value={bulkRenameBase}
+                onChange={(e) => setBulkRenameBase(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !isBulkRenaming) {
+                    e.preventDefault();
+                    void handleBulkRename();
+                  }
+                }}
+                disabled={isBulkRenaming}
+                style={{
+                  height: 26,
+                  padding: 'var(--spacing-xs) var(--spacing-sm)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 6,
+                  backgroundColor: 'var(--color-bg)',
+                  color: 'var(--color-text)',
+                  fontSize: '12px',
+                  outline: 'none',
+                  fontFamily: 'inherit',
+                  width: '160px',
+                  opacity: isBulkRenaming ? 0.6 : 1,
+                }}
+              />
+              <button
+                onClick={() => { void handleBulkRename(); }}
+                disabled={isBulkRenaming || !sessionId}
+                title={`按 基础名_批量序号_项目序号 批量重命名所选卡片及其资产\n例如：输入 cat → cat_1_raw / cat_1_1 / cat_2_raw / cat_2_1 …`}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 'var(--spacing-xs)',
+                  padding: 'var(--spacing-xs) var(--spacing-sm)',
+                  backgroundColor: 'transparent',
+                  color: 'var(--color-text-secondary)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 6,
+                  fontSize: '12px',
+                  cursor: (isBulkRenaming || !sessionId) ? 'not-allowed' : 'pointer',
+                  flexShrink: 0,
+                  opacity: (isBulkRenaming || !sessionId) ? 0.5 : 1,
+                }}
+              >
+                <Pencil size={12} />
+                {isBulkRenaming ? '重命名中…' : '批量重命名'}
               </button>
             </>
           )}
