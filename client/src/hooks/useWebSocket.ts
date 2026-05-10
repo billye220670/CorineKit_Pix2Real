@@ -141,7 +141,7 @@ function getOrCreateConnection(): WebSocket {
             if (useSettingsStore.getState().desktopNotifyOnComplete) {
               const { workflowName } = resolveWorkflowLabel(msg.promptId);
               const count = Array.isArray(msg.outputs) ? msg.outputs.length : 0;
-              notifyTaskComplete(workflowName, count, `workflow-${msg.promptId}`);
+              notifyTaskComplete(workflowName, count, `workflow-${msg.promptId}-${Date.now()}`);
             }
           } catch { /* noop */ }
           break;
@@ -150,7 +150,7 @@ function getOrCreateConnection(): WebSocket {
           try {
             if (useSettingsStore.getState().desktopNotifyOnComplete) {
               const { workflowName } = resolveWorkflowLabel(msg.promptId);
-              notifyTaskError(workflowName, msg.message, `workflow-${msg.promptId}`);
+              notifyTaskError(workflowName, msg.message, `workflow-${msg.promptId}-${Date.now()}`);
             }
           } catch { /* noop */ }
           break;
@@ -193,7 +193,7 @@ function getOrCreateConnection(): WebSocket {
                   try {
                     if (useSettingsStore.getState().desktopNotifyOnComplete) {
                       const name = currentExec.generationContext?.workflowName ?? '智能生成';
-                      notifyTaskComplete(name, allOutputs.length, `agent-${currentExec.promptId}`);
+                      notifyTaskComplete(name, allOutputs.length, `agent-${currentExec.promptId}-${Date.now()}`);
                     }
                   } catch { /* noop */ }
                 }
@@ -204,7 +204,7 @@ function getOrCreateConnection(): WebSocket {
                   if (useSettingsStore.getState().desktopNotifyOnComplete) {
                     const name = agentExec.generationContext?.workflowName ?? '智能生成';
                     const count = Array.isArray(msg.outputs) ? msg.outputs.length : 0;
-                    notifyTaskComplete(name, count, `agent-${agentExec.promptId}`);
+                    notifyTaskComplete(name, count, `agent-${agentExec.promptId}-${Date.now()}`);
                   }
                 } catch { /* noop */ }
               }
@@ -215,7 +215,7 @@ function getOrCreateConnection(): WebSocket {
               try {
                 if (useSettingsStore.getState().desktopNotifyOnComplete) {
                   const name = agentExec.generationContext?.workflowName ?? '智能生成';
-                  notifyTaskError(name, msg.message, `agent-${agentExec.promptId}`);
+                  notifyTaskError(name, msg.message, `agent-${agentExec.promptId}-${Date.now()}`);
                 }
               } catch { /* noop */ }
               break;

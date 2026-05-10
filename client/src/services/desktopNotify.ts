@@ -7,6 +7,12 @@ function supported(): boolean {
   return typeof window !== 'undefined' && 'Notification' in window;
 }
 
+/** 判断窗口是否"不在前台"：标签隐藏、最小化、或焦点在其他应用。 */
+function isBackground(): boolean {
+  if (typeof document === 'undefined') return true;
+  return document.visibilityState === 'hidden' || !document.hasFocus();
+}
+
 /** 确保已获得通知权限；仅在 default 时发起请求，其余直接返回当前状态。 */
 export async function ensureNotificationPermission(): Promise<NotificationPermission> {
   if (!supported()) return 'denied';
@@ -25,7 +31,7 @@ export interface NotifyOptions {
   tag?: string;       // 用于同类通知合并（同 tag 会覆盖而非堆叠）
   icon?: string;
   silent?: boolean;
-  /** 仅在页面不可见时才弹出（前台时不打扰）。默认 true。 */
+  /** 仅在页面不在前台时才弹出（前台时不打扰）。默认 true。 */
   onlyWhenHidden?: boolean;
 }
 
@@ -33,7 +39,7 @@ export interface NotifyOptions {
 export async function notify(opts: NotifyOptions): Promise<void> {
   if (!supported()) return;
   const onlyWhenHidden = opts.onlyWhenHidden !== false;
-  if (onlyWhenHidden && typeof document !== 'undefined' && !document.hidden) return;
+  if (onlyWhenHidden && !isBackground()) return;
 
   const perm = await ensureNotificationPermission();
   if (perm !== 'granted') return;
@@ -49,9 +55,7 @@ export async function notify(opts: NotifyOptions): Promise<void> {
       try { window.focus(); } catch { /* noop */ }
       n.close();
     };
-  } catch {
-    // 某些环境构造 Notification 可能失败，忽略
-  }
+  } catch { /* noop */ }
 }
 
 /** 任务完成通知（便捷封装） */
