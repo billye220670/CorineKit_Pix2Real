@@ -21,11 +21,11 @@
 
 ## 更新摘要
 **所做更改**
-- 新增平铺采样器集成章节，详细介绍 TILED_SAMPLER_NODE_TYPES 集合和 isTiledSampler 标志支持
-- 更新节点权重分析与阶段映射功能说明，包含 Tiled 采样器的特殊处理机制
-- 增强 WebSocket 进度事件处理与前端展示优化，支持多轮节点和 Tiled 采样器进度计算
-- 补充采样器权重计算与动态权重调整机制，包括 Tiled 采样器的估算算法
-- 更新进度条计算公式与阶段名称映射表，涵盖 SD 放大采样阶段
+- 新增WebSocket竞态条件修复章节，详细说明500ms宽限期机制和execution_success信号优先级处理
+- 更新事件缓冲与重放机制，包括执行开始/进度事件的缓冲策略
+- 增强完成事件处理的可靠性，包括历史提交检测和输出下载的防御性重试
+- 补充promptWorkflowMap注册的竞态条件修复，包括2秒延迟等待机制
+- 更新WebSocket连接管理，包括错误优先级处理和双触发防护
 
 ## 目录
 1. [简介](#简介)
@@ -33,13 +33,14 @@
 3. [核心组件](#核心组件)
 4. [架构总览](#架构总览)
 5. [详细组件分析](#详细组件分析)
-6. [加权进度计算系统](#加权进度计算系统)
-7. [平铺采样器集成](#平铺采样器集成)
-8. [依赖关系分析](#依赖关系分析)
-9. [性能考虑](#性能考虑)
-10. [故障排查指南](#故障排查指南)
-11. [结论](#结论)
-12. [附录](#附录)
+6. [WebSocket竞态条件修复](#websocket竞态条件修复)
+7. [加权进度计算系统](#加权进度计算系统)
+8. [平铺采样器集成](#平铺采样器集成)
+9. [依赖关系分析](#依赖关系分析)
+10. [性能考虑](#性能考虑)
+11. [故障排查指南](#故障排查指南)
+12. [结论](#结论)
+13. [附录](#附录)
 
 ## 简介
 本技术文档面向 CorineKit Pix2Real 的 ComfyUI 集成服务，聚焦于以下方面：
@@ -47,10 +48,14 @@
 - WebSocket 连接管理：连接建立、消息路由、事件监听、断线重连策略
 - 文件上传下载处理：二进制数据传输、进度监控、内存管理
 - ComfyUI 服务集成流程：认证机制（clientId）、超时处理、性能优化建议
+- **新增** WebSocket竞态条件修复：500ms宽限期机制和execution_success信号优先级处理
+- **新增** 事件缓冲与重放：执行开始/进度事件的缓冲策略，确保客户端注册时机无关性
+- **新增** 完成事件可靠性：历史提交检测和输出下载的防御性重试机制
+- **新增** promptWorkflowMap注册竞态条件修复：2秒延迟等待机制
 - **新增** 加权进度计算系统：基于节点权重分析的精确进度估算
 - **新增** 平铺采样器集成：支持 UltimateSDUpscale 等 Tiled 采样器的特殊进度计算
 
-该系统通过适配器模式加载 ComfyUI 工作流模板，统一构建 prompt JSON 并提交队列；后端以单例 WebSocket 代理与 ComfyUI 实时通信，同时在任务完成后将输出文件下载到本地会话目录，供前端按需访问。**最新更新**引入了基于节点权重分析的加权进度计算系统，提供更准确的任务进度估算，并集成了平铺采样器支持，能够处理分块重复采样的复杂进度计算。
+该系统通过适配器模式加载 ComfyUI 工作流模板，统一构建 prompt JSON 并提交队列；后端以单例 WebSocket 代理与 ComfyUI 实时通信，同时在任务完成后将输出文件下载到本地会话目录，供前端按需访问。**最新更新**引入了全面的WebSocket竞态条件修复机制，确保在各种网络和时间条件下都能稳定可靠地处理任务完成事件，显著提升了系统的鲁棒性和用户体验。
 
 ## 项目结构
 整体采用前后端分离架构：
@@ -73,6 +78,7 @@ BE_Services["ComfyUI 服务层<br/>HTTP/WS 封装"]
 BE_Session["会话管理<br/>sessionsBase"]
 BE_Progress["加权进度计算<br/>PromptProgressState"]
 BE_Tiled["平铺采样器支持<br/>TILED_SAMPLER_NODE_TYPES"]
+BE_Race["竞态条件修复<br/>500ms宽限期机制"]
 end
 subgraph "外部服务"
 COMFY["ComfyUI 服务<br/>HTTP/WS"]
@@ -88,6 +94,7 @@ BE_Routes --> BE_Session
 BE_Services --> BE_Session
 BE_WS --> BE_Progress
 BE_Progress --> BE_Tiled
+BE_WS --> BE_Race
 ```
 
 **图表来源**
@@ -120,6 +127,19 @@ BE_Progress --> BE_Tiled
 - 前端 WebSocket 与状态
   - 单例 WebSocket 连接、断线重连、事件分发至状态库
   - 状态库维护任务生命周期、进度、输出文件映射
+- **新增** WebSocket竞态条件修复
+  - 500ms宽限期机制：在executing:null事件后等待execution_success信号
+  - execution_success信号优先级：优先处理新的完成信号而非旧的executing:null
+  - 双触发防护：防止onComplete被重复触发
+- **新增** 事件缓冲与重放机制
+  - bufferAndSend函数：缓冲最近的execution_start/progress事件
+  - 客户端注册时机无关性：即使客户端在ComfyUI开始处理后才注册也能重放事件
+- **新增** 完成事件可靠性增强
+  - 历史提交检测：防御性重试getHistory直到ComfyUI提交历史
+  - 输出下载重试：确保输出文件完整下载后再通知前端
+- **新增** promptWorkflowMap注册竞态条件修复
+  - 2秒延迟等待：在完成事件处理前等待客户端注册消息
+  - 最大重试次数：20次，每次100ms间隔
 - **新增** 加权进度计算系统
   - PromptProgressState 管理：跟踪任务总节点数、总权重、已完成权重等状态
   - 节点权重分析：基于时间开销的静态权重表和动态采样权重计算
@@ -141,33 +161,28 @@ BE_Progress --> BE_Tiled
 - [client/src/hooks/useWorkflowStore.ts:1-645](file://client/src/hooks/useWorkflowStore.ts#L1-L645)
 
 ## 架构总览
-后端启动时创建 Express 与 WebSocketServer，分别监听 HTTP 与 WS 请求。每个浏览器客户端连接后，后端分配唯一 clientId 并与 ComfyUI 建立 WebSocket 连接，将 ComfyUI 的进度/完成/错误事件转换为统一格式回传给前端。**新增的加权进度计算系统**在事件处理过程中实时计算精确的进度百分比，包括阶段名称、步骤索引和总步骤数。**新增的平铺采样器支持**能够处理分块重复采样的复杂进度计算，使用 tick 计数和预期 tick 数来估算进度。完成事件中包含输出文件信息，后端从 ComfyUI 下载对应二进制并保存到会话目录，随后通知前端。
+后端启动时创建 Express 与 WebSocketServer，分别监听 HTTP 与 WS 请求。每个浏览器客户端连接后，后端分配唯一 clientId 并与 ComfyUI 建立 WebSocket 连接，将 ComfyUI 的进度/完成/错误事件转换为统一格式回传给前端。**最新的竞态条件修复机制**在WebSocket事件处理中引入了500ms宽限期，确保execution_success信号优先处理，避免"卡片完成但为空"的问题。**增强的完成事件处理**包含历史提交检测和输出下载重试，确保输出文件的完整性。**新增的事件缓冲机制**能够在客户端注册时机无关的情况下重放执行开始和进度事件。
 
 ```mermaid
 sequenceDiagram
 participant Browser as "浏览器"
 participant WS_Server as "后端 WebSocket 服务器"
 participant WS_Comfy as "ComfyUI WebSocket"
-participant Progress as "加权进度计算"
-participant Tiled as "平铺采样器支持"
-participant HTTP as "后端 HTTP 服务"
-participant FS as "会话文件系统"
+participant RaceFix as "竞态条件修复"
+participant HistoryCheck as "历史提交检测"
+participant EventBuffer as "事件缓冲"
 Browser->>WS_Server : 建立 /ws 连接
 WS_Server->>Browser : 发送 {type : "connected", clientId}
 WS_Server->>WS_Comfy : connectWebSocket(clientId,...)
 WS_Comfy-->>WS_Server : progress/executing/...
-WS_Server->>Progress : 计算加权进度
-WS_Server->>Tiled : 检测 Tiled 采样器节点
-Tiled-->>WS_Server : 返回 isTiledSampler 标志
-Progress-->>WS_Server : {percentage, stage, stepIndex, stepTotal}
+WS_Server->>RaceFix : 500ms宽限期处理
+RaceFix-->>WS_Server : execution_success优先级
+WS_Server->>EventBuffer : 缓冲execution_start/progress
 WS_Server-->>Browser : 转发进度/开始/完成/错误
-WS_Server->>HTTP : getHistory(promptId)
-HTTP-->>WS_Server : 历史输出列表
-loop 遍历输出
-WS_Server->>HTTP : getImageBuffer(filename, subfolder, type)
-HTTP-->>WS_Server : Buffer
-WS_Server->>FS : 保存到会话 output 目录
-end
+Browser->>WS_Server : 注册 promptId 映射
+WS_Server->>EventBuffer : 重放缓冲事件
+WS_Server->>HistoryCheck : 防御性重试getHistory
+HistoryCheck-->>WS_Server : 历史提交完成
 WS_Server-->>Browser : 完成事件 + 输出文件 URL
 ```
 
@@ -231,40 +246,39 @@ Save --> Done
 - 事件路由
   - progress：计算百分比并转发
   - executing：首次节点非空触发 execution_start，节点为空触发 complete
-  - execution_success：显式完成信号
+  - execution_success：显式完成信号（优先级最高）
   - execution_error：错误事件
 - 断线重连
   - 前端 useWebSocket 使用模块级全局连接与计数，断开后延迟重连
   - 后端在客户端断开时关闭对应的 ComfyUI 连接
-- 事件缓冲与重放
-  - 对每个 promptId 维护事件缓冲，若客户端注册较晚可重放已发生的 execution_start/progress
-- **新增** 加权进度计算
-  - onExecutionStart：初始化 PromptProgressState
-  - onExecutionCached：处理缓存命中节点，直接计入已完成权重
-  - onExecutingNode：节点切换时更新阶段名称和权重
-  - onProgress：实时计算加权进度百分比
-- **新增** 平铺采样器支持
-  - 检测 isTiledSampler 标志，启用特殊进度计算逻辑
-  - 多轮节点处理：使用 nodeTickCount 和预期 tick 数计算进度
+- **新增** 竞态条件修复机制
+  - 500ms宽限期：在executing:null事件后等待execution_success信号
+  - execution_success优先级：优先处理新的完成信号而非旧的executing:null
+  - 双触发防护：防止onComplete被重复触发
+- **新增** 事件缓冲与重放
+  - bufferAndSend函数：缓冲最近的execution_start/progress事件
+  - 客户端注册时机无关性：即使客户端在ComfyUI开始处理后才注册也能重放事件
+- **新增** 错误优先级处理
+  - execution_error事件会清除任何待处理的完成定时器
+  - 确保错误事件优先于完成事件处理
 
 ```mermaid
 sequenceDiagram
 participant FE as "前端"
 participant WS as "后端 WS 服务器"
 participant CW as "ComfyUI WS"
-participant PS as "进度状态管理"
-participant TS as "Tiled采样器检测"
+participant RF as "竞态条件修复"
+participant EB as "事件缓冲"
 FE->>WS : 建立 /ws 连接
 WS-->>FE : {type : "connected", clientId}
 WS->>CW : connectWebSocket(clientId,...)
 CW-->>WS : progress/executing/...
-WS->>PS : 初始化/更新进度状态
-WS->>TS : 检测 isTiledSampler 标志
-TS-->>WS : 返回 Tiled 采样器信息
-PS-->>WS : 计算加权进度
+WS->>RF : 500ms宽限期处理
+RF-->>WS : execution_success优先级
+WS->>EB : 缓冲execution_start/progress
 WS-->>FE : 转发进度/开始/完成/错误
 FE->>WS : 注册 promptId 映射
-WS-->>FE : 重放缓冲事件
+WS->>EB : 重放缓冲事件
 FE-->>WS : 关闭连接
 WS->>CW : 关闭连接
 ```
@@ -347,6 +361,78 @@ Workflow0Adapter ..|> WorkflowAdapter
 - [server/src/services/sessionManager.ts:1-164](file://server/src/services/sessionManager.ts#L1-L164)
 - [server/src/routes/output.ts:1-134](file://server/src/routes/output.ts#L1-L134)
 - [server/src/routes/session.ts:1-95](file://server/src/routes/session.ts#L1-L95)
+
+## WebSocket竞态条件修复
+
+### 500ms宽限期机制
+**新增** 系统引入了500ms宽限期机制来解决WebSocket通信中的竞态条件：
+
+- **执行完成信号竞争**：在较新的ComfyUI版本中，execution_success信号会在历史完全提交到磁盘后触发，而executing:null可能在历史提交完成前就到达
+- **宽限期设置**：EXECUTION_SUCCESS_GRACE_MS = 500ms，在此期间等待execution_success信号
+- **双重触发防护**：使用completedPrompts集合防止onComplete被重复触发
+- **定时器管理**：pendingCompleteTimers映射管理每个promptId的待处理完成定时器
+
+```mermaid
+stateDiagram-v2
+[*] --> WaitingForExecutionSuccess : executing : null触发
+WaitingForExecutionSuccess --> Complete : execution_success到达
+WaitingForExecutionSuccess --> Timeout : 500ms宽限期结束
+Timeout --> Complete : 触发完成定时器
+Complete --> [*]
+```
+
+**图表来源**
+- [server/src/services/comfyui.ts:280-302](file://server/src/services/comfyui.ts#L280-L302)
+- [server/src/services/comfyui.ts:340-347](file://server/src/services/comfyui.ts#L340-L347)
+
+**章节来源**
+- [server/src/services/comfyui.ts:280-302](file://server/src/services/comfyui.ts#L280-L302)
+- [server/src/services/comfyui.ts:340-347](file://server/src/services/comfyui.ts#L340-L347)
+
+### execution_success信号优先级处理
+**新增** execution_success信号具有最高优先级，确保任务完成的准确性：
+
+- **优先级规则**：execution_success信号总是优先于executing:null处理
+- **定时器清理**：当execution_success到达时，清除任何待处理的executing:null定时器
+- **错误优先级**：execution_error事件会清除任何待处理的完成定时器，确保错误处理优先
+- **双触发防护**：使用completedPrompts集合防止重复触发完成事件
+
+**章节来源**
+- [server/src/services/comfyui.ts:352-364](file://server/src/services/comfyui.ts#L352-L364)
+
+### 事件缓冲与重放机制
+**新增** 系统实现了事件缓冲机制，确保客户端注册时机无关性：
+
+- **bufferAndSend函数**：缓冲最近的execution_start和progress事件
+- **缓冲策略**：每个promptId维护事件缓冲，最多保留最近的事件
+- **重放机制**：客户端注册时重放所有缓冲事件，确保不会错过任何重要状态
+- **时机无关性**：即使客户端在ComfyUI开始处理后才注册，也能获得完整的事件序列
+
+**章节来源**
+- [server/src/index.ts:165-175](file://server/src/index.ts#L165-L175)
+- [server/src/index.ts:466-473](file://server/src/index.ts#L466-L473)
+
+### promptWorkflowMap注册竞态条件修复
+**新增** 系统引入了2秒延迟等待机制来处理promptWorkflowMap注册的竞态条件：
+
+- **注册时机问题**：客户端可能在任务完成前就注册promptId映射
+- **延迟等待**：在onComplete处理前等待客户端注册消息，最多2秒
+- **重试机制**：20次重试，每次100ms间隔，累计2秒等待时间
+- **日志记录**：记录实际等待时间和原因，便于调试和监控
+
+**章节来源**
+- [server/src/index.ts:328-337](file://server/src/index.ts#L328-L337)
+
+### 完成事件可靠性增强
+**新增** 系统实现了防御性重试机制，确保完成事件的可靠性：
+
+- **历史提交检测**：防御性重试getHistory直到ComfyUI提交历史，最多10秒
+- **重试策略**：50次重试，每次200ms间隔，累计10秒等待时间
+- **超时处理**：超过最大重试次数后发出警告但仍继续处理
+- **输出完整性保证**：确保输出文件完整下载后再通知前端
+
+**章节来源**
+- [server/src/index.ts:340-361](file://server/src/index.ts#L340-L361)
 
 ## 加权进度计算系统
 
@@ -515,6 +601,11 @@ Workflow0Adapter ..|> WorkflowAdapter
 - 前端依赖
   - useWebSocket 依赖 WebSocket 与 Zustand 状态库
   - 类型定义统一前后端事件结构
+- **新增** 竞态条件修复依赖
+  - index.ts 中的WebSocket事件处理和完成事件管理
+  - comfyui.ts 中的500ms宽限期和execution_success优先级处理
+  - **新增** 事件缓冲机制依赖
+  - **新增** promptWorkflowMap注册等待机制
 - **新增** 进度计算依赖
   - index.ts 中的 PromptProgressState 管理
   - comfyui.ts 中的节点权重计算
@@ -533,6 +624,9 @@ IDX["index.ts"] --> SVC
 IDX --> SM
 FE_WS["useWebSocket.ts"] --> FE_TYPES["types/index.ts"]
 FE_STORE["useWorkflowStore.ts"] --> FE_TYPES
+RACE["竞态条件修复"] --> IDX
+RACE --> SVC
+EVENT["事件缓冲"] --> IDX
 PROGRESS["加权进度计算"] --> IDX
 PROGRESS --> SVC
 TILED["平铺采样器支持"] --> SVC
@@ -572,6 +666,10 @@ TILED --> IDX
   - 下载完成后立即清理临时文件，避免磁盘膨胀；对大文件建议流式传输或分块下载
 - 模型与资源
   - 通过 /object_info 接口动态获取模型列表，减少硬编码；在 UI 中缓存模型列表以降低请求频率
+- **新增** 竞态条件修复性能
+  - 500ms宽限期对性能影响极小，但显著提升了系统的可靠性
+  - 事件缓冲使用Map结构，内存占用与任务数量线性相关
+  - 防御性重试机制在正常情况下几乎不触发，只有在磁盘I/O较慢时才发挥作用
 - **新增** 进度计算性能
   - 节点权重计算复杂度低，对性能影响可忽略
   - 进度状态缓存使用 Map 结构，内存占用与任务数量线性相关
@@ -594,11 +692,25 @@ TILED --> IDX
 - 无进度/无完成事件
   - 现象：WebSocket 无 progress 或 complete
   - 排查：确认客户端已注册 promptId 映射；检查后端事件缓冲与重放逻辑
-  - **新增**：检查节点权重计算是否正常，确认 STAGE_NAMES 映射是否存在
-  - **新增**：检查 Tiled 采样器节点的 isTiledSampler 标志是否正确设置
+  - **新增**：检查500ms宽限期机制是否正常工作
+  - **新增**：验证execution_success信号是否被正确优先处理
+  - **新增**：检查双触发防护机制是否生效
+  - **新增**：验证事件缓冲是否正确重放
 - 输出文件缺失
   - 现象：完成事件存在但无法下载
   - 排查：检查 /history 返回的输出列表；确认 /view 参数与文件存在；查看后端日志中的下载错误
+  - **新增**：检查防御性重试机制是否正常工作
+  - **新增**：验证历史提交检测是否成功
+- **新增** 竞态条件问题
+  - 现象：任务完成但输出为空或延迟完成
+  - 排查：检查500ms宽限期设置；确认execution_success信号优先级
+  - 排查：验证双触发防护机制；检查completedPrompts集合状态
+  - 排查：确认pendingCompleteTimers映射管理
+- **新增** 注册时机问题
+  - 现象：任务完成但前端未收到输出URL
+  - 排查：检查promptWorkflowMap注册等待机制
+  - 排查：验证2秒延迟等待是否正常工作
+  - 排查：确认客户端注册消息是否正确发送
 - **新增** 进度显示异常
   - 现象：进度百分比不准确或阶段名称显示异常
   - 排查：检查节点权重表配置；确认节点类型映射；验证采样器 steps 参数
@@ -616,7 +728,7 @@ TILED --> IDX
 - [server/src/index.ts:92-189](file://server/src/index.ts#L92-L189)
 
 ## 结论
-本系统通过适配器模式与统一的 HTTP/WS 封装，实现了对多种 ComfyUI 工作流的标准化接入。**最新更新**引入的加权进度计算系统显著提升了进度估算的准确性，通过节点权重分析和阶段映射为用户提供了更直观的任务执行状态。**新增的平铺采样器集成**进一步增强了系统的实用性，能够准确处理分块重复采样的复杂进度计算。前端以单例 WebSocket 与状态库协同，提供实时进度与输出管理；后端负责与 ComfyUI 的桥接与本地文件持久化。建议在生产环境中增强 HTTP 重试与超时、优化大文件处理与内存占用，并完善错误监控与日志追踪。
+本系统通过适配器模式与统一的 HTTP/WS 封装，实现了对多种 ComfyUI 工作流的标准化接入。**最新更新**引入的WebSocket竞态条件修复机制显著提升了系统的稳定性和可靠性，通过500ms宽限期和execution_success信号优先级处理，有效解决了任务完成事件的竞态条件问题。**增强的事件缓冲与重放机制**确保了客户端注册时机无关性，而**promptWorkflowMap注册竞态条件修复**则保证了输出文件的正确保存。**新增的完成事件可靠性增强**通过防御性重试机制确保了输出文件的完整性。**最新更新**引入的加权进度计算系统显著提升了进度估算的准确性，通过节点权重分析和阶段映射为用户提供了更直观的任务执行状态。**新增的平铺采样器集成**进一步增强了系统的实用性，能够准确处理分块重复采样的复杂进度计算。前端以单例 WebSocket 与状态库协同，提供实时进度与输出管理；后端负责与 ComfyUI 的桥接与本地文件持久化。建议在生产环境中增强 HTTP 重试与超时、优化大文件处理与内存占用，并完善错误监控与日志追踪。
 
 ## 附录
 
