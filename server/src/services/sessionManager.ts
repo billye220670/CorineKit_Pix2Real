@@ -1,13 +1,15 @@
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
+import { getSessionsBase } from '../config/paths.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-export const sessionsBase = path.resolve(__dirname, '../../../sessions');
+// 运行时动态获取 sessions 根目录。保留函数导出以便外部模块在每次调用点
+// 取最新值（用户可在运行时通过设置面板切换路径）。
+export { getSessionsBase };
 
 // ── Directory helpers ──────────────────────────────────────────────────────
 
 export function ensureSessionDirs(sessionId: string): void {
+  const sessionsBase = getSessionsBase();
   for (let tab = 0; tab <= 5; tab++) {
     fs.mkdirSync(path.join(sessionsBase, sessionId, `tab-${tab}`, 'input'), { recursive: true });
     fs.mkdirSync(path.join(sessionsBase, sessionId, `tab-${tab}`, 'masks'), { recursive: true });
@@ -24,6 +26,7 @@ export function saveInputImage(
   ext: string,
   buffer: Buffer,
 ): string {
+  const sessionsBase = getSessionsBase();
   const dir = path.join(sessionsBase, sessionId, `tab-${tabId}`, 'input');
   fs.mkdirSync(dir, { recursive: true });
   const filename = `${imageId}${ext}`;
@@ -37,6 +40,7 @@ export function saveOutputFile(
   filename: string,
   buffer: Buffer,
 ): string {
+  const sessionsBase = getSessionsBase();
   const dir = path.join(sessionsBase, sessionId, `tab-${tabId}`, 'output');
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, filename), buffer);
@@ -49,6 +53,7 @@ export function saveMask(
   maskKey: string,
   buffer: Buffer,
 ): void {
+  const sessionsBase = getSessionsBase();
   const dir = path.join(sessionsBase, sessionId, `tab-${tabId}`, 'masks');
   fs.mkdirSync(dir, { recursive: true });
   // maskKey may contain ":" which is invalid in file names on Windows — replace with "_"
@@ -96,6 +101,7 @@ export interface SerializedTask {
 
 export function saveState(sessionId: string, state: Omit<SessionState, 'sessionId' | 'createdAt' | 'updatedAt'>): void {
   ensureSessionDirs(sessionId);
+  const sessionsBase = getSessionsBase();
   const stateFile = path.join(sessionsBase, sessionId, 'session.json');
 
   let createdAt = new Date().toISOString();
@@ -116,6 +122,7 @@ export function saveState(sessionId: string, state: Omit<SessionState, 'sessionI
 }
 
 export function loadSession(sessionId: string): SessionState | null {
+  const sessionsBase = getSessionsBase();
   const stateFile = path.join(sessionsBase, sessionId, 'session.json');
   if (!fs.existsSync(stateFile)) return null;
   try {
@@ -136,6 +143,7 @@ export interface SessionMeta {
 }
 
 export function listSessions(): SessionMeta[] {
+  const sessionsBase = getSessionsBase();
   if (!fs.existsSync(sessionsBase)) return [];
   const dirs = fs.readdirSync(sessionsBase).filter((d) => {
     const p = path.join(sessionsBase, d);
@@ -156,6 +164,7 @@ export function listSessions(): SessionMeta[] {
 }
 
 export function deleteSession(sessionId: string): void {
+  const sessionsBase = getSessionsBase();
   const sessionDir = path.join(sessionsBase, sessionId);
   if (fs.existsSync(sessionDir)) {
     fs.rmSync(sessionDir, { recursive: true, force: true });
@@ -169,6 +178,7 @@ export function deleteSession(sessionId: string): void {
 export function saveCover(sessionId: string, sourceUrl: string): { coverUrl: string } {
   // sourceUrl like /api/session-files/{sessionId}/tab-0/output/xxx.png
   // or /api/session-files/{sessionId}/tab-0/input/xxx.jpg
+  const sessionsBase = getSessionsBase();
   const prefix = `/api/session-files/`;
   if (!sourceUrl.startsWith(prefix)) {
     throw new Error('Invalid source URL for cover');
@@ -252,6 +262,7 @@ export function renameCardAssets(
   const safeLabel = sanitizeLabel(newLabel);
   if (!safeLabel) throw new Error('Invalid label');
 
+  const sessionsBase = getSessionsBase();
   const stateFile = path.join(sessionsBase, sessionId, 'session.json');
   if (!fs.existsSync(stateFile)) throw new Error('Session not found');
 
@@ -374,6 +385,7 @@ export function renameCardAssetsBatch(
 ): BatchRenamedCardResult[] {
   if (!Array.isArray(items) || items.length === 0) return [];
 
+  const sessionsBase = getSessionsBase();
   const stateFile = path.join(sessionsBase, sessionId, 'session.json');
   if (!fs.existsSync(stateFile)) throw new Error('Session not found');
 

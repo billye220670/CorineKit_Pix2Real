@@ -36,3 +36,6 @@ Thumbs.db
 npm-debug.log*
 
 /sessions
+
+# Runtime config (sessionsBase override etc.)
+/config.json

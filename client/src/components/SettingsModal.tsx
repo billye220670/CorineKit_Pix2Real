@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X } from 'lucide-react';
+import { X, FolderOpen } from 'lucide-react';
 import { useSettingsStore, type ReversePromptModel, type LlmModel, type StartupBehavior, type DropdownMenuStyle } from '../hooks/useSettingsStore.js';
 import { SegmentedControl } from './SegmentedControl.js';
+import { ensureNotificationPermission } from '../services/desktopNotify.js';
 
 const REVERSE_PROMPT_MODELS: { value: ReversePromptModel; label: string }[] = [
   { value: 'Qwen3VL', label: 'Qwen3VL' },
@@ -29,7 +30,13 @@ const DROPDOWN_MENU_STYLE_OPTIONS: { value: DropdownMenuStyle; label: string }[]
 const CATEGORIES = [
   { id: 'workflow', label: '工作流' },
   { id: 'session', label: '会话' },
+  { id: 'notification', label: '通知' },
   { id: 'prompt', label: '提示词管理' },
+];
+
+const TOGGLE_OPTIONS: { value: 'on' | 'off'; label: string }[] = [
+  { value: 'on', label: '开启' },
+  { value: 'off', label: '关闭' },
 ];
 
 // ── 统一样式常量 ─────────────────────────────────────────────────────────
@@ -89,6 +96,15 @@ export function SettingsModal() {
   const setLlmModel = useSettingsStore((s) => s.setLlmModel);
   const dropdownMenuStyle = useSettingsStore((s) => s.dropdownMenuStyle);
   const setDropdownMenuStyle = useSettingsStore((s) => s.setDropdownMenuStyle);
+  const desktopNotifyOnComplete = useSettingsStore((s) => s.desktopNotifyOnComplete);
+  const setDesktopNotifyOnComplete = useSettingsStore((s) => s.setDesktopNotifyOnComplete);
+  const sessionsBase = useSettingsStore((s) => s.sessionsBase);
+  const defaultSessionsBase = useSettingsStore((s) => s.defaultSessionsBase);
+  const sessionsPathLoaded = useSettingsStore((s) => s.sessionsPathLoaded);
+  const loadSessionsPath = useSettingsStore((s) => s.loadSessionsPath);
+  const updateSessionsPath = useSettingsStore((s) => s.updateSessionsPath);
+
+  const [sessionsPathSaving, setSessionsPathSaving] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -101,6 +117,13 @@ export function SettingsModal() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [settingsOpen, closeSettings]);
+
+  // 打开面板时加载会话路径
+  useEffect(() => {
+    if (settingsOpen && !sessionsPathLoaded) {
+      void loadSessionsPath();
+    }
+  }, [settingsOpen, sessionsPathLoaded, loadSessionsPath]);
 
   // IntersectionObserver — highlight nav item whose section heading enters the top of the scroll area
   useEffect(() => {
@@ -132,6 +155,72 @@ export function SettingsModal() {
 
   const scrollTo = (sectionId: string) => {
     sectionRefs.current[sectionId]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  // 切换 sessions 路径后：清掉本地 session 标记，重载到欢迎页并刷新列表
+  const applyAndReloadWelcome = () => {
+    try {
+      localStorage.removeItem('pix2real_session_id');
+      sessionStorage.removeItem('pix2real_switch_intent');
+    } catch { /* ignore */ }
+    window.location.reload();
+  };
+
+  const handleBrowseSessionsFolder = async () => {
+    if (sessionsPathSaving) return;
+    let selected: string;
+    try {
+      const resp = await fetch('/api/settings/browse-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initialPath: sessionsBase ?? '' }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        alert(`打开目录选择器失败：${data?.error ?? `HTTP ${resp.status}`}`);
+        return;
+      }
+      if (data?.cancelled || !data?.path) return;
+      selected = String(data.path);
+    } catch (err) {
+      alert(`调用目录选择器失败：${err instanceof Error ? err.message : String(err)}`);
+      return;
+    }
+
+    if (sessionsBase && selected === sessionsBase) {
+      alert('所选路径与当前路径相同');
+      return;
+    }
+    if (!window.confirm(
+      `将 sessions 存储路径切换为:\n${selected}\n\n老路径下的会话文件不会被迁移。\n切换后将立即返回欢迎页并刷新列表，确认继续？`
+    )) return;
+    setSessionsPathSaving(true);
+    const result = await updateSessionsPath(selected);
+    setSessionsPathSaving(false);
+    if (!result.ok) {
+      alert(`保存失败：${result.error}`);
+      return;
+    }
+    applyAndReloadWelcome();
+  };
+
+  const handleResetSessionsPath = async () => {
+    if (!defaultSessionsBase) return;
+    if (sessionsBase === defaultSessionsBase) {
+      alert('当前已是默认路径');
+      return;
+    }
+    if (!window.confirm(
+      `将 sessions 路径恢复为默认:\n${defaultSessionsBase}\n\n切换后将立即返回欢迎页并刷新列表，确认继续？`
+    )) return;
+    setSessionsPathSaving(true);
+    const result = await updateSessionsPath(null);
+    setSessionsPathSaving(false);
+    if (!result.ok) {
+      alert(`恢复失败：${result.error}`);
+      return;
+    }
+    applyAndReloadWelcome();
   };
 
   return (
@@ -289,6 +378,113 @@ export function SettingsModal() {
                   options={STARTUP_BEHAVIOR_OPTIONS}
                   value={startupBehavior}
                   onChange={(v) => setStartupBehavior(v as StartupBehavior)}
+                />
+              </div>
+
+              {/* Row: Session 存储路径 */}
+              <div style={{ ...settingRowStyle, alignItems: 'flex-start', borderBottom: 'none' }}>
+                <div style={{ marginRight: 24, flex: 1, minWidth: 0 }}>
+                  <div style={settingLabelStyle}>Session 存储路径</div>
+                  <div style={settingDescStyle}>
+                    所有会话数据（输入 / 输出 / 蒙版 / 封面等）的根目录，切换后立即返回欢迎页并刷新列表。<br />
+                    {defaultSessionsBase && (
+                      <span style={{ color: 'var(--color-text-secondary)' }}>
+                        默认路径：<code style={{ fontSize: 11 }}>{defaultSessionsBase}</code>
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div
+                      style={{
+                        flex: 1,
+                        minWidth: 280,
+                        padding: '6px 10px',
+                        fontSize: 12,
+                        fontFamily: 'monospace',
+                        border: '1px solid var(--color-border)',
+                        borderRadius: 6,
+                        background: 'var(--color-bg)',
+                        color: sessionsBase ? 'var(--color-text)' : 'var(--color-text-secondary)',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                      title={sessionsBase ?? ''}
+                    >
+                      {sessionsPathLoaded
+                        ? (sessionsBase ?? '（加载失败）')
+                        : '加载中…'}
+                    </div>
+                    <button
+                      onClick={handleBrowseSessionsFolder}
+                      disabled={!sessionsPathLoaded || sessionsPathSaving}
+                      title="浏览选择目录"
+                      style={{
+                        ...actionBtnStyle,
+                        padding: '6px 10px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        opacity: sessionsPathSaving ? 0.6 : 1,
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = 'var(--color-surface-hover)'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = 'var(--color-bg)'}
+                    >
+                      <FolderOpen size={16} />
+                    </button>
+                    <button
+                      onClick={handleResetSessionsPath}
+                      disabled={
+                        !sessionsPathLoaded
+                        || sessionsPathSaving
+                        || sessionsBase === defaultSessionsBase
+                      }
+                      style={{
+                        ...actionBtnStyle,
+                        opacity: sessionsBase === defaultSessionsBase ? 0.5 : 1,
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = 'var(--color-surface-hover)'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = 'var(--color-bg)'}
+                    >
+                      恢复默认
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style={sectionGapStyle} />
+
+            {/* ── Section: 通知 ── */}
+            <div
+              ref={(el) => { sectionRefs.current['notification'] = el; }}
+              data-section="notification"
+            >
+              <div style={sectionTitleStyle}>通知</div>
+
+              {/* Row: 任务完成桌面通知 */}
+              <div style={settingRowStyle}>
+                <div style={{ marginRight: 24 }}>
+                  <div style={settingLabelStyle}>任务完成桌面通知</div>
+                  <div style={settingDescStyle}>
+                    页面切到后台时，在 Windows 右下角弹出系统通知（需浏览器通知权限）
+                  </div>
+                </div>
+                <SegmentedControl
+                  options={TOGGLE_OPTIONS}
+                  value={desktopNotifyOnComplete ? 'on' : 'off'}
+                  onChange={(v) => {
+                    const enabled = v === 'on';
+                    setDesktopNotifyOnComplete(enabled);
+                    if (enabled) {
+                      // 开启时主动申请权限
+                      ensureNotificationPermission().then((perm) => {
+                        if (perm !== 'granted') {
+                          alert('浏览器通知权限未授予，桌面通知将不会弹出。请在浏览器地址栏左侧的权限设置中允许通知。');
+                        }
+                      });
+                    }
+                  }}
                 />
               </div>
             </div>

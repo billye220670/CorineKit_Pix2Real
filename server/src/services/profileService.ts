@@ -1,6 +1,6 @@
 import { readGenerationLog, readFavorites } from './agentService.js';
 import type { GenerationRecord } from './agentService.js';
-import { sessionsBase } from './sessionManager.js';
+import { getSessionsBase } from './sessionManager.js';
 import fs from 'fs';
 
 // 用户偏好画像接口
@@ -79,6 +79,7 @@ export function buildUserProfile(): UserPreferenceProfile {
   const logs: GenerationRecord[] = [];
   const favorites: Record<string, { tabId: number; favoritedAt: number }> = {};
 
+  const sessionsBase = getSessionsBase();
   if (fs.existsSync(sessionsBase)) {
     const sessionDirs = fs.readdirSync(sessionsBase, { withFileTypes: true })
       .filter(d => d.isDirectory())

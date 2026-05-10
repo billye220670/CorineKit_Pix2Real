@@ -3,7 +3,7 @@ import { exec } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { sessionsBase } from '../services/sessionManager.js';
+import { getSessionsBase } from '../services/sessionManager.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const outputBase = path.resolve(__dirname, '../../../output');
@@ -89,7 +89,7 @@ router.post('/open-file', express.json(), (req, res) => {
   let filePath: string;
   try {
     if (url.startsWith('/api/session-files/')) {
-      filePath = path.resolve(sessionsBase, decodeURIComponent(url.slice('/api/session-files/'.length)));
+      filePath = path.resolve(getSessionsBase(), decodeURIComponent(url.slice('/api/session-files/'.length)));
     } else if (url.startsWith('/output/')) {
       filePath = path.resolve(outputBase, decodeURIComponent(url.slice('/output/'.length)));
     } else if (url.startsWith('/api/output/')) {

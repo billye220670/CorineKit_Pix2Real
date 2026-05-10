@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { sessionsBase } from './sessionManager.js';
+import { getSessionsBase } from './sessionManager.js';
 
 export interface GenerationRecord {
   id: string;
@@ -38,7 +38,7 @@ export interface GenerationRecord {
 }
 
 function getLogPath(sessionId: string): string {
-  return path.join(sessionsBase, sessionId, 'generation-log.json');
+  return path.join(getSessionsBase(), sessionId, 'generation-log.json');
 }
 
 export function readGenerationLog(sessionId: string): GenerationRecord[] {
@@ -66,7 +66,7 @@ export function appendGenerationLog(sessionId: string, record: GenerationRecord)
 // ── Favorites ─────────────────────────────────────────────────────────────────
 
 function getFavoritesPath(sessionId: string): string {
-  return path.join(sessionsBase, sessionId, 'favorites.json');
+  return path.join(getSessionsBase(), sessionId, 'favorites.json');
 }
 
 export function readFavorites(sessionId: string): Record<string, { tabId: number; favoritedAt: number }> {
@@ -111,7 +111,7 @@ export function updateGenerationLogFavorite(sessionId: string, imageId: string, 
     }
   }
   if (updated) {
-    const logPath = path.join(sessionsBase, sessionId, 'generation-log.json');
+    const logPath = path.join(getSessionsBase(), sessionId, 'generation-log.json');
     fs.writeFileSync(logPath, JSON.stringify(logs, null, 2), 'utf-8');
   }
 }

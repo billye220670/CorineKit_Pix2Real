@@ -11,8 +11,10 @@ import sessionRouter from './routes/session.js';
 import modelMetaRouter from './routes/modelMeta.js';
 import agentRouter from './routes/agent.js';
 import favoritesRouter, { favoritesBase } from './routes/favorites.js';
+import settingsRouter from './routes/settings.js';
 import { connectWebSocket, getHistory, getImageBuffer, getPromptNodeInfo, getPromptTotalNodes, getPromptTotalWeight, clearPromptNodeInfo, SAMPLER_STEP_WEIGHT } from './services/comfyui.js';
-import { sessionsBase, saveOutputFile } from './services/sessionManager.js';
+import { saveOutputFile } from './services/sessionManager.js';
+import { loadConfigFromDisk, getSessionsBase } from './config/paths.js';
 import { ensureComfyUI, isComfyUIRunning } from './services/comfyuiLauncher.js';
 
 // ── 节点 class_type → 中文阶段名映射 ───────────────────────────────
@@ -97,9 +99,13 @@ for (const dir of OUTPUT_DIRS) {
   }
 }
 
+// Load persisted runtime config (sessions path override etc.) before anything touches paths
+loadConfigFromDisk();
+
 // Ensure sessions directory exists
-if (!fs.existsSync(sessionsBase)) {
-  fs.mkdirSync(sessionsBase, { recursive: true });
+const initialSessionsBase = getSessionsBase();
+if (!fs.existsSync(initialSessionsBase)) {
+  fs.mkdirSync(initialSessionsBase, { recursive: true });
 }
 
 // Ensure model_meta directories exist
@@ -127,11 +133,15 @@ app.use('/api/session', sessionRouter);
 
 // Static serve output and sessions directories
 app.use('/output', express.static(outputBase));
-app.use('/api/session-files', express.static(sessionsBase));
+// 动态指向 sessionsBase：每次请求都读取当前配置，设置面板切换后无需重启
+app.use('/api/session-files', (req, res, next) => {
+  express.static(getSessionsBase())(req, res, next);
+});
 app.use('/model_meta', express.static(modelMetaBase));
 app.use('/api/models', modelMetaRouter);
 app.use('/api/agent', agentRouter);
 app.use('/api/favorites', favoritesRouter);
+app.use('/api/settings', settingsRouter);
 app.use('/favorites', express.static(favoritesBase));
 
 // ComfyUI 状态查询

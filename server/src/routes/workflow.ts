@@ -10,7 +10,7 @@ import { getAdapter, adapters } from '../adapters/index.js';
 import { workflow5Adapter } from '../adapters/Workflow5Adapter.js';
 import { workflow10Adapter } from '../adapters/Workflow10Adapter.js';
 import { uploadImage, uploadVideo, queuePrompt, deleteQueueItem, getSystemStats, getQueue, prioritizeQueueItem, getHistory, getImageBuffer, getCheckpointModels, getUnetModels, getLoraModels } from '../services/comfyui.js';
-import { sessionsBase } from '../services/sessionManager.js';
+import { getSessionsBase } from '../services/sessionManager.js';
 import { callLLM, buildSmartLoraPrompt, buildTriggerInsertPrompt } from '../services/llmService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -925,7 +925,7 @@ router.post('/:id/open-folder', express.json(), (req, res) => {
 
   let outputDir: string;
   if (sessionId && tabId !== undefined) {
-    outputDir = path.resolve(sessionsBase, sessionId, `tab-${tabId}`, 'output');
+    outputDir = path.resolve(getSessionsBase(), sessionId, `tab-${tabId}`, 'output');
   } else {
     // Legacy fallback: open workflow output dir
     const adapter = getAdapter(workflowId);
@@ -980,7 +980,7 @@ router.post('/export-blend', express.json({ limit: '50mb' }), async (req, res) =
 
     // Sanitise filename — allow alphanumeric, underscore, hyphen, dot, space, and CJK characters
     const safeName = path.basename(filename).replace(/[^\w\-. \u4e00-\u9fff]/g, '_');
-    const outputDir = path.resolve(sessionsBase, sessionId, `tab-${tabId}`, 'output');
+    const outputDir = path.resolve(getSessionsBase(), sessionId, `tab-${tabId}`, 'output');
     if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 
     const filePath = path.join(outputDir, safeName);
