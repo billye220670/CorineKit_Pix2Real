@@ -129,6 +129,13 @@ export function Sidebar() {
     // Tab 9 is text-to-image only; it does not accept image drops
     if (targetTab === 9) return;
 
+    // Tab-specific file type filter
+    const filterForTab = (file: File) => {
+      if (targetTab === 4) return file.type.startsWith('video/');
+      if (targetTab === 3) return file.type.startsWith('image/');
+      return true;
+    };
+
     const imageId = e.dataTransfer.getData('application/x-workflow-image');
     if (imageId) {
       const state = useWorkflowStore.getState();
@@ -172,9 +179,11 @@ export function Sidebar() {
       }
 
       if (files.length === 0) return;
-      addImagesToTab(targetTab, files);
+      const filtered = files.filter(filterForTab);
+      if (filtered.length === 0) return;
+      addImagesToTab(targetTab, filtered);
       const targetName = state.workflows.find((w) => w.id === targetTab)?.name ?? '';
-      const label = files.length > 1 ? `${files.length} 张图片` : '';
+      const label = filtered.length > 1 ? `${filtered.length} 张图片` : '';
       showToast(`已导入${label}到「${targetName}」`);
       return;
     }
@@ -201,6 +210,7 @@ export function Sidebar() {
         break;
       }
       if (!file) return;
+      if (!filterForTab(file)) return;
       addImagesToTab(targetTab, [file]);
       const targetName = state.workflows.find((w) => w.id === targetTab)?.name ?? '';
       showToast(`已导入到「${targetName}」`);

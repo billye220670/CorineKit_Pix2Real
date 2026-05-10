@@ -184,7 +184,15 @@ export function App() {
       files.push(...dtFiles);
     }
 
-    if (files.length > 0) importFiles(files);
+    // Tab 4 (视频补帧) only accepts video files
+    // Tab 3 (图生视频) only accepts image files
+    const filtered = activeTab === 4
+      ? files.filter((f) => f.type.startsWith('video/'))
+      : activeTab === 3
+        ? files.filter((f) => f.type.startsWith('image/'))
+        : files;
+
+    if (filtered.length > 0) importFiles(filtered);
   }, [activeTab, importFiles]);
 
   return (
@@ -291,7 +299,7 @@ export function App() {
           }}
         >
           {images.length === 0 && activeTab !== 7 && activeTab !== 8 && activeTab !== 9 ? (
-            <DropZone fullscreen importFiles={importFiles} onDropHandled={() => setIsDragOver(false)} />
+            <DropZone fullscreen importFiles={importFiles} onDropHandled={() => setIsDragOver(false)} activeTab={activeTab} />
           ) : (
             <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
               {activeTab === 8 ? (

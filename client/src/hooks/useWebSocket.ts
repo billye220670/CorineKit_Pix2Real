@@ -1,6 +1,8 @@
 import { useEffect, useCallback } from 'react';
 import { useWorkflowStore } from './useWorkflowStore.js';
 import { useAgentStore } from './useAgentStore.js';
+import { useSettingsStore } from './useSettingsStore.js';
+import { notifyTaskComplete, notifyTaskError } from '../services/desktopNotify.js';
 import type { Text2ImgConfig, ZitConfig } from '../services/sessionService.js';
 import type { WSMessage } from '../types/index.js';
 
@@ -8,6 +10,21 @@ import type { WSMessage } from '../types/index.js';
 let globalWs: WebSocket | null = null;
 let globalReconnectTimer: number | undefined;
 let connectionCount = 0;
+
+/** 根据 promptId 在 tabData 中查找归属的 tabId 与工作流名，用于桌面通知文案。 */
+function resolveWorkflowLabel(promptId: string): { tabId: number | null; workflowName: string } {
+  const state = useWorkflowStore.getState();
+  for (const [tabKey, tabVal] of Object.entries(state.tabData)) {
+    if (!tabVal) continue;
+    const found = Object.entries(tabVal.imagePromptMap || {}).find(([, pid]) => pid === promptId);
+    if (found) {
+      const tabId = Number(tabKey);
+      const workflowName = state.workflows.find((w) => w.id === tabId)?.name ?? '工作流';
+      return { tabId, workflowName };
+    }
+  }
+  return { tabId: null, workflowName: '工作流' };
+}
 
 function getOrCreateConnection(): WebSocket {
   if (globalWs && (globalWs.readyState === WebSocket.OPEN || globalWs.readyState === WebSocket.CONNECTING)) {
@@ -119,9 +136,23 @@ function getOrCreateConnection(): WebSocket {
           } catch (logErr) {
             console.error('[Agent] Generation log error:', logErr);
           }
+          // 桌面通知（任务完成）
+          try {
+            if (useSettingsStore.getState().desktopNotifyOnComplete) {
+              const { workflowName } = resolveWorkflowLabel(msg.promptId);
+              const count = Array.isArray(msg.outputs) ? msg.outputs.length : 0;
+              notifyTaskComplete(workflowName, count, `workflow-${msg.promptId}`);
+            }
+          } catch { /* noop */ }
           break;
         case 'error':
           store.failTask(msg.promptId, msg.message);
+          try {
+            if (useSettingsStore.getState().desktopNotifyOnComplete) {
+              const { workflowName } = resolveWorkflowLabel(msg.promptId);
+              notifyTaskError(workflowName, msg.message, `workflow-${msg.promptId}`);
+            }
+          } catch { /* noop */ }
           break;
       }
     } catch {
@@ -158,15 +189,35 @@ function getOrCreateConnection(): WebSocket {
                   // 全部完成，将所有 batchOutputs 转为 outputs 格式
                   const allOutputs = (currentExec.batchOutputs ?? []).map(url => ({ filename: url.split('/').pop() || '', url }));
                   agentStore.setAgentExecution({ ...currentExec, outputs: allOutputs });
+                  // 桌面通知（仅在全部完成时触发一次）
+                  try {
+                    if (useSettingsStore.getState().desktopNotifyOnComplete) {
+                      const name = currentExec.generationContext?.workflowName ?? '智能生成';
+                      notifyTaskComplete(name, allOutputs.length, `agent-${currentExec.promptId}`);
+                    }
+                  } catch { /* noop */ }
                 }
               } else {
                 // 单次生成：沿用现有逻辑
                 agentStore.completeAgentExecution(msg.outputs);
+                try {
+                  if (useSettingsStore.getState().desktopNotifyOnComplete) {
+                    const name = agentExec.generationContext?.workflowName ?? '智能生成';
+                    const count = Array.isArray(msg.outputs) ? msg.outputs.length : 0;
+                    notifyTaskComplete(name, count, `agent-${agentExec.promptId}`);
+                  }
+                } catch { /* noop */ }
               }
               break;
             }
             case 'error':
               agentStore.failAgentExecution(msg.message || 'Unknown error');
+              try {
+                if (useSettingsStore.getState().desktopNotifyOnComplete) {
+                  const name = agentExec.generationContext?.workflowName ?? '智能生成';
+                  notifyTaskError(name, msg.message, `agent-${agentExec.promptId}`);
+                }
+              } catch { /* noop */ }
               break;
           }
         }

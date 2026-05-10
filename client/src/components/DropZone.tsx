@@ -5,6 +5,7 @@ interface DropZoneProps {
   fullscreen: boolean;
   importFiles: (files: File[]) => void;
   onDropHandled?: () => void;
+  activeTab?: number;
 }
 
 function isImageOrVideo(file: File): boolean {
@@ -36,8 +37,15 @@ async function readFilesFromEntry(entry: FileSystemEntry): Promise<File[]> {
   return [];
 }
 
-export function DropZone({ fullscreen, importFiles, onDropHandled }: DropZoneProps) {
+export function DropZone({ fullscreen, importFiles, onDropHandled, activeTab }: DropZoneProps) {
   const [isDragOver, setIsDragOver] = useState(false);
+
+  // Determine file type filter based on active tab
+  const filterByTab = useCallback((files: File[]): File[] => {
+    if (activeTab === 4) return files.filter((f) => f.type.startsWith('video/'));
+    if (activeTab === 3) return files.filter((f) => f.type.startsWith('image/'));
+    return files;
+  }, [activeTab]);
 
   const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
@@ -68,9 +76,10 @@ export function DropZone({ fullscreen, importFiles, onDropHandled }: DropZonePro
     }
 
     if (files.length > 0) {
-      importFiles(files);
+      const filtered = filterByTab(files);
+      if (filtered.length > 0) importFiles(filtered);
     }
-  }, [importFiles, onDropHandled]);
+  }, [importFiles, onDropHandled, filterByTab]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -84,11 +93,12 @@ export function DropZone({ fullscreen, importFiles, onDropHandled }: DropZonePro
 
   const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []).filter(isImageOrVideo);
-    if (files.length > 0) {
-      importFiles(files);
+    const filtered = filterByTab(files);
+    if (filtered.length > 0) {
+      importFiles(filtered);
     }
     e.target.value = '';
-  }, [importFiles]);
+  }, [importFiles, filterByTab]);
 
   if (fullscreen) {
     return (
@@ -122,13 +132,13 @@ export function DropZone({ fullscreen, importFiles, onDropHandled }: DropZonePro
           color: 'var(--color-text-secondary)',
           fontSize: '15px',
         }}>
-          拖入图片或文件夹，或点击选择文件
+          {activeTab === 4 ? '拖入视频文件，或点击选择' : activeTab === 3 ? '拖入图片或文件夹，或点击选择文件' : '拖入图片或文件夹，或点击选择文件'}
         </p>
         <input
           id="file-input"
           type="file"
           multiple
-          accept="image/*,video/*"
+          accept={activeTab === 4 ? 'video/*' : activeTab === 3 ? 'image/*' : 'image/*,video/*'}
           onChange={handleFileInput}
           style={{ display: 'none' }}
         />
