@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { X, FolderOpen } from 'lucide-react';
-import { useSettingsStore, type ReversePromptModel, type LlmModel, type StartupBehavior, type DropdownMenuStyle } from '../hooks/useSettingsStore.js';
+import { useSettingsStore, type ReversePromptModel, type LlmModel, type StartupBehavior, type DropdownMenuStyle, type DiceMixPreset, type DiceRefMode, type DiceRatioMode } from '../hooks/useSettingsStore.js';
 import { SegmentedControl } from './SegmentedControl.js';
 import { ensureNotificationPermission } from '../services/desktopNotify.js';
 import { MyProfileSection } from './MyProfileSection.js';
@@ -28,8 +28,25 @@ const DROPDOWN_MENU_STYLE_OPTIONS: { value: DropdownMenuStyle; label: string }[]
   { value: 'fast', label: '快速' },
 ];
 
+const DICE_MIX_PRESET_OPTIONS: { value: DiceMixPreset; label: string; title: string }[] = [
+  { value: 'preference',  label: '更多偏好', title: '70% 画像偏好 / 20% 画像微改 / 10% 探索' },
+  { value: 'balanced',    label: '均衡',     title: '50% 画像偏好 / 30% 画像微改 / 20% 探索（默认）' },
+  { value: 'exploration', label: '更多推荐', title: '20% 画像偏好 / 30% 画像微改 / 50% 探索' },
+];
+
+const DICE_REF_MODE_OPTIONS: { value: DiceRefMode; label: string; title: string }[] = [
+  { value: 'auto', label: '使用（如有）', title: '若侧边栏已配置参考图，则每条随机结果都会带上该参考图' },
+  { value: 'none', label: '不使用',        title: '骰子随机生成时忽略侧边栏的参考图，总是纯随机' },
+];
+
+const DICE_RATIO_MODE_OPTIONS: { value: DiceRatioMode; label: string; title: string }[] = [
+  { value: 'manual', label: '手动', title: '所有随机结果都跟随侧边栏当前比例' },
+  { value: 'auto',   label: '自动', title: '由 AI 为每条随机结果推荐合适画面比例' },
+];
+
 const CATEGORIES = [
   { id: 'workflow', label: '工作流' },
+  { id: 'random', label: '随机生成' },
   { id: 'session', label: '会话' },
   { id: 'notification', label: '通知' },
   { id: 'prompt', label: '提示词管理' },
@@ -98,6 +115,12 @@ export function SettingsModal() {
   const setDropdownMenuStyle = useSettingsStore((s) => s.setDropdownMenuStyle);
   const desktopNotifyOnComplete = useSettingsStore((s) => s.desktopNotifyOnComplete);
   const setDesktopNotifyOnComplete = useSettingsStore((s) => s.setDesktopNotifyOnComplete);
+  const diceMixPreset = useSettingsStore((s) => s.diceMixPreset);
+  const setDiceMixPreset = useSettingsStore((s) => s.setDiceMixPreset);
+  const diceRefMode = useSettingsStore((s) => s.diceRefMode);
+  const setDiceRefMode = useSettingsStore((s) => s.setDiceRefMode);
+  const diceRatioMode = useSettingsStore((s) => s.diceRatioMode);
+  const setDiceRatioMode = useSettingsStore((s) => s.setDiceRatioMode);
   const sessionsBase = useSettingsStore((s) => s.sessionsBase);
   const defaultSessionsBase = useSettingsStore((s) => s.defaultSessionsBase);
   const sessionsPathLoaded = useSettingsStore((s) => s.sessionsPathLoaded);
@@ -321,6 +344,58 @@ export function SettingsModal() {
                   options={DROPDOWN_MENU_STYLE_OPTIONS}
                   value={dropdownMenuStyle}
                   onChange={(v) => setDropdownMenuStyle(v as DropdownMenuStyle)}
+                />
+              </div>
+            </div>
+            )}
+
+            {/* ── Section: 随机生成 ── */}
+            {activeSection === 'random' && (
+            <div>
+              <div style={sectionTitleStyle}>随机生成</div>
+
+              {/* Row: 随机生成偏好 */}
+              <div style={settingRowStyle}>
+                <div style={{ marginRight: 24 }}>
+                  <div style={settingLabelStyle}>随机生成偏好</div>
+                  <div style={settingDescStyle}>
+                    控制「快速出图」生成按钮旁骰子按钮按数量分配画像偏好 / 画像微改 / 探索三档的比例。
+                  </div>
+                </div>
+                <SegmentedControl
+                  options={DICE_MIX_PRESET_OPTIONS}
+                  value={diceMixPreset}
+                  onChange={(v) => setDiceMixPreset(v as DiceMixPreset)}
+                />
+              </div>
+
+              {/* Row: 参考图 */}
+              <div style={settingRowStyle}>
+                <div style={{ marginRight: 24 }}>
+                  <div style={settingLabelStyle}>参考图</div>
+                  <div style={settingDescStyle}>
+                    骰子批量生成时是否复用侧边栏已设置的参考图；若侧边栏未配置参考图，两种模式结果相同。
+                  </div>
+                </div>
+                <SegmentedControl
+                  options={DICE_REF_MODE_OPTIONS}
+                  value={diceRefMode}
+                  onChange={(v) => setDiceRefMode(v as DiceRefMode)}
+                />
+              </div>
+
+              {/* Row: 比例 */}
+              <div style={settingRowStyle}>
+                <div style={{ marginRight: 24 }}>
+                  <div style={settingLabelStyle}>比例</div>
+                  <div style={settingDescStyle}>
+                    手动：所有随机结果跟随侧边栏当前比例；自动：由 AI 为每条结果推荐合适的画面比例。
+                  </div>
+                </div>
+                <SegmentedControl
+                  options={DICE_RATIO_MODE_OPTIONS}
+                  value={diceRatioMode}
+                  onChange={(v) => setDiceRatioMode(v as DiceRatioMode)}
                 />
               </div>
             </div>

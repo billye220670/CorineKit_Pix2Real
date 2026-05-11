@@ -3,13 +3,14 @@ import { useWorkflowStore, type Text2ImgConfig } from '../hooks/useWorkflowStore
 import { type LoraSlot } from '../services/sessionService.js';
 import { usePromptAssistantStore } from '../hooks/usePromptAssistantStore.js';
 import { useWebSocket } from '../hooks/useWebSocket.js';
-import { ChevronRight, ChevronDown, Loader, BookText, Hash, AlignLeft, Wand2, Loader2, AlertTriangle, Plus, Trash2, Upload, RefreshCw, X, Sparkles } from 'lucide-react';
+import { ChevronRight, ChevronDown, Loader, BookText, Hash, AlignLeft, Wand2, Loader2, AlertTriangle, Plus, Trash2, Upload, RefreshCw, X, Sparkles, Dices } from 'lucide-react';
 import { SYSTEM_PROMPTS } from './prompt-assistant/systemPrompts.js';
 import { ModelSelect, useModelFavorites } from './ModelSelect.js';
 import { useModelMetadata } from '../hooks/useModelMetadata.js';
 import PromptContextMenu from './PromptContextMenu.js';
 import { showToast } from '../hooks/useToast.js';
 import { callPromptAssistant, callSmartLora, callSmartTriggerInsert } from '../services/api.js';
+import { useSettingsStore, type DiceMixPreset } from '../hooks/useSettingsStore.js';
 
 const RATIO_PRESETS = [
   { label: '1:1',  width: 1024, height: 1024 },
@@ -37,6 +38,69 @@ const SCHEDULERS = [
 const SAMPLER_VALUES = SAMPLERS.map(s => s.value);
 const SCHEDULER_VALUES = SCHEDULERS.map(s => s.value);
 
+// ── 随机骰子按钮的档位 → 比例映射 ────────────────────────────────────────
+const DICE_MIX_RATIOS: Record<DiceMixPreset, [number, number, number]> = {
+  preference:  [0.7, 0.2, 0.1],
+  balanced:    [0.5, 0.3, 0.2],
+  exploration: [0.2, 0.3, 0.5],
+};
+
+const DICE_MIX_LABEL: Record<DiceMixPreset, string> = {
+  preference:  '更多偏好',
+  balanced:    '均衡',
+  exploration: '更多推荐',
+};
+
+/**
+ * 根据档位与总数计算三档数量。
+ * - N == 1：按权重加权随机单抽
+ * - N == 2：按比例向下取整 + 余数给权重最高档
+ * - N == 3：强制三档各 1
+ * - N >= 4：四舍五入，若 exploration 档 exploreCount 被舍入成 0，借 1 张
+ */
+function computeMix(n: number, preset: DiceMixPreset): { preferenceCount: number; tweakCount: number; exploreCount: number } {
+  const [pr, tr, er] = DICE_MIX_RATIOS[preset];
+  if (n <= 0) return { preferenceCount: 0, tweakCount: 0, exploreCount: 0 };
+
+  if (n === 1) {
+    const r = Math.random();
+    if (r < pr) return { preferenceCount: 1, tweakCount: 0, exploreCount: 0 };
+    if (r < pr + tr) return { preferenceCount: 0, tweakCount: 1, exploreCount: 0 };
+    return { preferenceCount: 0, tweakCount: 0, exploreCount: 1 };
+  }
+
+  if (n === 2) {
+    // 按权重挑出前 2 档各 1 张
+    const arr = [
+      { key: 'p' as const, w: pr },
+      { key: 't' as const, w: tr },
+      { key: 'e' as const, w: er },
+    ].sort((a, b) => b.w - a.w);
+    const counts = { p: 0, t: 0, e: 0 };
+    counts[arr[0].key] += 1;
+    counts[arr[1].key] += 1;
+    return { preferenceCount: counts.p, tweakCount: counts.t, exploreCount: counts.e };
+  }
+
+  if (n === 3) {
+    return { preferenceCount: 1, tweakCount: 1, exploreCount: 1 };
+  }
+
+  let pc = Math.round(n * pr);
+  let tc = Math.round(n * tr);
+  let ec = n - pc - tc;
+  if (ec < 0) {
+    // 舍入使 ec 变负：从最大档借回
+    if (pc >= tc) pc += ec; else tc += ec;
+    ec = 0;
+  }
+  if (ec === 0 && preset === 'exploration' && pc > 0) {
+    pc -= 1;
+    ec = 1;
+  }
+  return { preferenceCount: pc, tweakCount: tc, exploreCount: ec };
+}
+
 const DRAFT_KEY = 't2i_draft';
 const DEFAULT_LORAS: LoraSlot[] = [];
 function readDraft() {
@@ -59,6 +123,25 @@ function readDraft() {
     }
     return raw;
   } catch { return {}; }
+}
+
+/**
+ * 生成一个 48 位的唯一随机种子（KSampler.seed）。
+ * 使用 crypto.getRandomValues 而非 Math.random，避免批量场景下连续调用产生相似/重复值，
+ * 从而导致"prompt 不同但生成结果视觉上一模一样"。
+ */
+function genUniqueSeed(): number {
+  const buf = new Uint32Array(2);
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    crypto.getRandomValues(buf);
+  } else {
+    buf[0] = Math.floor(Math.random() * 0x100000000);
+    buf[1] = Math.floor(Math.random() * 0x100000000);
+  }
+  // 拼出 48 位整数（2^48 ≈ 2.8e14，远小于 Comfy KSampler 上限 2^53）
+  const high = buf[0] & 0xFFFF;
+  const low  = buf[1];
+  return high * 0x100000000 + low;
 }
 
 export function Text2ImgSidebar({ width }: { width?: number }) {
@@ -228,6 +311,10 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
   const refFileInputRef = useRef<HTMLInputElement>(null);
   const [batchCount, setBatchCount] = useState(1);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isRandomizing, setIsRandomizing] = useState(false);
+  const diceMixPreset = useSettingsStore((s) => s.diceMixPreset);
+  const diceRefMode = useSettingsStore((s) => s.diceRefMode);
+  const diceRatioMode = useSettingsStore((s) => s.diceRatioMode);
   const [smartLoraLoading, setSmartLoraLoading] = useState(false);
   const [triggerInsertLoadingIndex, setTriggerInsertLoadingIndex] = useState<number | null>(null);
   const [promptFocused, setPromptFocused] = useState(false);
@@ -527,14 +614,16 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
     try {
       for (let i = 0; i < count; i++) {
         const itemName = count === 1 ? baseName : `${baseName}_${i + 1}`;
-        const imageId = addText2ImgCard(config, itemName);
+        // 每张卡片独立生成 seed，避免 Node.js Math.random 在连续快速调用下碰撞
+        const cfgWithSeed: Text2ImgConfig = { ...config, seed: genUniqueSeed() };
+        const imageId = addText2ImgCard(cfgWithSeed, itemName);
         setFlashingImage(imageId);
         startTask(imageId, '');  // Show shimmer immediately before fetch returns
         try {
           const res = await fetch('/api/workflow/7/execute', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ clientId, ...config, name: itemName }),
+            body: JSON.stringify({ clientId, ...cfgWithSeed, name: itemName }),
           });
           if (!res.ok) {
             console.error('[Text2Img] Execute failed:', await res.text());
@@ -551,6 +640,144 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
       setIsGenerating(false);
     }
   }, [clientId, isGenerating, model, models, loras, loraModels, prompt, negativePrompt, selectedPreset, customWidth, customHeight, steps, cfg, sampler, scheduler, customName, batchCount, addText2ImgCard, startTask, sendMessage, sessionId, referenceImage, poseStrength, depthStrength]);
+
+  /**
+   * 随机骰子：按用户在设置面板选择的档位（更多偏好 / 均衡 / 更多推荐）拆分 batchCount，
+   * 调后端 /api/agent/random-batch 拉取 N 条 prompt，覆盖当前 sidebar 其他配置后入照片墙。
+   */
+  const handleRandomGenerate = useCallback(async () => {
+    if (!clientId || isGenerating || isRandomizing) return;
+    if (models.length === 0) return;
+
+    const total = Math.min(32, Math.max(1, batchCount));
+    const { preferenceCount, tweakCount, exploreCount } = computeMix(total, diceMixPreset);
+
+    setIsRandomizing(true);
+    try {
+      type RandomItem = {
+        category: 'preference' | 'tweak' | 'explore';
+        prompt: string;
+        recommendedLoras?: Array<{ model: string; strength: number }>;
+        recommendedModel?: string;
+        ratio?: string;
+        width?: number;
+        height?: number;
+        cardName?: string;
+      };
+      let items: RandomItem[];
+      try {
+        const resp = await fetch('/api/agent/random-batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ preferenceCount, tweakCount, exploreCount, mixPreset: diceMixPreset, ratioMode: diceRatioMode }),
+        });
+        if (!resp.ok) {
+          const errText = await resp.text();
+          showToast(`随机生成失败：${errText || `HTTP ${resp.status}`}`);
+          return;
+        }
+        const data = await resp.json() as { items: RandomItem[] };
+        items = Array.isArray(data.items) ? data.items : [];
+      } catch (err) {
+        showToast(`随机生成请求失败：${err instanceof Error ? err.message : String(err)}`);
+        return;
+      }
+
+      if (items.length < total) {
+        showToast(`随机生成返回条数不足（${items.length}/${total}），已中止`);
+        return;
+      }
+
+      // 基础配置：复用 sidebar 当前其他字段；model / loras 会被每条 item 的推荐覆盖
+      // 参考图：仅当 diceRefMode === 'auto' 且 sidebar 已配置参考图时注入
+      const useSidebarRef = diceRefMode === 'auto' && !!referenceImage;
+      const baseConfig: Omit<Text2ImgConfig, 'prompt' | 'model' | 'loras'> = {
+        negativePrompt,
+        width:     selectedPreset ? selectedPreset.width : customWidth,
+        height:    selectedPreset ? selectedPreset.height : customHeight,
+        steps,
+        cfg,
+        sampler,
+        scheduler,
+        ...(useSidebarRef ? { referenceImage, poseStrength, depthStrength, useOriginalRatio: ratio === 'original', ...(refImageSize ? { refImageWidth: refImageSize.width, refImageHeight: refImageSize.height } : {}) } : {}),
+      };
+
+      const CATEGORY_LABEL: Record<'preference' | 'tweak' | 'explore', string> = {
+        preference: '偏好',
+        tweak:      '微改',
+        explore:    '探索',
+      };
+      // 按档位累计计数（仅用于 fallback 名字与分母展示）
+      const categoryTotals = { preference: preferenceCount, tweak: tweakCount, explore: exploreCount };
+      const categoryCursor = { preference: 0, tweak: 0, explore: 0 };
+      // 同批次已使用的卡片名集合，用于在 LLM 偶发撞名时追加 _2/_3... 防重
+      const usedNames = new Set<string>();
+
+      let firstImageId: string | null = null;
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+
+        // 每条 item 用推荐的 LoRA 和模型覆盖；无推荐则回退到 sidebar 当前值
+        const recLoras = Array.isArray(item.recommendedLoras) && item.recommendedLoras.length > 0
+          ? item.recommendedLoras.map(l => ({ model: l.model, enabled: true, strength: l.strength }))
+          : loras;
+        const recModel = item.recommendedModel && models.includes(item.recommendedModel)
+          ? item.recommendedModel
+          : (model || (models[0] ?? ''));
+
+        const cfg: Text2ImgConfig = {
+          ...baseConfig,
+          model: recModel,
+          loras: recLoras,
+          prompt: item.prompt,
+          seed: genUniqueSeed(),
+          // 若比例模式为 auto 且 LLM 返回了有效 width/height，覆盖 baseConfig 的比例
+          ...(diceRatioMode === 'auto' && item.width && item.height ? { width: item.width, height: item.height } : {}),
+        };
+        categoryCursor[item.category] += 1;
+        // 注意：displayName 作为 ComfyUI SaveImage.filename_prefix，不能含 "/" 或 "\"，
+        // 否则 ComfyUI 会把 "/" 前的部分当成 subfolder，导致本地文件互相覆盖。
+        // 命名策略：直接使用 LLM 的 cardName；若 LLM 没返回，回退到「随机·偏好 1-5」；
+        // 仅在同批撞名时才追加 _2/_3... 作为防重保底。
+        const seq = categoryCursor[item.category];
+        const fallbackName = `随机·${CATEGORY_LABEL[item.category]} ${seq}-${categoryTotals[item.category]}`;
+        const baseName = (item.cardName && item.cardName.trim().length > 0 ? item.cardName.trim() : fallbackName)
+          .replace(/[/\\]/g, '-');
+        let displayName = baseName;
+        if (usedNames.has(displayName)) {
+          let n = 2;
+          while (usedNames.has(`${baseName}_${n}`)) n++;
+          displayName = `${baseName}_${n}`;
+        }
+        usedNames.add(displayName);
+
+        const imageId = addText2ImgCard(cfg, displayName);
+        if (firstImageId === null) {
+          firstImageId = imageId;
+          setFlashingImage(imageId);
+        }
+        startTask(imageId, '');
+        try {
+          const res = await fetch('/api/workflow/7/execute', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ clientId, ...cfg, name: displayName }),
+          });
+          if (!res.ok) {
+            console.error('[Text2Img] Random execute failed:', await res.text());
+            continue;
+          }
+          const data = await res.json() as { promptId: string };
+          startTask(imageId, data.promptId);
+          sendMessage({ type: 'register', promptId: data.promptId, workflowId: 7, sessionId, tabId: 7 });
+        } catch (err) {
+          console.error('[Text2Img] Random execute error:', err);
+        }
+      }
+    } finally {
+      setIsRandomizing(false);
+    }
+  }, [clientId, isGenerating, isRandomizing, batchCount, diceMixPreset, diceRefMode, diceRatioMode, model, models, loraModels, loras, negativePrompt, selectedPreset, customWidth, customHeight, steps, cfg, sampler, scheduler, referenceImage, poseStrength, depthStrength, ratio, refImageSize, addText2ImgCard, startTask, setFlashingImage, sendMessage, sessionId]);
 
   const handleQuickAction = useCallback(async (mode: 'naturalToTags' | 'tagsToNatural' | 'detailer') => {
     if (!prompt.trim()) return;
@@ -1525,6 +1752,38 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
           >
             {isGenerating && <Loader size={14} style={{ animation: 'pulse 1s ease-in-out infinite' }} />}
             生成
+          </button>
+          <button
+            onClick={handleRandomGenerate}
+            disabled={!clientId || isGenerating || isRandomizing || models.length === 0}
+            title={`随机生成（档位：${DICE_MIX_LABEL[diceMixPreset]} / 参考图：${diceRefMode === 'auto' ? '使用（如有）' : '不使用'} / 比例：${diceRatioMode === 'auto' ? '自动' : '手动'}，可在设置-随机生成中调整）`}
+            style={{
+              padding: '10px',
+              width: 40,
+              backgroundColor: 'var(--color-bg)',
+              color: 'var(--color-text)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 8,
+              fontSize: '14px',
+              fontWeight: 600,
+              cursor: (!clientId || isGenerating || isRandomizing || models.length === 0) ? 'not-allowed' : 'pointer',
+              opacity: (!clientId || isGenerating || isRandomizing || models.length === 0) ? 0.5 : 1,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'background-color 0.15s, opacity 0.15s',
+              flexShrink: 0,
+            }}
+            onMouseEnter={(e) => {
+              if (!e.currentTarget.disabled) e.currentTarget.style.backgroundColor = 'var(--color-surface-hover, rgba(255,255,255,0.06))';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'var(--color-bg)';
+            }}
+          >
+            {isRandomizing
+              ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+              : <Dices size={16} />}
           </button>
           <input
             type="number"

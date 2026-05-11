@@ -1,6 +1,7 @@
 interface SegmentedControlOption {
   value: string;
   label: string;
+  title?: string;
 }
 
 interface SegmentedControlProps {
@@ -25,6 +26,7 @@ export function SegmentedControl({ options, value, onChange }: SegmentedControlP
           <button
             key={opt.value}
             onClick={() => onChange(opt.value)}
+            title={opt.title}
             style={{
               padding: '5px 14px',
               borderRadius: 6,

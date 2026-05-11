@@ -18,16 +18,21 @@
 - [ProgressOverlay.tsx](file://client/src/components/ProgressOverlay.tsx)
 - [ImageCard.tsx](file://client/src/components/ImageCard.tsx)
 - [StatusBar.tsx](file://client/src/components/StatusBar.tsx)
+- [desktopNotify.ts](file://client/src/services/desktopNotify.ts)
+- [useSettingsStore.ts](file://client/src/hooks/useSettingsStore.ts)
+- [SettingsModal.tsx](file://client/src/components/SettingsModal.tsx)
 </cite>
 
 ## 更新摘要
 **变更内容**
-- 新增阶段化进度同步支持：WebSocket 通信层新增 stage 信息处理，支持客户端与服务器间的阶段化进度同步
+- 新增桌面通知系统集成：在 useWebSocket.ts 中集成了 desktopNotify 服务，实现任务完成和错误事件的桌面通知功能
 - 更新进度消息格式：progress 消息包含 stage、stepIndex、stepTotal 字段，提供更详细的执行阶段信息
 - 增强 UI 展示能力：ProgressOverlay 和 ImageCard 组件支持阶段化进度显示
 - 优化服务器端进度计算：基于节点权重的阶段化进度计算，提供更准确的执行状态反馈
 - **新增**：多轮检测和tick计数支持：服务器端实现了基于tick计数的多轮进度检测算法，支持复杂工作流的精确进度跟踪
 - **新增**：Tiled采样器特殊处理：针对UltimateSDUpscale等Tiled采样器节点的特殊进度计算逻辑
+- **新增**：桌面通知权限管理：实现浏览器通知权限的动态申请和管理，支持仅在后台时弹出通知
+- **新增**：工作流标签解析：通过 resolveWorkflowLabel 函数从 tabData 中解析工作流名称，用于通知文案
 
 ## 目录
 1. [简介](#简介)
@@ -37,34 +42,37 @@
 5. [详细组件分析](#详细组件分析)
 6. [阶段化进度同步机制](#阶段化进度同步机制)
 7. [多轮检测与Tick计数算法](#多轮检测与tick计数算法)
-8. [AI代理通信架构](#ai代理通信架构)
-9. [竞态条件修复机制](#竞态条件修复机制)
-10. [依赖关系分析](#依赖关系分析)
-11. [性能考量](#性能考量)
-12. [故障排除指南](#故障排除指南)
-13. [结论](#结论)
-14. [附录](#附录)
+8. [桌面通知系统](#桌面通知系统)
+9. [AI代理通信架构](#ai代理通信架构)
+10. [竞态条件修复机制](#竞态条件修复机制)
+11. [依赖关系分析](#依赖关系分析)
+12. [性能考量](#性能考量)
+13. [故障排除指南](#故障排除指南)
+14. [结论](#结论)
+15. [附录](#附录)
 
 ## 简介
 本文件系统性阐述本项目中的 WebSocket 实时通信实现与最佳实践，重点覆盖：
 - 连接建立、消息传输、状态同步等核心机制
 - useWebSocket Hook 的连接管理、消息监听、错误处理与重连策略
 - 阶段化进度同步机制，支持客户端与服务器间的详细执行阶段信息同步
+- **新增**：桌面通知系统集成，实现任务完成和错误事件的系统级通知
 - **新增**：多轮检测与Tick计数算法，支持复杂工作流的精确进度跟踪
 - AI代理通信架构，支持智能对话和工作流执行
 - 服务器端 WebSocket 服务与 ComfyUI 的对接
 - 应用场景：任务进度实时更新、状态同步、输出下载与通知、AI代理智能交互
 - 性能优化与故障排除建议
 - **新增**：阶段化进度同步机制，提供更精确的执行阶段反馈
+- **新增**：桌面通知权限管理，确保用户体验和隐私保护
 
 ## 项目结构
-前端通过自定义 Hook 统一管理 WebSocket 连接，支持工作流任务和AI代理两种通信模式。服务器端基于 ws 构建 WebSocket 服务，负责与 ComfyUI 交互并将进度/完成/错误事件回传给前端。**新增**：服务器端实现了基于节点权重的阶段化进度计算，前端通过 stage、stepIndex、stepTotal 字段获取详细的执行阶段信息。**新增**：多轮检测算法支持复杂工作流的精确进度跟踪。
+前端通过自定义 Hook 统一管理 WebSocket 连接，支持工作流任务和AI代理两种通信模式。服务器端基于 ws 构建 WebSocket 服务，负责与 ComfyUI 交互并将进度/完成/错误事件回传给前端。**新增**：服务器端实现了基于节点权重的阶段化进度计算，前端通过 stage、stepIndex、stepTotal 字段获取详细的执行阶段信息。**新增**：多轮检测算法支持复杂工作流的精确进度跟踪。**新增**：桌面通知系统通过 desktopNotify 服务实现浏览器通知权限管理和系统级通知推送。
 
 ```mermaid
 graph TB
 subgraph "客户端"
 A["App.tsx<br/>挂载 useWebSocket"]
-B["useWebSocket.ts<br/>全局单例连接"]
+B["useWebSocket.ts<br/>全局单例连接<br/>集成桌面通知"]
 C["useWorkflowStore.ts<br/>工作流状态管理<br/>支持阶段化进度"]
 D["useAgentStore.ts<br/>AI代理状态管理"]
 E["AgentDialog.tsx<br/>AI代理对话界面"]
@@ -72,30 +80,36 @@ F["AgentFab.tsx<br/>AI代理浮动按钮"]
 G["QueuePanel.tsx<br/>发送注册消息"]
 H["ProgressOverlay.tsx<br/>阶段化进度显示"]
 I["ImageCard.tsx<br/>任务卡片UI"]
+J["desktopNotify.ts<br/>桌面通知服务<br/>权限管理"]
+K["useSettingsStore.ts<br/>通知设置管理"]
+L["SettingsModal.tsx<br/>通知设置界面"]
 end
 subgraph "服务器"
-J["server/index.ts<br/>WebSocketServer /ws<br/>阶段化进度计算<br/>多轮检测算法"]
-K["server/routes/agent.ts<br/>AI代理路由"]
-L["server/services/agentService.ts<br/>AI代理服务"]
-M["ComfyUI<br/>执行引擎"]
-N["comfyui.ts<br/>ComfyUI连接管理<br/>事件去重机制<br/>节点权重计算"]
-O["阶段映射表<br/>class_type → 中文阶段名"]
-P["多轮检测算法<br/>Tick计数支持"]
+M["server/index.ts<br/>WebSocketServer /ws<br/>阶段化进度计算<br/>多轮检测算法"]
+N["server/routes/agent.ts<br/>AI代理路由"]
+O["server/services/agentService.ts<br/>AI代理服务"]
+P["ComfyUI<br/>执行引擎"]
+Q["comfyui.ts<br/>ComfyUI连接管理<br/>事件去重机制<br/>节点权重计算"]
+R["阶段映射表<br/>class_type → 中文阶段名"]
+S["多轮检测算法<br/>Tick计数支持"]
 end
 A --> B
 E --> B
 G --> B
-B <- --> J
-J --> M
-J --> N
+B <- --> M
+M --> P
+M --> Q
 B --> C
 B --> D
+B --> J
 C --> H
 C --> I
-J --> O
-J --> P
-K --> L
-E --> K
+K --> J
+L --> K
+M --> R
+M --> S
+N --> O
+E --> N
 ```
 
 **图表来源**
@@ -112,18 +126,23 @@ E --> K
 - [comfyui.ts:127-188](file://server/src/services/comfyui.ts#L127-L188)
 - [ProgressOverlay.tsx:12](file://client/src/components/ProgressOverlay.tsx#L12-L125)
 - [ImageCard.tsx:629-638](file://client/src/components/ImageCard.tsx#L629-L638)
+- [desktopNotify.ts:1-77](file://client/src/services/desktopNotify.ts#L1-L77)
+- [useSettingsStore.ts:13](file://client/src/hooks/useSettingsStore.ts#L13)
+- [SettingsModal.tsx:418-449](file://client/src/components/SettingsModal.tsx#L418-L449)
 
 **章节来源**
-- [useWebSocket.ts:1-202](file://client/src/hooks/useWebSocket.ts#L1-L202)
+- [useWebSocket.ts:1-276](file://client/src/hooks/useWebSocket.ts#L1-L276)
 - [index.ts:63](file://server/src/index.ts#L63)
 
 ## 核心组件
-- 客户端 Hook：统一管理 WebSocket 生命周期、消息分发与重连
+- 客户端 Hook：统一管理 WebSocket 生命周期、消息分发与重连，**新增**：集成桌面通知服务
 - 阶段化状态管理：useWorkflowStore 支持 stage、stepIndex、stepTotal 字段的状态更新
 - 类型系统：定义服务端消息协议（连接、开始、进度、完成、错误），**新增**：支持阶段化进度字段
 - UI 组件：ProgressOverlay 和 ImageCard 支持阶段化进度显示
 - 服务器端：转发客户端注册请求、缓冲事件、回放丢失事件、下载输出并回传
 - AI代理服务：提供智能对话、意图解析、工作流执行和生成历史管理
+- **新增**：桌面通知服务：基于浏览器 Notifications API，实现系统级通知推送
+- **新增**：权限管理系统：动态申请和管理浏览器通知权限，支持仅在后台时弹出通知
 - **新增**：阶段映射机制：class_type → 中文阶段名映射，提供用户友好的进度显示
 - **新增**：多轮检测算法：支持复杂工作流的精确进度跟踪，包括Tick计数和节点切换检测
 
@@ -135,9 +154,10 @@ E --> K
 - [agent.ts:369](file://server/src/routes/agent.ts#L369)
 - [agentService.ts:1-118](file://server/src/services/agentService.ts#L1-L118)
 - [comfyui.ts:127-188](file://server/src/services/comfyui.ts#L127-L188)
+- [desktopNotify.ts:1-77](file://client/src/services/desktopNotify.ts#L1-L77)
 
 ## 架构总览
-WebSocket 通信链路由客户端 Hook 建立，服务器作为代理与 ComfyUI 交互，最终将事件回传至客户端，驱动 UI 实时更新。AI代理通信通过独立的状态管理和对话流程实现智能交互。**新增**：服务器端实现了基于节点权重的阶段化进度计算，提供更精确的执行阶段反馈。**新增**：多轮检测算法支持复杂工作流的精确进度跟踪。
+WebSocket 通信链路由客户端 Hook 建立，服务器作为代理与 ComfyUI 交互，最终将事件回传至客户端，驱动 UI 实时更新。AI代理通信通过独立的状态管理和对话流程实现智能交互。**新增**：服务器端实现了基于节点权重的阶段化进度计算，提供更精确的执行阶段反馈。**新增**：多轮检测算法支持复杂工作流的精确进度跟踪。**新增**：桌面通知系统通过 desktopNotify 服务实现浏览器通知权限管理和系统级通知推送。
 
 ```mermaid
 sequenceDiagram
@@ -148,6 +168,7 @@ participant Agent as "AI代理服务"
 participant Cfg as "ComfyUI"
 participant StageCalc as "阶段化进度计算"
 participant MultiRound as "多轮检测算法"
+participant DesktopNotify as "桌面通知服务"
 UI->>Hook : 调用 sendMessage(...)
 Hook->>Srv : 发送消息(如注册)
 Srv->>StageCalc : 计算阶段化进度
@@ -158,8 +179,11 @@ Cfg-->>Srv : 执行开始/进度(含阶段信息)
 Srv-->>Hook : 回传事件(带 promptId、stage、stepIndex、stepTotal)
 Hook->>Hook : 解析消息类型
 Hook->>UI : 触发状态更新(进度/阶段/完成/错误)
+Hook->>DesktopNotify : 处理桌面通知(完成/错误)
+DesktopNotify->>DesktopNotify : 权限检查与通知推送
 Hook->>Agent : 处理AI代理事件
 Agent->>UI : 更新对话状态和执行进度
+Agent->>DesktopNotify : 处理AI代理桌面通知
 ```
 
 **图表来源**
@@ -167,6 +191,7 @@ Agent->>UI : 更新对话状态和执行进度
 - [agent.ts:633](file://server/src/routes/agent.ts#L633)
 - [useWorkflowStore.ts:398-499](file://client/src/hooks/useWorkflowStore.ts#L398-L499)
 - [index.ts:132-144](file://server/src/index.ts#L132-L144)
+- [desktopNotify.ts:39-59](file://client/src/services/desktopNotify.ts#L39-L59)
 
 ## 详细组件分析
 
@@ -176,6 +201,8 @@ Agent->>UI : 更新对话状态和执行进度
 - 消息路由：解析服务端消息，调用状态管理函数更新任务状态
 - 发送消息：封装 JSON 序列化与 readyState 校验
 - AI代理支持：独立处理AI代理执行状态，与工作流任务状态分离
+- **新增**：桌面通知集成：在任务完成和错误事件时调用 desktopNotify 服务
+- **新增**：工作流标签解析：通过 resolveWorkflowLabel 函数获取工作流名称
 - **新增**：阶段化进度处理：支持 stage、stepIndex、stepTotal 字段的进度更新
 
 ```mermaid
@@ -190,11 +217,27 @@ Setup --> UseConn
 UseConn --> ParseMsg["解析服务端消息"]
 ParseMsg --> WorkFlow{"工作流任务?"}
 WorkFlow --> |是| UpdateWF["更新工作流状态(stage/stepIndex/stepTotal)"]
+UpdateWF --> CheckComplete{"完成事件?"}
+CheckComplete --> |是| CheckNotify{"桌面通知开启?"}
+CheckNotify --> |是| ResolveLabel["resolveWorkflowLabel"]
+ResolveLabel --> NotifyComplete["notifyTaskComplete"]
+CheckNotify --> |否| Send["sendMessage(data)"]
+CheckComplete --> |否| CheckError{"错误事件?"}
+CheckError --> |是| CheckNotify2{"桌面通知开启?"}
+CheckNotify2 --> |是| ResolveLabel2["resolveWorkflowLabel"]
+ResolveLabel2 --> NotifyError["notifyTaskError"]
+CheckNotify2 --> |否| Send
 WorkFlow --> |否| AgentMsg{"AI代理消息?"}
 AgentMsg --> |是| UpdateAgent["更新代理状态"]
+UpdateAgent --> AgentComplete{"代理完成事件?"}
+AgentComplete --> |是| CheckAgentNotify{"桌面通知开启?"}
+CheckAgentNotify --> |是| NotifyAgentComplete["notifyTaskComplete(Agent)"]
+CheckAgentNotify --> |否| Send
+AgentComplete --> |否| AgentError{"代理错误事件?"}
+AgentError --> |是| CheckAgentNotify2{"桌面通知开启?"}
+CheckAgentNotify2 --> |是| NotifyAgentError["notifyTaskError(Agent)"]
+CheckAgentNotify2 --> |否| Send
 AgentMsg --> |否| Ignore["忽略消息"]
-UpdateWF --> Send["sendMessage(data)"]
-UpdateAgent --> Send
 Send --> Ready{"readyState=OPEN?"}
 Ready --> |是| WSsend["ws.send(JSON)"]
 Ready --> |否| Ignore2["忽略发送"]
@@ -206,6 +249,8 @@ Ignore2 --> End
 - [useWebSocket.ts:75-98](file://client/src/hooks/useWebSocket.ts#L75-L98)
 - [useWebSocket.ts:10-73](file://client/src/hooks/useWebSocket.ts#L10-L73)
 - [useWebSocket.ts:131-153](file://client/src/hooks/useWebSocket.ts#L131-L153)
+- [useWebSocket.ts:140-156](file://client/src/hooks/useWebSocket.ts#L140-L156)
+- [useWebSocket.ts:192-221](file://client/src/hooks/useWebSocket.ts#L192-L221)
 
 **章节来源**
 - [useWebSocket.ts:10-73](file://client/src/hooks/useWebSocket.ts#L10-L73)
@@ -312,12 +357,14 @@ WSMessage <|-- WSErrorMessage
 - AI代理状态：对话消息、执行状态、收藏管理
 - 事件驱动：根据消息类型调用状态管理函数，跨标签页同步
 - UI 响应：进度条、完成态高亮、错误提示、对话界面、**新增**：阶段化进度显示
+- **新增**：桌面通知：在任务完成和错误时通过 desktopNotify 服务推送系统通知
 
 ```mermaid
 sequenceDiagram
 participant WS as "WebSocket"
 participant WFStore as "useWorkflowStore"
 participant AgentStore as "useAgentStore"
+participant DesktopNotify as "desktopNotify"
 participant UI as "各组件"
 WS->>WFStore : updateProgress(promptId, percentage, stage, stepIndex, stepTotal)
 WS->>AgentStore : updateAgentProgress(percentage)
@@ -331,6 +378,8 @@ WS->>WFStore : failTask(promptId, message)
 WS->>AgentStore : failAgentExecution(message)
 WFStore-->>UI : 标记错误并显示
 AgentStore-->>UI : 显示错误状态
+Note over DesktopNotify : 任务完成/错误通知
+DesktopNotify->>DesktopNotify : 权限检查与通知推送
 ```
 
 **图表来源**
@@ -352,6 +401,7 @@ AgentStore-->>UI : 显示错误状态
 - AI代理对话：AgentDialog 提供智能对话界面，支持意图解析和工作流执行
 - 生成历史：自动记录生成日志，支持收藏和后续处理
 - **新增**：阶段化进度显示：ProgressOverlay 和 ImageCard 组件展示详细的执行阶段信息
+- **新增**：桌面通知推送：任务完成和错误事件通过系统通知提醒用户
 - **新增**：复杂工作流支持：多轮检测算法支持UltimateSDUpscale等复杂节点的精确进度跟踪
 
 **章节来源**
@@ -478,6 +528,74 @@ Emit --> End(["完成"])
 - [index.ts:137-142](file://server/src/services/comfyui.ts#L137-L142)
 - [ProgressOverlay.tsx:76-94](file://client/src/components/ProgressOverlay.tsx#L76-L94)
 
+## 桌面通知系统
+
+### desktopNotify 服务设计
+桌面通知系统基于浏览器 Notifications API 实现，提供系统级通知推送功能：
+
+```mermaid
+flowchart TD
+Start(["通知触发"]) --> CheckSupport{"浏览器支持通知?"}
+CheckSupport --> |否| Return["静默返回"]
+CheckSupport --> |是| CheckBackground{"页面在后台?"}
+CheckBackground --> |否| Return
+CheckBackground --> |是| CheckPermission{"已获得权限?"}
+CheckPermission --> |否| RequestPermission["请求通知权限"]
+RequestPermission --> CheckPerm2{"权限已授予?"}
+CheckPerm2 --> |否| Return
+CheckPerm2 --> |是| CreateNotification["创建系统通知"]
+CheckPermission --> |是| CreateNotification
+CreateNotification --> SetOnClick["设置点击事件"]
+SetOnClick --> FocusWindow["聚焦窗口"]
+FocusWindow --> CloseNotification["关闭通知"]
+Return --> End(["完成"])
+```
+
+**图表来源**
+- [desktopNotify.ts:39-59](file://client/src/services/desktopNotify.ts#L39-L59)
+- [desktopNotify.ts:17-26](file://client/src/services/desktopNotify.ts#L17-L26)
+- [desktopNotify.ts:11-14](file://client/src/services/desktopNotify.ts#L11-L14)
+
+### 权限管理机制
+桌面通知系统实现了完善的权限管理机制：
+
+- **权限状态检查**：仅在 Notification.permission 为 'default' 时发起权限请求
+- **权限请求去重**：使用 permissionPromise 避免重复请求权限
+- **权限状态持久化**：通过 ensureNotificationPermission 函数管理权限状态
+- **前台/后台策略**：默认仅在页面不在前台时弹出通知，避免打扰用户
+
+### 通知触发流程
+桌面通知在以下场景自动触发：
+
+- **工作流任务完成**：notifyTaskComplete(workflowName, count, tag)
+- **工作流任务错误**：notifyTaskError(workflowName, message, tag)
+- **AI代理任务完成**：notifyTaskComplete(agentName, count, tag)
+- **AI代理任务错误**：notifyTaskError(agentName, message, tag)
+
+### 工作流标签解析
+resolveWorkflowLabel 函数从 tabData 中解析工作流名称：
+
+```mermaid
+flowchart TD
+Start(["resolveWorkflowLabel"]) --> GetState["获取 workflowStore 状态"]
+GetState --> IterateTabs["遍历 tabData"]
+IterateTabs --> CheckEntry["检查 imagePromptMap"]
+CheckEntry --> MatchPrompt{"匹配 promptId?"}
+MatchPrompt --> |是| ExtractTab["提取 tabId 和 workflowName"]
+MatchPrompt --> |否| NextEntry["检查下一个条目"]
+NextEntry --> CheckEntry
+ExtractTab --> Return["返回 {tabId, workflowName}"]
+```
+
+**图表来源**
+- [useWebSocket.ts:14-27](file://client/src/hooks/useWebSocket.ts#L14-L27)
+
+**章节来源**
+- [desktopNotify.ts:1-77](file://client/src/services/desktopNotify.ts#L1-L77)
+- [useWebSocket.ts:14-27](file://client/src/hooks/useWebSocket.ts#L14-L27)
+- [useWebSocket.ts:140-156](file://client/src/hooks/useWebSocket.ts#L140-L156)
+- [useWebSocket.ts:192-221](file://client/src/hooks/useWebSocket.ts#L192-L221)
+
 ## AI代理通信架构
 
 ### AgentDialog 组件设计
@@ -579,6 +697,8 @@ Fallback --> Cleanup
   - App.tsx 在应用入口挂载 useWebSocket，确保全局连接可用
   - QueuePanel.tsx 使用 sendMessage 发送注册消息
   - **新增**：ProgressOverlay 和 ImageCard 依赖阶段化进度信息进行 UI 渲染
+  - **新增**：desktopNotify 依赖 useSettingsStore 进行通知设置管理
+  - **新增**：resolveWorkflowLabel 依赖 useWorkflowStore 获取工作流标签
   - **新增**：多轮检测算法依赖comfyui.ts中的节点权重计算
 - 服务器端依赖
   - WebSocketServer 依赖 ws
@@ -593,10 +713,13 @@ graph LR
 App["App.tsx"] --> Hook["useWebSocket.ts"]
 Hook --> WFStore["useWorkflowStore.ts"]
 Hook --> AgentStore["useAgentStore.ts"]
+Hook --> DesktopNotify["desktopNotify.ts"]
 AgentDialog["AgentDialog.tsx"] --> Hook
 AgentDialog --> AgentStore
 AgentDialog --> WFStore
 QueuePanel["QueuePanel.tsx"] --> Hook
+DesktopNotify --> SettingsStore["useSettingsStore.ts"]
+SettingsStore --> SettingsModal["SettingsModal.tsx"]
 Server["server/index.ts"] --> WS["ws"]
 Server --> Comfy["ComfyUI"]
 Server --> RaceFix["竞态条件修复"]
@@ -623,6 +746,9 @@ ImageCard["ImageCard.tsx"] --> ProgressOverlay
 - [agent.ts:1-800](file://server/src/routes/agent.ts#L1-L800)
 - [agentService.ts:1-118](file://server/src/services/agentService.ts#L1-L118)
 - [comfyui.ts:127-188](file://server/src/services/comfyui.ts#L127-L188)
+- [desktopNotify.ts:1-77](file://client/src/services/desktopNotify.ts#L1-L77)
+- [useSettingsStore.ts:1-106](file://client/src/hooks/useSettingsStore.ts#L1-L106)
+- [SettingsModal.tsx:418-449](file://client/src/components/SettingsModal.tsx#L418-L449)
 
 **章节来源**
 - [App.tsx:74](file://client/src/components/App.tsx#L74)
@@ -637,6 +763,7 @@ ImageCard["ImageCard.tsx"] --> ProgressOverlay
 - 会话输出异步下载：完成后异步写盘，避免阻塞主流程
 - AI代理缓存：LLM调用结果和用户画像数据进行缓存，减少重复计算
 - 异步写入：生成日志和收藏数据采用异步写入，不阻塞主线程
+- **新增**：桌面通知性能优化：权限检查使用 promise 去重，避免重复请求
 - **新增**：阶段化进度计算的性能影响：基于节点权重的计算增加了服务器端处理开销，但提供了更精确的用户体验
 - **新增**：阶段映射表的内存优化：使用 Map 结构存储映射关系，避免重复计算
 - **新增**：竞态条件修复的性能影响：2秒等待时间对用户体验影响最小，但显著提高了completion事件的可靠性
@@ -668,6 +795,12 @@ ImageCard["ImageCard.tsx"] --> ProgressOverlay
   - 检查客户端注册消息的发送时机
   - 查看服务器日志中的等待时间统计
   - 确认任务执行时间是否过短导致竞态条件
+- **新增**：桌面通知相关问题
+  - 检查浏览器通知权限是否已授予
+  - 确认页面是否在后台状态
+  - 验证 desktopNotify 服务是否正确导入
+  - 检查通知设置开关是否启用
+  - 查看浏览器控制台是否有权限请求错误
 - **新增**：阶段化进度显示问题
   - 检查服务器端阶段映射表是否正确配置
   - 确认节点类型是否在映射表中
@@ -690,13 +823,15 @@ ImageCard["ImageCard.tsx"] --> ProgressOverlay
 ## 结论
 本项目采用"客户端单例连接 + 服务器事件缓冲回放"的方案，实现了稳定高效的实时通信。通过明确的消息协议与状态管理解耦，前端 UI 能够及时响应任务生命周期变化。新增的AI代理通信架构进一步增强了系统的智能化水平，通过意图解析和工作流执行，为用户提供更加自然的交互体验。
 
+**重要更新**：本次桌面通知系统的集成显著提升了用户体验。通过 desktopNotify 服务实现的系统级通知推送，用户可以在后台继续工作时及时获知任务完成或错误状态。权限管理系统确保了用户隐私保护，仅在页面不在前台时弹出通知，避免打扰用户的当前操作。
+
 **重要更新**：本次阶段化进度同步机制显著提升了系统的透明度和用户体验。通过在服务器端实现基于节点权重的阶段化进度计算，前端能够获得详细的执行阶段信息，包括当前阶段(stage)、步骤索引(stepIndex)和总步骤(stepTotal)。这种精细化的进度反馈让用户能够清楚地了解任务的执行状态，特别是在复杂的多节点工作流中。
 
 **重要更新**：本次多轮检测与Tick计数算法的引入，彻底解决了复杂工作流的进度跟踪难题。通过智能检测节点切换、识别多轮执行场景、使用Tick计数进行精确进度计算，系统能够准确跟踪UltimateSDUpscale等复杂节点的执行进度，避免了传统进度计算方法的局限性。
 
 **重要更新**：本次竞态条件修复显著提升了系统的可靠性。通过在completion事件处理前增加等待机制，确保了客户端注册消息的可靠接收，解决了任务执行过快时的事件丢失问题。这一改进在不影响用户体验的前提下，大幅提高了系统的稳定性。
 
-建议在生产环境中进一步完善心跳、背压与限流策略，并对异常路径进行更细粒度的日志记录与告警。同时，监控多轮检测算法的效果，确保Tick计数和预期Tick计算的准确性。对于大规模并发场景，可以考虑优化阶段映射表的内存使用和计算效率。
+建议在生产环境中进一步完善心跳、背压与限流策略，并对异常路径进行更细粒度的日志记录与告警。同时，监控多轮检测算法的效果，确保Tick计数和预期Tick计算的准确性。对于大规模并发场景，可以考虑优化阶段映射表的内存使用和计算效率。桌面通知系统方面，可以考虑添加通知声音和振动选项，以及更精细的通知分类管理。
 
 ## 附录
 
@@ -733,6 +868,7 @@ ImageCard["ImageCard.tsx"] --> ProgressOverlay
 - 通过 sendMessage 发送注册消息，携带 promptId、workflowId、sessionId、tabId
 - 依赖状态管理自动更新 UI，避免手动 DOM 操作
 - AI代理通信通过 AgentDialog 组件进行，支持智能对话和工作流执行
+- **新增**：桌面通知通过 desktopNotify 服务自动管理，无需手动处理
 - **新增**：阶段化进度信息通过 updateProgress 方法自动更新，无需手动处理
 - **新增**：多轮检测算法自动处理复杂节点的进度跟踪
 
@@ -741,6 +877,22 @@ ImageCard["ImageCard.tsx"] --> ProgressOverlay
 - [QueuePanel.tsx:107-112](file://client/src/components/QueuePanel.tsx#L107-L112)
 - [useWebSocket.ts:91-95](file://client/src/hooks/useWebSocket.ts#L91-L95)
 - [AgentDialog.tsx:162-393](file://client/src/components/AgentDialog.tsx#L162-L393)
+
+### 桌面通知配置与使用
+桌面通知系统通过以下方式配置和使用：
+
+- **权限管理**：通过 ensureNotificationPermission 函数动态申请权限
+- **通知触发**：在任务完成和错误事件时自动触发
+- **后台策略**：默认仅在页面不在前台时弹出通知
+- **设置界面**：通过 SettingsModal 组件管理通知开关
+- **工作流标签**：通过 resolveWorkflowLabel 函数获取工作流名称
+
+**章节来源**
+- [desktopNotify.ts:17-26](file://client/src/services/desktopNotify.ts#L17-L26)
+- [desktopNotify.ts:39-59](file://client/src/services/desktopNotify.ts#L39-L59)
+- [useSettingsStore.ts:57-60](file://client/src/hooks/useSettingsStore.ts#L57-L60)
+- [SettingsModal.tsx:431-447](file://client/src/components/SettingsModal.tsx#L431-L447)
+- [useWebSocket.ts:14-27](file://client/src/hooks/useWebSocket.ts#L14-L27)
 
 ### 阶段映射表配置
 服务器端维护了详细的节点类型到中文阶段名称的映射表，支持以下主要节点类型：

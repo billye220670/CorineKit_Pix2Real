@@ -23,6 +23,7 @@ export interface Text2ImgConfig {
   depthStrength?: number;     // 默认 0.3
   refImageWidth?: number;     // 参考图原始宽度
   refImageHeight?: number;    // 参考图原始高度
+  seed?: number;              // KSampler 随机种子；若未传，后端自动生成
 }
 
 export interface ZitConfig {

@@ -4,6 +4,11 @@ export type ReversePromptModel = 'Qwen3VL' | 'Florence' | 'WD-14' | 'Grok';
 export type LlmModel = 'local' | 'grok';
 export type StartupBehavior = 'restore' | 'new' | 'welcome';
 export type DropdownMenuStyle = 'classic' | 'fast';
+export type DiceMixPreset = 'preference' | 'balanced' | 'exploration';
+/** 随机生成 · 参考图行为：auto=若 sidebar 有参考图则一并使用；none=忽略 sidebar 的参考图 */
+export type DiceRefMode = 'auto' | 'none';
+/** 随机生成 · 比例模式：manual=跟随 sidebar；auto=由 LLM 为每条 item 建议合适比例 */
+export type DiceRatioMode = 'manual' | 'auto';
 
 interface SettingsState {
   reversePromptModel: ReversePromptModel;
@@ -11,6 +16,9 @@ interface SettingsState {
   startupBehavior: StartupBehavior;
   dropdownMenuStyle: DropdownMenuStyle;
   desktopNotifyOnComplete: boolean;
+  diceMixPreset: DiceMixPreset;
+  diceRefMode: DiceRefMode;
+  diceRatioMode: DiceRatioMode;
   settingsOpen: boolean;
   // 服务端托管的设置
   sessionsBase: string | null;          // 当前生效的 sessions 根目录（绝对路径）
@@ -21,6 +29,9 @@ interface SettingsState {
   setStartupBehavior: (behavior: StartupBehavior) => void;
   setDropdownMenuStyle: (style: DropdownMenuStyle) => void;
   setDesktopNotifyOnComplete: (enabled: boolean) => void;
+  setDiceMixPreset: (preset: DiceMixPreset) => void;
+  setDiceRefMode: (mode: DiceRefMode) => void;
+  setDiceRatioMode: (mode: DiceRatioMode) => void;
   openSettings: () => void;
   closeSettings: () => void;
   // 会话路径相关
@@ -34,6 +45,18 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   startupBehavior: (localStorage.getItem('settings_startupBehavior') as StartupBehavior | null) ?? 'restore',
   dropdownMenuStyle: (localStorage.getItem('settings_dropdownMenuStyle') as DropdownMenuStyle | null) ?? 'classic',
   desktopNotifyOnComplete: localStorage.getItem('settings_desktopNotifyOnComplete') !== '0',
+  diceMixPreset: (() => {
+    const v = localStorage.getItem('settings_diceMixPreset');
+    return v === 'preference' || v === 'balanced' || v === 'exploration' ? v : 'balanced';
+  })(),
+  diceRefMode: (() => {
+    const v = localStorage.getItem('settings_diceRefMode');
+    return v === 'auto' || v === 'none' ? v : 'auto';
+  })(),
+  diceRatioMode: (() => {
+    const v = localStorage.getItem('settings_diceRatioMode');
+    return v === 'manual' || v === 'auto' ? v : 'auto';
+  })(),
   settingsOpen: false,
   sessionsBase: null,
   defaultSessionsBase: null,
@@ -57,6 +80,18 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setDesktopNotifyOnComplete: (enabled) => {
     localStorage.setItem('settings_desktopNotifyOnComplete', enabled ? '1' : '0');
     set({ desktopNotifyOnComplete: enabled });
+  },
+  setDiceMixPreset: (preset) => {
+    localStorage.setItem('settings_diceMixPreset', preset);
+    set({ diceMixPreset: preset });
+  },
+  setDiceRefMode: (mode) => {
+    localStorage.setItem('settings_diceRefMode', mode);
+    set({ diceRefMode: mode });
+  },
+  setDiceRatioMode: (mode) => {
+    localStorage.setItem('settings_diceRatioMode', mode);
+    set({ diceRatioMode: mode });
   },
   openSettings: () => {
     // 打开面板时若尚未加载 sessions 路径，顺便拉一次

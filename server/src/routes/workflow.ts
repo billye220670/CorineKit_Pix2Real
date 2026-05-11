@@ -269,7 +269,7 @@ router.post('/10/execute', uploadFields, async (req, res) => {
 // POST /api/workflow/7/execute — 快速出图: text-to-image, JSON body (no file upload)
 router.post('/7/execute', express.json(), async (req, res) => {
   try {
-    const { clientId, model, loras, prompt, negativePrompt, width, height, steps, cfg, sampler, scheduler, name } = req.body as {
+    const { clientId, model, loras, prompt, negativePrompt, width, height, steps, cfg, sampler, scheduler, name, seed: clientSeed } = req.body as {
       clientId: string;
       model: string;
       loras?: Array<{ model: string; enabled: boolean; strength: number }>;
@@ -282,6 +282,7 @@ router.post('/7/execute', express.json(), async (req, res) => {
       sampler: string;
       scheduler: string;
       name?: string;
+      seed?: number;
     };
 
     if (!clientId) {
@@ -302,7 +303,7 @@ router.post('/7/execute', express.json(), async (req, res) => {
 
       const proTemplate = JSON.parse(fs.readFileSync(text2imgProTemplatePath, 'utf-8'));
       proTemplate['4'].inputs.ckpt_name = model;
-      proTemplate['3'].inputs.seed = Math.floor(Math.random() * 2 ** 32);
+      proTemplate['3'].inputs.seed = Number.isFinite(clientSeed) ? Math.floor(clientSeed as number) : Math.floor(Math.random() * 2 ** 32);
       proTemplate['3'].inputs.steps = steps;
       proTemplate['3'].inputs.cfg = cfg;
       proTemplate['3'].inputs.sampler_name = sampler;
@@ -318,7 +319,10 @@ router.post('/7/execute', express.json(), async (req, res) => {
         proTemplate['5'].inputs.height = height;
       }
       if (name) {
-        proTemplate['45'].inputs.filename_prefix = name;
+        // ComfyUI SaveImage 把 filename_prefix 中的 "/" 与 "\" 视为 subfolder 分隔符，
+        // 多条 prompt 若 "/" 后字段相同会产生同名输出文件（subfolder 不同但本地 saveOutputFile
+        // 只用 filename），导致后写者覆盖先写者，前端呈现为"一模一样"。这里统一替换为 "-"。
+        proTemplate['45'].inputs.filename_prefix = name.replace(/[/\\]/g, '-');
       }
 
       // LoRA handling for PRO workflow (nodes 70-74)
@@ -352,8 +356,8 @@ router.post('/7/execute', express.json(), async (req, res) => {
     // Node 5: image dimensions
     template['5'].inputs.width = width;
     template['5'].inputs.height = height;
-    // Node 3: sampler settings + random seed
-    template['3'].inputs.seed = Math.floor(Math.random() * 1125899906842624);
+    // Node 3: sampler settings + random seed (前端可传 seed 确保批量生成时不重复)
+    template['3'].inputs.seed = Number.isFinite(clientSeed) ? Math.floor(clientSeed as number) : Math.floor(Math.random() * 1125899906842624);
     template['3'].inputs.steps = steps;
     template['3'].inputs.cfg = cfg;
     template['3'].inputs.sampler_name = sampler;
@@ -368,7 +372,8 @@ router.post('/7/execute', express.json(), async (req, res) => {
     }
     // Node 45: output filename prefix
     if (name) {
-      template['45'].inputs.filename_prefix = name;
+      // 同上 PRO 分支说明：防止 "/" 被 ComfyUI 当作 subfolder 分隔符导致输出文件名碰撞、本地覆盖。
+      template['45'].inputs.filename_prefix = name.replace(/[/\\]/g, '-');
     }
 
     // LoRA handling: nodes 50, 51, 52, 53, 54 chained from Checkpoint #4

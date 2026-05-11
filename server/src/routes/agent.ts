@@ -648,6 +648,395 @@ router.get('/suggestions', async (req, res) => {
   }
 });
 
+// ── 批量随机生成（骰子按钮） ────────────────────────────────────────────────
+// 为 Tab 7 快速出图的随机骰子按钮生成 N 条 prompt 建议，
+// N = preferenceCount + tweakCount + exploreCount
+// 每条只返回 prompt 文本与所属档位，sidebar 其他配置不变。
+
+// 从画像/元数据提取 {nickname, triggerWords} 形式的 LoRA 条目，便于 fallback 拼英文 tags
+function extractLoraTriggersByCategory(
+  profile: any,
+  metadata: any,
+  category: string,
+  limit: number,
+): Array<{ nickname: string; triggerWords: string }> {
+  const out: Array<{ nickname: string; triggerWords: string }> = [];
+  const loras = (profile.loraPreferences || [])
+    .filter((lp: any) => metadata[lp.model]?.category === category);
+  for (const lp of loras) {
+    if (out.length >= limit) break;
+    const meta = metadata[lp.model];
+    const tw = (meta?.triggerWords || '').toString().trim();
+    if (!tw) continue;
+    out.push({ nickname: meta?.nickname || '', triggerWords: tw });
+  }
+  return out;
+}
+
+function extractUnusedLoraTriggers(
+  profile: any,
+  metadata: any,
+  limit: number,
+): Array<{ nickname: string; category: string; triggerWords: string }> {
+  const used = new Set((profile.loraPreferences || []).map((lp: any) => lp.model));
+  const pool = Object.entries(metadata)
+    .filter(([key, meta]: [string, any]) => {
+      return meta?.nickname
+        && ['角色', '姿势', '风格'].includes(meta.category)
+        && (meta.triggerWords || '').toString().trim().length > 0
+        && !used.has(key);
+    })
+    .map(([_, meta]: [string, any]) => ({
+      nickname: meta.nickname as string,
+      category: meta.category as string,
+      triggerWords: (meta.triggerWords as string).trim(),
+    }));
+  pool.sort(() => Math.random() - 0.5);
+  return pool.slice(0, limit);
+}
+
+// 英文 SD 标签化 prompt fallback（与 chat 流程最终下发到 Text2Img 的格式一致）
+function buildRandomBatchFallback(
+  profile: any,
+  metadata: any,
+  preferenceCount: number,
+  tweakCount: number,
+  exploreCount: number,
+): Array<{ category: 'preference' | 'tweak' | 'explore'; prompt: string }> {
+  const pick = <T,>(arr: T[]): T | undefined => arr.length === 0 ? undefined : arr[Math.floor(Math.random() * arr.length)];
+  const chars  = extractLoraTriggersByCategory(profile, metadata, '角色', 10);
+  const poses  = extractLoraTriggersByCategory(profile, metadata, '姿势', 10);
+  const exprs  = extractLoraTriggersByCategory(profile, metadata, '表情', 10);
+  const styles = extractLoraTriggersByCategory(profile, metadata, '风格', 10);
+  const explorePool = extractUnusedLoraTriggers(profile, metadata, 30);
+
+  // 英文通用 tag 片段
+  const viewsEN    = ['from front', 'from side', 'from behind', 'from above', 'close-up', 'full body shot', 'upper body', 'cowboy shot'];
+  const bgEN       = ['outdoors', 'indoors', 'cafe', 'street at night', 'rainy night', 'snowy field', 'under cherry blossoms', 'sunset beach', 'forest path', 'rooftop at dusk'];
+  const lightEN    = ['soft lighting', 'backlighting', 'rim light', 'cinematic lighting', 'volumetric light'];
+  const outfitEN   = ['school uniform', 'casual outfit', 'kimono', 'dress', 'hoodie', 'evening gown'];
+  const moodEN     = ['serene atmosphere', 'dynamic pose', 'dreamy mood'];
+
+  const joinTags = (tags: Array<string | undefined>): string =>
+    tags.filter((t): t is string => !!t && t.trim().length > 0).map(t => t.trim()).join(', ');
+
+  const items: Array<{ category: 'preference' | 'tweak' | 'explore'; prompt: string }> = [];
+
+  // preference: 画像锁定 —— 角色 + 姿势 + 表情 + 风格（全部用 triggerWords）
+  for (let i = 0; i < preferenceCount; i++) {
+    const view = pick(viewsEN);
+    const c = pick(chars);
+    const p = pick(poses);
+    const e = pick(exprs);
+    const s = pick(styles);
+    const outfit = pick(outfitEN);
+    const bg = pick(bgEN);
+    const prompt = joinTags([view, '1girl', c?.triggerWords, e?.triggerWords, p?.triggerWords, outfit, bg, s?.triggerWords]);
+    items.push({ category: 'preference', prompt: prompt || '1girl, solo, detailed illustration' });
+  }
+
+  // tweak: 沿用画像角色，更换场景/光线/构图
+  for (let i = 0; i < tweakCount; i++) {
+    const view = pick(viewsEN);
+    const c = pick(chars);
+    const bg = pick(bgEN);
+    const light = pick(lightEN);
+    const mood = pick(moodEN);
+    const s = pick(styles);
+    const prompt = joinTags([view, '1girl', c?.triggerWords, bg, light, mood, s?.triggerWords]);
+    items.push({ category: 'tweak', prompt: prompt || '1girl, solo, dynamic scene, cinematic lighting' });
+  }
+
+  // explore: 从未使用的 LoRA 中拉 triggerWords
+  for (let i = 0; i < exploreCount; i++) {
+    const view = pick(viewsEN);
+    const ex = pick(explorePool);
+    const bg = pick(bgEN);
+    const light = pick(lightEN);
+    const prompt = joinTags([view, '1girl', ex?.triggerWords, bg, light]);
+    items.push({ category: 'explore', prompt: prompt || '1girl, solo, experimental style, cinematic lighting' });
+  }
+
+  return items;
+}
+
+// 种子意图（中文自然语言）：按档位构造一条"用户点击暖场建议"那样的 user message
+function buildRandomSeed(
+  category: 'preference' | 'tweak' | 'explore',
+  profile: any,
+  metadata: any,
+): string {
+  const pick = <T,>(arr: T[]): T | undefined => arr.length === 0 ? undefined : arr[Math.floor(Math.random() * arr.length)];
+  const chars  = extractLorasByCategory(profile, metadata, '角色', 10);
+  const poses  = extractLorasByCategory(profile, metadata, '姿势', 10);
+  const exprs  = extractLorasByCategory(profile, metadata, '表情', 10);
+  const styles = extractLorasByCategory(profile, metadata, '风格', 10);
+  const unused = getUnusedLorasForExploration(profile, metadata, 30);
+
+  if (category === 'preference') {
+    const c = pick(chars); const p = pick(poses); const e = pick(exprs); const s = pick(styles);
+    const parts: string[] = [];
+    if (c) parts.push(`画一张${c}`);
+    if (p) parts.push(`${p}姿势`);
+    if (e) parts.push(`${e}表情`);
+    if (s) parts.push(`${s}风格`);
+    return parts.length > 0 ? parts.join('，') : '画一张二次元风格的角色图';
+  }
+
+  if (category === 'tweak') {
+    const c = pick(chars);
+    const scenes = ['在咖啡馆', '在夜色街头', '在樱花树下', '在海边黄昏', '在雪地', '在屋顶天台', '在森林小径', '在图书馆', '在雨中', '在霓虹都市'];
+    const lights = ['逆光剪影', '柔和光线', '电影感打光', '侧光', '夕阳金光', '冷色调氛围'];
+    const views  = ['侧面视角', '仰视视角', '俯视视角', '背后视角', '特写'];
+    const parts: string[] = [];
+    if (c) parts.push(c);
+    const scene = pick(scenes); if (scene) parts.push(scene);
+    const light = pick(lights); if (light) parts.push(light);
+    const view  = pick(views);  if (view)  parts.push(view);
+    return parts.length > 0 ? parts.join('，') : '画一张户外场景人物图';
+  }
+
+  // explore
+  const ex = pick(unused);
+  if (!ex) return '画一张陌生风格的探索性场景图';
+  if (ex.category === '角色')      return `画一张${ex.nickname}的新立绘`;
+  if (ex.category === '风格')      return `试试${ex.nickname}风格的场景图`;
+  /* 姿势 */                       return `画一张${ex.nickname}姿势的人物图`;
+}
+
+// 调用 chat 流程同款 LLM（buildSystemPrompt + generate_image tool），返回 parsed intent
+// 骰子模式额外要求 LLM 回填 ratio（可选，仅 ratioMode='auto' 生效）与 cardName（图片短名）
+const DICE_RATIO_ENUM = ['1:1', '3:4', '9:16', '4:3', '16:9'] as const;
+type DiceRatio = typeof DICE_RATIO_ENUM[number];
+const DICE_RATIO_TO_SIZE: Record<DiceRatio, { width: number; height: number }> = {
+  '1:1':  { width: 1024, height: 1024 },
+  '3:4':  { width: 832,  height: 1216 },
+  '9:16': { width: 768,  height: 1344 },
+  '4:3':  { width: 1216, height: 832  },
+  '16:9': { width: 1344, height: 768  },
+};
+
+/** 为骰子模式打造带 ratio / cardName 的 generate_image tool 变体 */
+function getDiceTools(ratioAuto: boolean): any[] {
+  const base = getAgentTools();
+  const patched = base.map((t) => {
+    if (t.type !== 'function' || t.function?.name !== 'generate_image') return t;
+    const cloned = JSON.parse(JSON.stringify(t));
+    // 追加到 description 末尾：部分模型（如 Grok）对 schema 新增字段极度保守，
+    // 必须同时在 description 里直说，否则会被忽略
+    cloned.function.description = (cloned.function.description || '') +
+      (ratioAuto
+        ? ' 【批量随机模式】调用本工具时必须额外返回两个字段：cardName（中文短名）与 ratio（画面比例枚举）。'
+        : ' 【批量随机模式】调用本工具时必须额外返回 cardName 字段（中文短名）。');
+    cloned.function.parameters.properties.cardName = {
+      type: 'string',
+      description: '【必填】像为画作/摄影作品起标题一样，为这张图起一个有画面感、有意境的中文短名（4-12 个汉字）。⛔ 不要机械堆叠 character+pose+style 元素（例如 ❌「赛博朋克菲谢尔壁尻」）。✅ 推荐用动作、意境、氛围、情绪表达：「独坐空山」「霓虹浅梦」「雨夜归人」「暮色独白」「回眸刹那」「森林低语」。📌 关于角色名——仅当你本次填写了 character 字段时，cardName 才需要自然地包含该角色中文原名（例「菲谢尔的霓虹独白」「雪原上的安琪拉」）；若本次不涉及特定角色（character 留空），请不要在 cardName 里硬塞任何人名。不要使用标点符号和英文，不要直接搬运 LoRA 名字。',
+    };
+    if (ratioAuto) {
+      cloned.function.parameters.properties.ratio = {
+        type: 'string',
+        enum: [...DICE_RATIO_ENUM],
+        description: '【必填】为这张图推荐合适的画面比例。人物立绘/肖像优先 3:4 或 9:16；风景/场景/横构图优先 4:3 或 16:9；群像/装饰性构图可选 1:1。',
+      };
+    }
+    // 把 cardName / ratio 推入 required，强制 LLM 必须返回
+    const req = Array.isArray(cloned.function.parameters.required) ? cloned.function.parameters.required : [];
+    if (!req.includes('cardName')) req.push('cardName');
+    if (ratioAuto && !req.includes('ratio')) req.push('ratio');
+    cloned.function.parameters.required = req;
+    return cloned;
+  });
+  return patched;
+}
+
+/** 骰子模式追加到 system prompt 末尾的专属指令 */
+function buildDiceDirective(ratioAuto: boolean): string {
+  const lines = [
+    '',
+    '## 🎲 批量随机模式专属要求（必读）',
+    '本次调用来自「快速出图」骰子批量生成，除了常规的 generate_image 字段外，以下字段为**必填**：',
+    '- `cardName`：像为一幅画作/摄影作品起标题一样，给这张图一个有画面感、有意境的中文短名（4-12 字）。\n  ⛔ 不要机械罗列 character+pose+style（例：❌「赛博朋克菲谢尔壁尻」）。\n  ✅ 用动作/意境/氛围/情绪去表达：「独坐空山」「霓虹浅梦」「雨夜归人」「暮色独白」「回眸刹那」「森林低语」「失温的星」。\n  📌 角色名规则（条件性）：仅当你本次填写了 character 字段时，cardName 才需要自然包含该角色中文名（例：「菲谢尔的霓虹独白」）；若本次不涉及特定角色（character 为空），请不要硬塞任何人名。\n  禁止标点和英文，禁止直接搬 LoRA 名字。',
+  ];
+  if (ratioAuto) {
+    lines.push('- `ratio`：从 "1:1" / "3:4" / "9:16" / "4:3" / "16:9" 中选一个（人物立绘优先 3:4；风景横构图优先 4:3；群像/装饰性构图可选 1:1）。');
+  }
+  lines.push('⚠️ 如果你忘记返回这些字段，系统将无法正确命名卡片与设定比例，请务必同时填写。');
+  return lines.join('\n');
+}
+
+type RunGenerateResult = {
+  intent: ParsedIntent;
+  ratio?: DiceRatio;
+  cardName?: string;
+};
+
+async function runGenerateImageForSeed(
+  seed: string,
+  profile: any,
+  metadata: any,
+  ratioAuto: boolean,
+): Promise<RunGenerateResult | null> {
+  const systemPrompt = buildSystemPrompt(profile, metadata) + buildDiceDirective(ratioAuto);
+  // user message 末尾再强调一次——Grok 对 user 最后一句注意力最高
+  const reinforcement = ratioAuto
+    ? '\n\n⚠️ 请务必在 generate_image 的参数中同时返回 cardName（4-12 汉字中文短名）和 ratio（画面比例枚举）。'
+    : '\n\n⚠️ 请务必在 generate_image 的参数中返回 cardName（4-12 汉字中文短名）。';
+  const messages: LLMMessage[] = [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: seed + reinforcement },
+  ];
+  const tools = getDiceTools(ratioAuto);
+  const llmResponse = await callLLM({ messages, tools, toolChoice: 'required', temperature: 0.9 });
+  if (!llmResponse.toolCalls || llmResponse.toolCalls.length === 0) return null;
+  const tc = llmResponse.toolCalls[0];
+  if (tc.function?.name !== 'generate_image') return null;
+  const intent = parseToolCall(tc, metadata, profile);
+  // 直接从 tool call arguments 里抠 ratio / cardName（parseToolCall 不认识这两个字段）
+  let ratio: DiceRatio | undefined;
+  let cardName: string | undefined;
+  let rawArgs: any = null;
+  try {
+    rawArgs = typeof tc.function.arguments === 'string'
+      ? JSON.parse(tc.function.arguments)
+      : (tc.function.arguments || {});
+    const rRatio = rawArgs.ratio ?? rawArgs.aspect_ratio ?? rawArgs.aspectRatio;
+    if (ratioAuto && typeof rRatio === 'string' && (DICE_RATIO_ENUM as readonly string[]).includes(rRatio)) {
+      ratio = rRatio as DiceRatio;
+    }
+    // 兼容 LLM 可能返回的多种键名：cardName / card_name / name / title
+    const rName = rawArgs.cardName ?? rawArgs.card_name ?? rawArgs.name ?? rawArgs.title;
+    if (typeof rName === 'string') {
+      const trimmed = rName.trim().replace(/[\s/\\]+/g, '').slice(0, 20);
+      if (trimmed.length > 0) cardName = trimmed;
+    }
+  } catch { /* ignore parse errors; ratio/cardName 将为 undefined */ }
+  console.log(`[Agent] random-batch LLM returned: ratio=${ratio ?? 'none'}, cardName=${cardName ?? 'none'}, rawKeys=${rawArgs ? Object.keys(rawArgs).join(',') : 'n/a'}`);
+  return { intent, ratio, cardName };
+}
+
+router.post('/random-batch', express.json(), async (req, res) => {
+  try {
+    const {
+      preferenceCount = 0,
+      tweakCount = 0,
+      exploreCount = 0,
+      ratioMode = 'auto',
+    } = (req.body || {}) as {
+      preferenceCount?: number;
+      tweakCount?: number;
+      exploreCount?: number;
+      mixPreset?: 'preference' | 'balanced' | 'exploration';
+      ratioMode?: 'manual' | 'auto';
+    };
+    const ratioAuto = ratioMode === 'auto';
+
+    const pc = Math.max(0, Math.floor(Number(preferenceCount) || 0));
+    const tc = Math.max(0, Math.floor(Number(tweakCount) || 0));
+    const ec = Math.max(0, Math.floor(Number(exploreCount) || 0));
+    const total = pc + tc + ec;
+
+    if (total <= 0 || total > 32) {
+      res.status(400).json({ error: 'Invalid count: total must be in [1, 32]' });
+      return;
+    }
+
+    const profile = buildUserProfile();
+    const metadata = getMetadata();
+    const maturity = getProfileMaturity(profile, metadata);
+
+    type RandomItem = {
+      category: 'preference' | 'tweak' | 'explore';
+      prompt: string;
+      recommendedLoras: Array<{ model: string; strength: number }>;
+      recommendedModel?: string;
+      /** LLM 推荐的比例（仅 ratioMode='auto' 时可能存在） */
+      ratio?: DiceRatio;
+      /** 对应的图片像素宽高（已由后端映射，前端可直接使用） */
+      width?: number;
+      height?: number;
+      /** LLM 取的中文短名，用于卡片 displayName / filename_prefix */
+      cardName?: string;
+    };
+
+    // fallback 兜底：把英文 SD tags prompt 过一次 parseToolCall 反推 LoRA/model
+    const buildFallbackItem = (category: 'preference' | 'tweak' | 'explore', rawPrompt: string): RandomItem => {
+      const fakeToolCall = {
+        function: {
+          name: 'generate_image',
+          arguments: JSON.stringify({ prompt: rawPrompt }),
+        },
+      };
+      const intent = parseToolCall(fakeToolCall, metadata, profile);
+      return {
+        category,
+        prompt: intent.prompt || rawPrompt,
+        recommendedLoras: (intent.recommendedLoras || []).map(l => ({ model: l.model, strength: l.strength })),
+        recommendedModel: intent.recommendedModel,
+      };
+    };
+
+    // cold 画像：LLM 难以命中，直接本地合成 + LoRA 反推
+    if (maturity === 'cold') {
+      const raw = buildRandomBatchFallback(profile, metadata, pc, tc, ec);
+      const coldItems: RandomItem[] = raw.map(r => buildFallbackItem(r.category, r.prompt));
+      res.json({ items: coldItems, fallback: true, maturity });
+      return;
+    }
+
+    // ── warm / hot：按档位构造 N 条中文种子，并发跑 chat 同款 generate_image LLM ──
+    const seeds: Array<{ category: 'preference' | 'tweak' | 'explore'; seed: string }> = [];
+    for (let i = 0; i < pc; i++) seeds.push({ category: 'preference', seed: buildRandomSeed('preference', profile, metadata) });
+    for (let i = 0; i < tc; i++) seeds.push({ category: 'tweak',      seed: buildRandomSeed('tweak',      profile, metadata) });
+    for (let i = 0; i < ec; i++) seeds.push({ category: 'explore',    seed: buildRandomSeed('explore',    profile, metadata) });
+
+    const settled = await Promise.all(seeds.map(async (s): Promise<RandomItem | null> => {
+      try {
+        const result = await runGenerateImageForSeed(s.seed, profile, metadata, ratioAuto);
+        if (!result || !result.intent || !result.intent.prompt) return null;
+        const intent = result.intent;
+        const size = result.ratio ? DICE_RATIO_TO_SIZE[result.ratio] : undefined;
+        return {
+          category: s.category,
+          prompt: intent.prompt,
+          recommendedLoras: (intent.recommendedLoras || []).map(l => ({ model: l.model, strength: l.strength })),
+          recommendedModel: intent.recommendedModel,
+          ratio: result.ratio,
+          width: size?.width,
+          height: size?.height,
+          cardName: result.cardName,
+        };
+      } catch (err) {
+        console.error(`[Agent] random-batch seed "${s.seed}" failed:`, err);
+        return null;
+      }
+    }));
+
+    // 对失败的槽位按原档位用 fallback 补齐，保证三档数量严格符合前端传入的 pc/tc/ec
+    const fallbackShortage = { preference: 0, tweak: 0, explore: 0 };
+    const items: RandomItem[] = [];
+    for (let i = 0; i < settled.length; i++) {
+      const r = settled[i];
+      if (r) {
+        items.push(r);
+      } else {
+        fallbackShortage[seeds[i].category] += 1;
+      }
+    }
+
+    const totalShortage = fallbackShortage.preference + fallbackShortage.tweak + fallbackShortage.explore;
+    if (totalShortage > 0) {
+      console.warn(`[Agent] random-batch LLM shortage: pref=${fallbackShortage.preference} tweak=${fallbackShortage.tweak} explore=${fallbackShortage.explore}`);
+      const fb = buildRandomBatchFallback(profile, metadata, fallbackShortage.preference, fallbackShortage.tweak, fallbackShortage.explore);
+      for (const r of fb) items.push(buildFallbackItem(r.category, r.prompt));
+    }
+
+    res.json({ items, fallback: totalShortage > 0, maturity });
+  } catch (err) {
+    console.error('[Agent] random-batch failed:', err);
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
 // POST /api/agent/log-generation - 记录生成日志
 router.post('/log-generation', (req, res) => {
   try {
