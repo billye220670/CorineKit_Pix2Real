@@ -9,6 +9,10 @@ export type DiceMixPreset = 'preference' | 'balanced' | 'exploration';
 export type DiceRefMode = 'auto' | 'none';
 /** 随机生成 · 比例模式：manual=跟随 sidebar；auto=由 LLM 为每条 item 建议合适比例 */
 export type DiceRatioMode = 'manual' | 'auto';
+/** 随机生成 · 内容限制：sfw=强制安全向；mixed=不加约束由 AI 自由发挥；nsfw=倾向成人向 */
+export type DiceContentPolicy = 'sfw' | 'mixed' | 'nsfw';
+/** 任务执行模式：manual=按数量一次性提交；autoLoop=持续循环直到手动停止 */
+export type TaskExecutionMode = 'manual' | 'autoLoop';
 
 interface SettingsState {
   reversePromptModel: ReversePromptModel;
@@ -19,6 +23,8 @@ interface SettingsState {
   diceMixPreset: DiceMixPreset;
   diceRefMode: DiceRefMode;
   diceRatioMode: DiceRatioMode;
+  diceContentPolicy: DiceContentPolicy;
+  taskExecutionMode: TaskExecutionMode;
   settingsOpen: boolean;
   // 服务端托管的设置
   sessionsBase: string | null;          // 当前生效的 sessions 根目录（绝对路径）
@@ -32,6 +38,8 @@ interface SettingsState {
   setDiceMixPreset: (preset: DiceMixPreset) => void;
   setDiceRefMode: (mode: DiceRefMode) => void;
   setDiceRatioMode: (mode: DiceRatioMode) => void;
+  setDiceContentPolicy: (policy: DiceContentPolicy) => void;
+  setTaskExecutionMode: (mode: TaskExecutionMode) => void;
   openSettings: () => void;
   closeSettings: () => void;
   // 会话路径相关
@@ -56,6 +64,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   diceRatioMode: (() => {
     const v = localStorage.getItem('settings_diceRatioMode');
     return v === 'manual' || v === 'auto' ? v : 'auto';
+  })(),
+  diceContentPolicy: (() => {
+    const v = localStorage.getItem('settings_diceContentPolicy');
+    return v === 'sfw' || v === 'mixed' || v === 'nsfw' ? v : 'mixed';
+  })(),
+  taskExecutionMode: (() => {
+    const v = localStorage.getItem('settings_taskExecutionMode');
+    return v === 'autoLoop' ? 'autoLoop' : 'manual';
   })(),
   settingsOpen: false,
   sessionsBase: null,
@@ -92,6 +108,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setDiceRatioMode: (mode) => {
     localStorage.setItem('settings_diceRatioMode', mode);
     set({ diceRatioMode: mode });
+  },
+  setDiceContentPolicy: (policy) => {
+    localStorage.setItem('settings_diceContentPolicy', policy);
+    set({ diceContentPolicy: policy });
+  },
+  setTaskExecutionMode: (mode) => {
+    localStorage.setItem('settings_taskExecutionMode', mode);
+    set({ taskExecutionMode: mode });
   },
   openSettings: () => {
     // 打开面板时若尚未加载 sessions 路径，顺便拉一次

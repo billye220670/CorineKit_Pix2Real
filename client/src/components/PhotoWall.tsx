@@ -8,6 +8,7 @@ import { Play, Trash2, Type, Check, Minus, Eraser, Pencil } from 'lucide-react';
 import { useWebSocket } from '../hooks/useWebSocket.js';
 import { showToast } from '../hooks/useToast.js';
 import { renameCardsBatch } from '../services/sessionService.js';
+import { useAutoLoopStore } from '../hooks/useAutoLoopStore.js';
 
 export type ViewSize = 'small' | 'medium' | 'large';
 
@@ -194,6 +195,11 @@ export function PhotoWall({ viewSize }: PhotoWallProps) {
 
   const handleBatchExecute = async () => {
     if (!clientId) return;
+
+    // 跨 Tab 拦截守卫：当前若有其它 Tab 的循环在跑，先询问用户
+    const guarded = await useAutoLoopStore.getState().guardBeforeSubmit(activeTab);
+    if (!guarded) return;
+
     const targetImages = isMultiSelectMode
       ? images.filter((img) => selectedImageIds.includes(img.id))
       : images;

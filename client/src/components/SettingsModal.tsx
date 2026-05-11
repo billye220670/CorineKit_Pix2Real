@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { X, FolderOpen } from 'lucide-react';
-import { useSettingsStore, type ReversePromptModel, type LlmModel, type StartupBehavior, type DropdownMenuStyle, type DiceMixPreset, type DiceRefMode, type DiceRatioMode } from '../hooks/useSettingsStore.js';
+import { useSettingsStore, type ReversePromptModel, type LlmModel, type StartupBehavior, type DropdownMenuStyle, type DiceMixPreset, type DiceRefMode, type DiceRatioMode, type DiceContentPolicy, type TaskExecutionMode } from '../hooks/useSettingsStore.js';
+import { useAutoLoopStore } from '../hooks/useAutoLoopStore.js';
 import { SegmentedControl } from './SegmentedControl.js';
 import { ensureNotificationPermission } from '../services/desktopNotify.js';
 import { MyProfileSection } from './MyProfileSection.js';
@@ -42,6 +43,17 @@ const DICE_REF_MODE_OPTIONS: { value: DiceRefMode; label: string; title: string 
 const DICE_RATIO_MODE_OPTIONS: { value: DiceRatioMode; label: string; title: string }[] = [
   { value: 'manual', label: '手动', title: '所有随机结果都跟随侧边栏当前比例' },
   { value: 'auto',   label: '自动', title: '由 AI 为每条随机结果推荐合适画面比例' },
+];
+
+const DICE_CONTENT_POLICY_OPTIONS: { value: DiceContentPolicy; label: string; title: string }[] = [
+  { value: 'sfw',   label: 'SFW',   title: '强制安全向：不涉及裸露/性暗示/挑逗，穿着得体适合全年龄展示' },
+  { value: 'mixed', label: '混合',  title: '不加额外约束：由 AI 根据主题自由发挥（默认）' },
+  { value: 'nsfw',  label: 'NSFW',  title: '倾向成人向：可含暴露服饰/性感姿势/成人情境等艺术表达' },
+];
+
+const TASK_EXECUTION_MODE_OPTIONS: { value: TaskExecutionMode; label: string; title: string }[] = [
+  { value: 'manual',   label: '手动添加', title: '按右侧张数输入框一次性提交任务（默认）' },
+  { value: 'autoLoop', label: '自动循环', title: '持续循环投递，完成一单即自动投递下一单，直到点击停止' },
 ];
 
 const CATEGORIES = [
@@ -121,6 +133,10 @@ export function SettingsModal() {
   const setDiceRefMode = useSettingsStore((s) => s.setDiceRefMode);
   const diceRatioMode = useSettingsStore((s) => s.diceRatioMode);
   const setDiceRatioMode = useSettingsStore((s) => s.setDiceRatioMode);
+  const diceContentPolicy = useSettingsStore((s) => s.diceContentPolicy);
+  const setDiceContentPolicy = useSettingsStore((s) => s.setDiceContentPolicy);
+  const taskExecutionMode = useSettingsStore((s) => s.taskExecutionMode);
+  const setTaskExecutionMode = useSettingsStore((s) => s.setTaskExecutionMode);
   const sessionsBase = useSettingsStore((s) => s.sessionsBase);
   const defaultSessionsBase = useSettingsStore((s) => s.defaultSessionsBase);
   const sessionsPathLoaded = useSettingsStore((s) => s.sessionsPathLoaded);
@@ -130,6 +146,9 @@ export function SettingsModal() {
   const [sessionsPathSaving, setSessionsPathSaving] = useState(false);
 
   const [activeSection, setActiveSection] = useState('workflow');
+
+  // 切换"自动循环"前的二次确认弹窗
+  const [autoLoopConfirmOpen, setAutoLoopConfirmOpen] = useState(false);
 
   // Escape key
   useEffect(() => {
@@ -346,6 +365,34 @@ export function SettingsModal() {
                   onChange={(v) => setDropdownMenuStyle(v as DropdownMenuStyle)}
                 />
               </div>
+
+              {/* Row: 任务执行模式 */}
+              <div style={settingRowStyle}>
+                <div style={{ marginRight: 24 }}>
+                  <div style={settingLabelStyle}>任务执行模式</div>
+                  <div style={settingDescStyle}>
+                    手动：按右侧张数输入框一次性提交；<br />
+                    自动循环：生成/随机按钮变为"开始循环"，持续投递任务直到手动停止
+                  </div>
+                </div>
+                <SegmentedControl
+                  options={TASK_EXECUTION_MODE_OPTIONS}
+                  value={taskExecutionMode}
+                  onChange={(v) => {
+                    const next = v as TaskExecutionMode;
+                    if (next === taskExecutionMode) return;
+                    if (next === 'autoLoop') {
+                      // 切到自动循环：弹风险确认
+                      setAutoLoopConfirmOpen(true);
+                    } else {
+                      // 切回手动：若当前有循环正在跑，先停止
+                      const loopState = useAutoLoopStore.getState();
+                      if (loopState.active) loopState.stopLoop();
+                      setTaskExecutionMode('manual');
+                    }
+                  }}
+                />
+              </div>
             </div>
             )}
 
@@ -396,6 +443,22 @@ export function SettingsModal() {
                   options={DICE_RATIO_MODE_OPTIONS}
                   value={diceRatioMode}
                   onChange={(v) => setDiceRatioMode(v as DiceRatioMode)}
+                />
+              </div>
+
+              {/* Row: 内容限制 */}
+              <div style={settingRowStyle}>
+                <div style={{ marginRight: 24 }}>
+                  <div style={settingLabelStyle}>内容限制</div>
+                  <div style={settingDescStyle}>
+                    SFW：强制安全向输出；混合：不加约束由 AI 自由发挥；NSFW：倾向成人向艺术表达。<br />
+                    该选项会作为骰子模式专属指令下发给 AI，约束生成提示词的侧重方向。
+                  </div>
+                </div>
+                <SegmentedControl
+                  options={DICE_CONTENT_POLICY_OPTIONS}
+                  value={diceContentPolicy}
+                  onChange={(v) => setDiceContentPolicy(v as DiceContentPolicy)}
                 />
               </div>
             </div>
@@ -618,6 +681,75 @@ export function SettingsModal() {
           </div>
         </div>
       </div>
+
+      {/* 自动循环风险确认弹窗 */}
+      {autoLoopConfirmOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 1100,
+            backgroundColor: 'rgba(0,0,0,0.7)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div
+            style={{
+              width: 'min(90vw, 480px)',
+              backgroundColor: 'var(--card-bg, #1a1a1a)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 10,
+              padding: '20px 22px',
+              color: 'var(--color-text)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>
+              开启自动循环模式？
+            </div>
+            <div style={{ fontSize: 13, lineHeight: '20px', color: 'var(--color-text-secondary)', marginBottom: 16 }}>
+              在此模式下，生成按钮和随机按钮会持续向队列投递任务，直到您手动点击停止。请注意：
+              <ul style={{ paddingLeft: 18, margin: '8px 0' }}>
+                <li>若使用的是在线模型或依赖 API 计费的资源（如 Grok/外部 LLM），长时间运行会持续产生 API 费用；</li>
+                <li>持续满载运行将显著增加 GPU 负载与发热，建议确认散热环境良好；</li>
+                <li>仅在您确认需要批量探索时开启，不使用时请切换回"手动添加"。</li>
+              </ul>
+              点击"开启自动循环"后设置立即生效。
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button
+                onClick={() => setAutoLoopConfirmOpen(false)}
+                style={{
+                  ...actionBtnStyle,
+                  padding: '7px 18px',
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = 'var(--color-surface-hover)'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'var(--color-bg)'}
+              >
+                取消
+              </button>
+              <button
+                onClick={() => {
+                  setTaskExecutionMode('autoLoop');
+                  setAutoLoopConfirmOpen(false);
+                }}
+                style={{
+                  ...actionBtnStyle,
+                  padding: '7px 18px',
+                  background: 'var(--color-primary)',
+                  color: '#fff',
+                  border: '1px solid var(--color-primary)',
+                }}
+              >
+                开启自动循环
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

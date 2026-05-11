@@ -14,6 +14,7 @@ import { showToast } from '../hooks/useToast.js';
 import { useDragStore } from '../hooks/useDragStore.js';
 import { useSettingsStore } from '../hooks/useSettingsStore.js';
 import { useAgentStore } from '../hooks/useAgentStore.js';
+import { useAutoLoopStore } from '../hooks/useAutoLoopStore.js';
 import type { ImageItem } from '../types/index.js';
 import { setSessionCover, renameCard } from '../services/sessionService.js';
 import { callPromptAssistant } from '../services/api.js';
@@ -385,6 +386,10 @@ export const ImageCard = memo(function ImageCard({ image, isMultiSelectMode, isS
 
   const handleExecute = useCallback(async () => {
     if (!clientId) return;
+
+    // 跨 Tab 拦截守卫：当前若有其它 Tab 的循环在跑，先询问用户
+    const guarded = await useAutoLoopStore.getState().guardBeforeSubmit(activeTab);
+    if (!guarded) return;
 
     // ── Workflow 5: 解除装备 ──────────────────────────────────────────
     if (activeTab === 5) {

@@ -849,8 +849,11 @@ function getDiceTools(ratioAuto: boolean): any[] {
   return patched;
 }
 
+/** 骰子模式的内容限制策略 */
+type DiceContentPolicy = 'sfw' | 'mixed' | 'nsfw';
+
 /** 骰子模式追加到 system prompt 末尾的专属指令 */
-function buildDiceDirective(ratioAuto: boolean): string {
+function buildDiceDirective(ratioAuto: boolean, contentPolicy: DiceContentPolicy = 'mixed'): string {
   const lines = [
     '',
     '## 🎲 批量随机模式专属要求（必读）',
@@ -861,6 +864,32 @@ function buildDiceDirective(ratioAuto: boolean): string {
     lines.push('- `ratio`：从 "1:1" / "3:4" / "9:16" / "4:3" / "16:9" 中选一个（人物立绘优先 3:4；风景横构图优先 4:3；群像/装饰性构图可选 1:1）。');
   }
   lines.push('⚠️ 如果你忘记返回这些字段，系统将无法正确命名卡片与设定比例，请务必同时填写。');
+
+  // 内容限制指令：按档位追加不同侧重
+  if (contentPolicy === 'sfw') {
+    lines.push('');
+    lines.push('## 🛡️ 内容限制：SFW（Safe For Work / 强制安全向）');
+    lines.push('- `prompt` 必须严格保持 SFW：角色穿着**完整得体**，适合全年龄段展示。');
+    lines.push('- ⛔ 禁止出现：nude / naked / nsfw / topless / bottomless / cleavage / underwear / lingerie / swimsuit (bikini 除非是沙滩场景且主体不裸露) / panty / see-through / wet clothes / exposed skin 过多 / 色情暗示姿势 / 挑逗表情 / 性器官相关词 / 性行为描述。');
+    lines.push('- ⛔ 禁止在 negativePrompt 里"去掉" SFW 约束（例如不要加 "sfw, clothed" 到 negative 里）。');
+    lines.push('- ✅ 鼓励：日常着装、制服、古风服饰、正式礼服、外套披肩、生活场景（咖啡馆/图书馆/校园/街景/自然风光）、情绪化特写（眼神/回眸/微笑）。');
+    lines.push('- 风格允许偏艺术/写实/唯美，但主体必须"**能出现在官方周边图册**"的程度。');
+  } else if (contentPolicy === 'nsfw') {
+    lines.push('');
+    lines.push('## 🔞 内容限制：NSFW（Adult-leaning / 倾向成人向）');
+    lines.push('- `prompt` 可以自然融入 NSFW 元素：暴露度较高的服饰（bikini / lingerie / micro-shorts / see-through）、性感姿势（arched back / hand on thigh / from behind / lying on bed）、成人情境（卧室/浴室/沙滩/私人空间）、挑逗表情（sultry / seductive / teasing）。');
+    lines.push('- ✅ 强烈鼓励用 Danbooru 风格的 NSFW 标签（如 cleavage, large breasts, thighs, bare shoulders, nsfw 等）自然穿插，不要生硬堆砌。');
+    lines.push('- 📌 保持**艺术性与审美**：画面应"像杂志硬照/艺术摄影/同人本扉页"，而不是粗劣的色情描述。');
+    lines.push('- ⛔ 仍然禁止：未成年（loli/shota/underage/child）、极端暴力与血腥、非自愿情境、真实人物的成人化、任何违法内容。');
+    lines.push('- 可将 `1girl, solo` 与成人元素结合；character（特定角色）也可自然进入成人情境，但严禁上述禁区。');
+  } else {
+    // mixed：轻量提示，不强制任一方向
+    lines.push('');
+    lines.push('## ⚖️ 内容限制：混合（由你自由判断）');
+    lines.push('- 本次无硬性内容约束：可 SFW 可 NSFW，由你根据 seed 与画像自然取舍。');
+    lines.push('- 但仍要保持艺术性与审美，禁止未成年、极端暴力血腥、非自愿情境、违法内容。');
+  }
+
   return lines.join('\n');
 }
 
@@ -875,8 +904,9 @@ async function runGenerateImageForSeed(
   profile: any,
   metadata: any,
   ratioAuto: boolean,
+  contentPolicy: DiceContentPolicy = 'mixed',
 ): Promise<RunGenerateResult | null> {
-  const systemPrompt = buildSystemPrompt(profile, metadata) + buildDiceDirective(ratioAuto);
+  const systemPrompt = buildSystemPrompt(profile, metadata) + buildDiceDirective(ratioAuto, contentPolicy);
   // user message 末尾再强调一次——Grok 对 user 最后一句注意力最高
   const reinforcement = ratioAuto
     ? '\n\n⚠️ 请务必在 generate_image 的参数中同时返回 cardName（4-12 汉字中文短名）和 ratio（画面比例枚举）。'
@@ -921,14 +951,17 @@ router.post('/random-batch', express.json(), async (req, res) => {
       tweakCount = 0,
       exploreCount = 0,
       ratioMode = 'auto',
+      contentPolicy: rawContentPolicy = 'mixed',
     } = (req.body || {}) as {
       preferenceCount?: number;
       tweakCount?: number;
       exploreCount?: number;
       mixPreset?: 'preference' | 'balanced' | 'exploration';
       ratioMode?: 'manual' | 'auto';
+      contentPolicy?: 'sfw' | 'mixed' | 'nsfw';
     };
     const ratioAuto = ratioMode === 'auto';
+    const contentPolicy: DiceContentPolicy = (rawContentPolicy === 'sfw' || rawContentPolicy === 'nsfw') ? rawContentPolicy : 'mixed';
 
     const pc = Math.max(0, Math.floor(Number(preferenceCount) || 0));
     const tc = Math.max(0, Math.floor(Number(tweakCount) || 0));
@@ -991,7 +1024,7 @@ router.post('/random-batch', express.json(), async (req, res) => {
 
     const settled = await Promise.all(seeds.map(async (s): Promise<RandomItem | null> => {
       try {
-        const result = await runGenerateImageForSeed(s.seed, profile, metadata, ratioAuto);
+        const result = await runGenerateImageForSeed(s.seed, profile, metadata, ratioAuto, contentPolicy);
         if (!result || !result.intent || !result.intent.prompt) return null;
         const intent = result.intent;
         const size = result.ratio ? DICE_RATIO_TO_SIZE[result.ratio] : undefined;

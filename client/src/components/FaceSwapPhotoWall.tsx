@@ -9,6 +9,7 @@ import { ImageCard } from './ImageCard.js';
 import { showToast } from '../hooks/useToast.js';
 import type { ViewSize } from './PhotoWall.js';
 import type { ImageItem } from '../types/index.js';
+import { useAutoLoopStore } from '../hooks/useAutoLoopStore.js';
 
 interface FaceSwapPhotoWallProps {
   viewSize: ViewSize;
@@ -396,6 +397,10 @@ export function FaceSwapPhotoWall({ viewSize }: FaceSwapPhotoWallProps) {
   // Execute a face-swap task: faceImage dropped on targetImage
   const executeFaceSwap = useCallback(async (faceImg: ImageItem, targetImg: ImageItem) => {
     if (!clientId) return;
+
+    // 跨 Tab 拦截守卫：当前若有其它 Tab 的循环在跑，先询问用户
+    const guarded = await useAutoLoopStore.getState().guardBeforeSubmit(8);
+    if (!guarded) return;
 
     const formData = new FormData();
     formData.append('targetImage', targetImg.file, targetImg.originalName);

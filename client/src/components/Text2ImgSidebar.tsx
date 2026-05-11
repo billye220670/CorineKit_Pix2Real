@@ -3,7 +3,7 @@ import { useWorkflowStore, type Text2ImgConfig } from '../hooks/useWorkflowStore
 import { type LoraSlot } from '../services/sessionService.js';
 import { usePromptAssistantStore } from '../hooks/usePromptAssistantStore.js';
 import { useWebSocket } from '../hooks/useWebSocket.js';
-import { ChevronRight, ChevronDown, Loader, BookText, Hash, AlignLeft, Wand2, Loader2, AlertTriangle, Plus, Trash2, Upload, RefreshCw, X, Sparkles, Dices } from 'lucide-react';
+import { ChevronRight, ChevronDown, Loader, BookText, Hash, AlignLeft, Wand2, Loader2, AlertTriangle, Plus, Trash2, Upload, RefreshCw, X, Sparkles, Dices, Square } from 'lucide-react';
 import { SYSTEM_PROMPTS } from './prompt-assistant/systemPrompts.js';
 import { ModelSelect, useModelFavorites } from './ModelSelect.js';
 import { useModelMetadata } from '../hooks/useModelMetadata.js';
@@ -11,6 +11,7 @@ import PromptContextMenu from './PromptContextMenu.js';
 import { showToast } from '../hooks/useToast.js';
 import { callPromptAssistant, callSmartLora, callSmartTriggerInsert } from '../services/api.js';
 import { useSettingsStore, type DiceMixPreset } from '../hooks/useSettingsStore.js';
+import { useAutoLoopStore, waitPromptComplete } from '../hooks/useAutoLoopStore.js';
 
 const RATIO_PRESETS = [
   { label: '1:1',  width: 1024, height: 1024 },
@@ -315,6 +316,11 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
   const diceMixPreset = useSettingsStore((s) => s.diceMixPreset);
   const diceRefMode = useSettingsStore((s) => s.diceRefMode);
   const diceRatioMode = useSettingsStore((s) => s.diceRatioMode);
+  const diceContentPolicy = useSettingsStore((s) => s.diceContentPolicy);
+  const taskExecutionMode = useSettingsStore((s) => s.taskExecutionMode);
+  const loopActive = useAutoLoopStore((s) => s.active);
+  const loopTabId = useAutoLoopStore((s) => s.tabId);
+  const isMyLoop = loopActive && loopTabId === 7;
   const [smartLoraLoading, setSmartLoraLoading] = useState(false);
   const [triggerInsertLoadingIndex, setTriggerInsertLoadingIndex] = useState<number | null>(null);
   const [promptFocused, setPromptFocused] = useState(false);
@@ -590,6 +596,10 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
   const handleGenerate = useCallback(async () => {
     if (!clientId || isGenerating) return;
 
+    // 跨 tab 守卫：若其它 tab 正在自动循环，弹模态框询问用户是否停止
+    const guarded = await useAutoLoopStore.getState().guardBeforeSubmit(7);
+    if (!guarded) return;
+
     const config: Text2ImgConfig = {
       model: model || (models[0] ?? ''),
       loras,
@@ -608,17 +618,24 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
     const now = new Date();
     const ts = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
     const baseName = customName.trim() || `t2i_${ts}`;
-    const count = Math.min(32, Math.max(1, batchCount));
+    const isLoop = taskExecutionMode === 'autoLoop';
+    const manualCount = Math.min(32, Math.max(1, batchCount));
+
+    if (isLoop) {
+      useAutoLoopStore.getState().startLoop(7, 'normal');
+    }
 
     setIsGenerating(true);
     try {
-      for (let i = 0; i < count; i++) {
-        const itemName = count === 1 ? baseName : `${baseName}_${i + 1}`;
+      let i = 0;
+      while (isLoop ? useAutoLoopStore.getState().active : i < manualCount) {
+        const itemName = (!isLoop && manualCount === 1) ? baseName : `${baseName}_${i + 1}`;
         // 每张卡片独立生成 seed，避免 Node.js Math.random 在连续快速调用下碰撞
         const cfgWithSeed: Text2ImgConfig = { ...config, seed: genUniqueSeed() };
         const imageId = addText2ImgCard(cfgWithSeed, itemName);
         setFlashingImage(imageId);
         startTask(imageId, '');  // Show shimmer immediately before fetch returns
+        let submittedPromptId: string | null = null;
         try {
           const res = await fetch('/api/workflow/7/execute', {
             method: 'POST',
@@ -627,19 +644,30 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
           });
           if (!res.ok) {
             console.error('[Text2Img] Execute failed:', await res.text());
+            if (isLoop) break;
+            i++;
             continue;
           }
           const data = await res.json() as { promptId: string };
+          submittedPromptId = data.promptId;
           startTask(imageId, data.promptId);
           sendMessage({ type: 'register', promptId: data.promptId, workflowId: 7, sessionId, tabId: 7 });
         } catch (err) {
           console.error('[Text2Img] Execute error:', err);
+          if (isLoop) break;
         }
+        if (isLoop && submittedPromptId) {
+          await waitPromptComplete(submittedPromptId);
+        }
+        i++;
       }
     } finally {
       setIsGenerating(false);
+      if (isLoop && useAutoLoopStore.getState().active) {
+        useAutoLoopStore.getState().stopLoop();
+      }
     }
-  }, [clientId, isGenerating, model, models, loras, loraModels, prompt, negativePrompt, selectedPreset, customWidth, customHeight, steps, cfg, sampler, scheduler, customName, batchCount, addText2ImgCard, startTask, sendMessage, sessionId, referenceImage, poseStrength, depthStrength]);
+  }, [clientId, isGenerating, model, models, loras, loraModels, prompt, negativePrompt, selectedPreset, customWidth, customHeight, steps, cfg, sampler, scheduler, customName, batchCount, taskExecutionMode, addText2ImgCard, startTask, sendMessage, sessionId, referenceImage, poseStrength, depthStrength, ratio, refImageSize]);
 
   /**
    * 随机骰子：按用户在设置面板选择的档位（更多偏好 / 均衡 / 更多推荐）拆分 batchCount，
@@ -649,8 +677,14 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
     if (!clientId || isGenerating || isRandomizing) return;
     if (models.length === 0) return;
 
-    const total = Math.min(32, Math.max(1, batchCount));
-    const { preferenceCount, tweakCount, exploreCount } = computeMix(total, diceMixPreset);
+    // 跨 tab 守卫：若其它 tab 正在自动循环，弹模态框询问用户是否停止
+    const guarded = await useAutoLoopStore.getState().guardBeforeSubmit(7);
+    if (!guarded) return;
+
+    const isLoop = taskExecutionMode === 'autoLoop';
+    if (isLoop) {
+      useAutoLoopStore.getState().startLoop(7, 'random');
+    }
 
     setIsRandomizing(true);
     try {
@@ -664,120 +698,143 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
         height?: number;
         cardName?: string;
       };
-      let items: RandomItem[];
-      try {
-        const resp = await fetch('/api/agent/random-batch', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ preferenceCount, tweakCount, exploreCount, mixPreset: diceMixPreset, ratioMode: diceRatioMode }),
-        });
-        if (!resp.ok) {
-          const errText = await resp.text();
-          showToast(`随机生成失败：${errText || `HTTP ${resp.status}`}`);
-          return;
-        }
-        const data = await resp.json() as { items: RandomItem[] };
-        items = Array.isArray(data.items) ? data.items : [];
-      } catch (err) {
-        showToast(`随机生成请求失败：${err instanceof Error ? err.message : String(err)}`);
-        return;
-      }
 
-      if (items.length < total) {
-        showToast(`随机生成返回条数不足（${items.length}/${total}），已中止`);
-        return;
-      }
+      // 每轮：manual 跑 1 轮，autoLoop 持续到 stopLoop
+      let outerIter = 0;
+      while (isLoop ? useAutoLoopStore.getState().active : outerIter === 0) {
+        const total = isLoop ? 1 : Math.min(32, Math.max(1, batchCount));
+        const { preferenceCount, tweakCount, exploreCount } = computeMix(total, diceMixPreset);
 
-      // 基础配置：复用 sidebar 当前其他字段；model / loras 会被每条 item 的推荐覆盖
-      // 参考图：仅当 diceRefMode === 'auto' 且 sidebar 已配置参考图时注入
-      const useSidebarRef = diceRefMode === 'auto' && !!referenceImage;
-      const baseConfig: Omit<Text2ImgConfig, 'prompt' | 'model' | 'loras'> = {
-        negativePrompt,
-        width:     selectedPreset ? selectedPreset.width : customWidth,
-        height:    selectedPreset ? selectedPreset.height : customHeight,
-        steps,
-        cfg,
-        sampler,
-        scheduler,
-        ...(useSidebarRef ? { referenceImage, poseStrength, depthStrength, useOriginalRatio: ratio === 'original', ...(refImageSize ? { refImageWidth: refImageSize.width, refImageHeight: refImageSize.height } : {}) } : {}),
-      };
-
-      const CATEGORY_LABEL: Record<'preference' | 'tweak' | 'explore', string> = {
-        preference: '偏好',
-        tweak:      '微改',
-        explore:    '探索',
-      };
-      // 按档位累计计数（仅用于 fallback 名字与分母展示）
-      const categoryTotals = { preference: preferenceCount, tweak: tweakCount, explore: exploreCount };
-      const categoryCursor = { preference: 0, tweak: 0, explore: 0 };
-      // 同批次已使用的卡片名集合，用于在 LLM 偶发撞名时追加 _2/_3... 防重
-      const usedNames = new Set<string>();
-
-      let firstImageId: string | null = null;
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-
-        // 每条 item 用推荐的 LoRA 和模型覆盖；无推荐则回退到 sidebar 当前值
-        const recLoras = Array.isArray(item.recommendedLoras) && item.recommendedLoras.length > 0
-          ? item.recommendedLoras.map(l => ({ model: l.model, enabled: true, strength: l.strength }))
-          : loras;
-        const recModel = item.recommendedModel && models.includes(item.recommendedModel)
-          ? item.recommendedModel
-          : (model || (models[0] ?? ''));
-
-        const cfg: Text2ImgConfig = {
-          ...baseConfig,
-          model: recModel,
-          loras: recLoras,
-          prompt: item.prompt,
-          seed: genUniqueSeed(),
-          // 若比例模式为 auto 且 LLM 返回了有效 width/height，覆盖 baseConfig 的比例
-          ...(diceRatioMode === 'auto' && item.width && item.height ? { width: item.width, height: item.height } : {}),
-        };
-        categoryCursor[item.category] += 1;
-        // 注意：displayName 作为 ComfyUI SaveImage.filename_prefix，不能含 "/" 或 "\"，
-        // 否则 ComfyUI 会把 "/" 前的部分当成 subfolder，导致本地文件互相覆盖。
-        // 命名策略：直接使用 LLM 的 cardName；若 LLM 没返回，回退到「随机·偏好 1-5」；
-        // 仅在同批撞名时才追加 _2/_3... 作为防重保底。
-        const seq = categoryCursor[item.category];
-        const fallbackName = `随机·${CATEGORY_LABEL[item.category]} ${seq}-${categoryTotals[item.category]}`;
-        const baseName = (item.cardName && item.cardName.trim().length > 0 ? item.cardName.trim() : fallbackName)
-          .replace(/[/\\]/g, '-');
-        let displayName = baseName;
-        if (usedNames.has(displayName)) {
-          let n = 2;
-          while (usedNames.has(`${baseName}_${n}`)) n++;
-          displayName = `${baseName}_${n}`;
-        }
-        usedNames.add(displayName);
-
-        const imageId = addText2ImgCard(cfg, displayName);
-        if (firstImageId === null) {
-          firstImageId = imageId;
-          setFlashingImage(imageId);
-        }
-        startTask(imageId, '');
+        let items: RandomItem[];
         try {
-          const res = await fetch('/api/workflow/7/execute', {
+          const resp = await fetch('/api/agent/random-batch', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ clientId, ...cfg, name: displayName }),
+            body: JSON.stringify({ preferenceCount, tweakCount, exploreCount, mixPreset: diceMixPreset, ratioMode: diceRatioMode, contentPolicy: diceContentPolicy }),
           });
-          if (!res.ok) {
-            console.error('[Text2Img] Random execute failed:', await res.text());
-            continue;
+          if (!resp.ok) {
+            const errText = await resp.text();
+            showToast(`随机生成失败：${errText || `HTTP ${resp.status}`}`);
+            if (isLoop) break;
+            return;
           }
-          const data = await res.json() as { promptId: string };
-          startTask(imageId, data.promptId);
-          sendMessage({ type: 'register', promptId: data.promptId, workflowId: 7, sessionId, tabId: 7 });
+          const data = await resp.json() as { items: RandomItem[] };
+          items = Array.isArray(data.items) ? data.items : [];
         } catch (err) {
-          console.error('[Text2Img] Random execute error:', err);
+          showToast(`随机生成请求失败：${err instanceof Error ? err.message : String(err)}`);
+          if (isLoop) break;
+          return;
         }
+
+        if (items.length < total) {
+          showToast(`随机生成返回条数不足（${items.length}/${total}），已${isLoop ? '终止循环' : '中止'}`);
+          if (isLoop) break;
+          return;
+        }
+
+        // 基础配置：复用 sidebar 当前其他字段；model / loras 会被每条 item 的推荐覆盖
+        // 参考图：仅当 diceRefMode === 'auto' 且 sidebar 已配置参考图时注入
+        const useSidebarRef = diceRefMode === 'auto' && !!referenceImage;
+        const baseConfig: Omit<Text2ImgConfig, 'prompt' | 'model' | 'loras'> = {
+          negativePrompt,
+          width:     selectedPreset ? selectedPreset.width : customWidth,
+          height:    selectedPreset ? selectedPreset.height : customHeight,
+          steps,
+          cfg,
+          sampler,
+          scheduler,
+          ...(useSidebarRef ? { referenceImage, poseStrength, depthStrength, useOriginalRatio: ratio === 'original', ...(refImageSize ? { refImageWidth: refImageSize.width, refImageHeight: refImageSize.height } : {}) } : {}),
+        };
+
+        const CATEGORY_LABEL: Record<'preference' | 'tweak' | 'explore', string> = {
+          preference: '偏好',
+          tweak:      '微改',
+          explore:    '探索',
+        };
+        // 按档位累计计数（仅用于 fallback 名字与分母展示）
+        const categoryTotals = { preference: preferenceCount, tweak: tweakCount, explore: exploreCount };
+        const categoryCursor = { preference: 0, tweak: 0, explore: 0 };
+        // 同批次已使用的卡片名集合，用于在 LLM 偶发撞名时追加 _2/_3... 防重
+        const usedNames = new Set<string>();
+
+        let firstImageId: string | null = null;
+        let lastPromptId: string | null = null;
+        for (let i = 0; i < items.length; i++) {
+          if (isLoop && !useAutoLoopStore.getState().active) break;
+          const item = items[i];
+
+          // 每条 item 用推荐的 LoRA 和模型覆盖；无推荐则回退到 sidebar 当前值
+          const recLoras = Array.isArray(item.recommendedLoras) && item.recommendedLoras.length > 0
+            ? item.recommendedLoras.map(l => ({ model: l.model, enabled: true, strength: l.strength }))
+            : loras;
+          const recModel = item.recommendedModel && models.includes(item.recommendedModel)
+            ? item.recommendedModel
+            : (model || (models[0] ?? ''));
+
+          const cfg: Text2ImgConfig = {
+            ...baseConfig,
+            model: recModel,
+            loras: recLoras,
+            prompt: item.prompt,
+            seed: genUniqueSeed(),
+            // 若比例模式为 auto 且 LLM 返回了有效 width/height，覆盖 baseConfig 的比例
+            ...(diceRatioMode === 'auto' && item.width && item.height ? { width: item.width, height: item.height } : {}),
+          };
+          categoryCursor[item.category] += 1;
+          // 注意：displayName 作为 ComfyUI SaveImage.filename_prefix，不能含 "/" 或 "\"，
+          // 否则 ComfyUI 会把 "/" 前的部分当成 subfolder，导致本地文件互相覆盖。
+          // 命名策略：直接使用 LLM 的 cardName；若 LLM 没返回，回退到「随机·偏好 1-5」；
+          // 仅在同批撞名时才追加 _2/_3... 作为防重保底。
+          const seq = categoryCursor[item.category];
+          const fallbackName = `随机·${CATEGORY_LABEL[item.category]} ${seq}-${categoryTotals[item.category]}`;
+          const baseName = (item.cardName && item.cardName.trim().length > 0 ? item.cardName.trim() : fallbackName)
+            .replace(/[/\\]/g, '-');
+          let displayName = baseName;
+          if (usedNames.has(displayName)) {
+            let n = 2;
+            while (usedNames.has(`${baseName}_${n}`)) n++;
+            displayName = `${baseName}_${n}`;
+          }
+          usedNames.add(displayName);
+
+          const imageId = addText2ImgCard(cfg, displayName);
+          if (firstImageId === null) {
+            firstImageId = imageId;
+            setFlashingImage(imageId);
+          }
+          startTask(imageId, '');
+          try {
+            const res = await fetch('/api/workflow/7/execute', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ clientId, ...cfg, name: displayName }),
+            });
+            if (!res.ok) {
+              console.error('[Text2Img] Random execute failed:', await res.text());
+              continue;
+            }
+            const data = await res.json() as { promptId: string };
+            lastPromptId = data.promptId;
+            startTask(imageId, data.promptId);
+            sendMessage({ type: 'register', promptId: data.promptId, workflowId: 7, sessionId, tabId: 7 });
+          } catch (err) {
+            console.error('[Text2Img] Random execute error:', err);
+          }
+        }
+
+        // autoLoop：等待这一轮最后一个提交完成后再继续下一轮
+        if (isLoop && lastPromptId) {
+          await waitPromptComplete(lastPromptId);
+        }
+        outerIter++;
       }
     } finally {
       setIsRandomizing(false);
+      if (isLoop && useAutoLoopStore.getState().active) {
+        useAutoLoopStore.getState().stopLoop();
+      }
     }
-  }, [clientId, isGenerating, isRandomizing, batchCount, diceMixPreset, diceRefMode, diceRatioMode, model, models, loraModels, loras, negativePrompt, selectedPreset, customWidth, customHeight, steps, cfg, sampler, scheduler, referenceImage, poseStrength, depthStrength, ratio, refImageSize, addText2ImgCard, startTask, setFlashingImage, sendMessage, sessionId]);
+  }, [clientId, isGenerating, isRandomizing, batchCount, diceMixPreset, diceRefMode, diceRatioMode, diceContentPolicy, taskExecutionMode, model, models, loraModels, loras, negativePrompt, selectedPreset, customWidth, customHeight, steps, cfg, sampler, scheduler, referenceImage, poseStrength, depthStrength, ratio, refImageSize, addText2ImgCard, startTask, setFlashingImage, sendMessage, sessionId]);
 
   const handleQuickAction = useCallback(async (mode: 'naturalToTags' | 'tagsToNatural' | 'detailer') => {
     if (!prompt.trim()) return;
@@ -1729,85 +1786,115 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
           }}
         />
         <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            onClick={handleGenerate}
-            disabled={!clientId || isGenerating || models.length === 0}
-            style={{
-              flex: 1,
-              padding: '10px',
-              backgroundColor: 'var(--color-primary)',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 8,
-              fontSize: '14px',
-              fontWeight: 600,
-              cursor: (!clientId || isGenerating || models.length === 0) ? 'not-allowed' : 'pointer',
-              opacity: (!clientId || isGenerating || models.length === 0) ? 0.5 : 1,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 6,
-              transition: 'opacity 0.15s',
-            }}
-          >
-            {isGenerating && <Loader size={14} style={{ animation: 'pulse 1s ease-in-out infinite' }} />}
-            生成
-          </button>
-          <button
-            onClick={handleRandomGenerate}
-            disabled={!clientId || isGenerating || isRandomizing || models.length === 0}
-            title={`随机生成（档位：${DICE_MIX_LABEL[diceMixPreset]} / 参考图：${diceRefMode === 'auto' ? '使用（如有）' : '不使用'} / 比例：${diceRatioMode === 'auto' ? '自动' : '手动'}，可在设置-随机生成中调整）`}
-            style={{
-              padding: '10px',
-              width: 40,
-              backgroundColor: 'var(--color-bg)',
-              color: 'var(--color-text)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 8,
-              fontSize: '14px',
-              fontWeight: 600,
-              cursor: (!clientId || isGenerating || isRandomizing || models.length === 0) ? 'not-allowed' : 'pointer',
-              opacity: (!clientId || isGenerating || isRandomizing || models.length === 0) ? 0.5 : 1,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'background-color 0.15s, opacity 0.15s',
-              flexShrink: 0,
-            }}
-            onMouseEnter={(e) => {
-              if (!e.currentTarget.disabled) e.currentTarget.style.backgroundColor = 'var(--color-surface-hover, rgba(255,255,255,0.06))';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'var(--color-bg)';
-            }}
-          >
-            {isRandomizing
-              ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
-              : <Dices size={16} />}
-          </button>
-          <input
-            type="number"
-            className="no-spin"
-            min={1}
-            max={32}
-            step={1}
-            value={batchCount}
-            onChange={(e) => setBatchCount(Math.min(32, Math.max(1, parseInt(e.target.value, 10) || 1)))}
-            style={{
-              width: 52,
-              padding: '0 6px',
-              border: '1px solid var(--color-border)',
-              borderRadius: 8,
-              backgroundColor: 'var(--color-bg)',
-              color: 'var(--color-text)',
-              fontSize: '14px',
-              fontWeight: 600,
-              textAlign: 'center',
-              outline: 'none',
-              fontFamily: 'inherit',
-              flexShrink: 0,
-            }}
-          />
+          {isMyLoop ? (
+            <button
+              onClick={() => useAutoLoopStore.getState().stopLoop()}
+              title="停止自动循环（当前正在执行的那一单会正常完成）"
+              style={{
+                flex: 1,
+                padding: '10px',
+                backgroundColor: '#E53935',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 8,
+                fontSize: '14px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                transition: 'opacity 0.15s',
+              }}
+            >
+              <Square size={14} fill="#fff" />
+              停止循环
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={handleGenerate}
+                disabled={!clientId || isGenerating || models.length === 0}
+                style={{
+                  flex: 1,
+                  padding: '10px',
+                  backgroundColor: 'var(--color-primary)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 8,
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  cursor: (!clientId || isGenerating || models.length === 0) ? 'not-allowed' : 'pointer',
+                  opacity: (!clientId || isGenerating || models.length === 0) ? 0.5 : 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                  transition: 'opacity 0.15s',
+                }}
+              >
+                {isGenerating && <Loader size={14} style={{ animation: 'pulse 1s ease-in-out infinite' }} />}
+                {taskExecutionMode === 'autoLoop' ? '开始循环' : '生成'}
+              </button>
+              <button
+                onClick={handleRandomGenerate}
+                disabled={!clientId || isGenerating || isRandomizing || models.length === 0}
+                title={`随机生成（档位：${DICE_MIX_LABEL[diceMixPreset]} / 参考图：${diceRefMode === 'auto' ? '使用（如有）' : '不使用'} / 比例：${diceRatioMode === 'auto' ? '自动' : '手动'}，可在设置-随机生成中调整）${taskExecutionMode === 'autoLoop' ? ' · 自动循环模式' : ''}`}
+                style={{
+                  padding: '10px',
+                  width: 40,
+                  backgroundColor: 'var(--color-bg)',
+                  color: 'var(--color-text)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 8,
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  cursor: (!clientId || isGenerating || isRandomizing || models.length === 0) ? 'not-allowed' : 'pointer',
+                  opacity: (!clientId || isGenerating || isRandomizing || models.length === 0) ? 0.5 : 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'background-color 0.15s, opacity 0.15s',
+                  flexShrink: 0,
+                }}
+                onMouseEnter={(e) => {
+                  if (!e.currentTarget.disabled) e.currentTarget.style.backgroundColor = 'var(--color-surface-hover, rgba(255,255,255,0.06))';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--color-bg)';
+                }}
+              >
+                {isRandomizing
+                  ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                  : <Dices size={16} />}
+              </button>
+              {taskExecutionMode === 'manual' && (
+                <input
+                  type="number"
+                  className="no-spin"
+                  min={1}
+                  max={32}
+                  step={1}
+                  value={batchCount}
+                  onChange={(e) => setBatchCount(Math.min(32, Math.max(1, parseInt(e.target.value, 10) || 1)))}
+                  style={{
+                    width: 52,
+                    padding: '0 6px',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 8,
+                    backgroundColor: 'var(--color-bg)',
+                    color: 'var(--color-text)',
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    textAlign: 'center',
+                    outline: 'none',
+                    fontFamily: 'inherit',
+                    flexShrink: 0,
+                  }}
+                />
+              )}
+            </>
+          )}
         </div>
       </div>
       {contextMenu && (

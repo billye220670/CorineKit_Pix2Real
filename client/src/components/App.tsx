@@ -20,6 +20,7 @@ import { Settings, Upload, Home } from 'lucide-react';
 import { Toast } from './Toast.js';
 import { MaskEditor } from './MaskEditor.js';
 import { SettingsModal } from './SettingsModal.js';
+import { AutoLoopInterruptDialog } from './AutoLoopInterruptDialog.js';
 import { PromptAssistantPanel } from './PromptAssistantPanel.js';
 import { WelcomePage } from './WelcomePage.js';
 import { useSettingsStore } from '../hooks/useSettingsStore.js';
@@ -414,6 +415,7 @@ export function App() {
       <MaskEditor />
       <SettingsModal />
       <PromptAssistantPanel />
+      <AutoLoopInterruptDialog />
     </div>
   );
 }

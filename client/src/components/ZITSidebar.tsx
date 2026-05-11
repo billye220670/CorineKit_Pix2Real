@@ -3,7 +3,9 @@ import { useWorkflowStore, type ZitConfig } from '../hooks/useWorkflowStore.js';
 import { type LoraSlot } from '../services/sessionService.js';
 import { usePromptAssistantStore } from '../hooks/usePromptAssistantStore.js';
 import { useWebSocket } from '../hooks/useWebSocket.js';
-import { ChevronRight, ChevronDown, Loader, BookText, Hash, AlignLeft, Wand2, Loader2, AlertTriangle, Plus, Trash2 } from 'lucide-react';
+import { useSettingsStore } from '../hooks/useSettingsStore.js';
+import { useAutoLoopStore, waitPromptComplete } from '../hooks/useAutoLoopStore.js';
+import { ChevronRight, ChevronDown, Loader, BookText, Hash, AlignLeft, Wand2, Loader2, AlertTriangle, Plus, Trash2, Square } from 'lucide-react';
 import PromptContextMenu from './PromptContextMenu';
 import { SYSTEM_PROMPTS } from './prompt-assistant/systemPrompts.js';
 import { ModelSelect, useModelFavorites } from './ModelSelect.js';
@@ -68,6 +70,12 @@ export function ZITSidebar({ width }: { width?: number }) {
   const addZitCard  = useWorkflowStore((s) => s.addZitCard);
   const setFlashingImage = useWorkflowStore((s) => s.setFlashingImage);
   const { sendMessage } = useWebSocket();
+
+  // 任务执行模式（手动/自动循环）与循环状态
+  const taskExecutionMode = useSettingsStore((s) => s.taskExecutionMode);
+  const loopActive = useAutoLoopStore((s) => s.active);
+  const loopTabId = useAutoLoopStore((s) => s.tabId);
+  const isMyLoop = loopActive && loopTabId === 9;
 
   // UNet model list
   const [unetModels, setUnetModels]         = useState<string[]>([]);
@@ -337,6 +345,10 @@ export function ZITSidebar({ width }: { width?: number }) {
   const handleGenerate = useCallback(async () => {
     if (!clientId || isGenerating) return;
 
+    // 跨 Tab 拦截守卫：当前若有其它 Tab 的循环在跑，先询问用户
+    const guarded = await useAutoLoopStore.getState().guardBeforeSubmit(9);
+    if (!guarded) return;
+
     const config: ZitConfig = {
       unetModel: unetModel || (unetModels[0] ?? ''),
       loras,
@@ -354,15 +366,22 @@ export function ZITSidebar({ width }: { width?: number }) {
     const now = new Date();
     const ts = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
     const baseName = customName.trim() || `zit_${ts}`;
-    const count = Math.min(32, Math.max(1, batchCount));
+    const isLoop = taskExecutionMode === 'autoLoop';
+    const manualCount = Math.min(32, Math.max(1, batchCount));
+
+    if (isLoop) {
+      useAutoLoopStore.getState().startLoop(9, 'normal');
+    }
 
     setIsGenerating(true);
     try {
-      for (let i = 0; i < count; i++) {
-        const itemName = count === 1 ? baseName : `${baseName}_${i + 1}`;
+      let i = 0;
+      while (isLoop ? useAutoLoopStore.getState().active : i < manualCount) {
+        const itemName = (!isLoop && manualCount === 1) ? baseName : `${baseName}_${i + 1}`;
         const imageId = addZitCard(config, itemName);
         setFlashingImage(imageId);
         startTask(imageId, '');
+        let submittedPromptId: string | null = null;
         try {
           const res = await fetch('/api/workflow/9/execute', {
             method: 'POST',
@@ -371,19 +390,33 @@ export function ZITSidebar({ width }: { width?: number }) {
           });
           if (!res.ok) {
             console.error('[ZIT] Execute failed:', await res.text());
+            if (isLoop) break;
+            i++;
             continue;
           }
           const data = await res.json() as { promptId: string };
+          submittedPromptId = data.promptId;
           startTask(imageId, data.promptId);
           sendMessage({ type: 'register', promptId: data.promptId, workflowId: 9, sessionId, tabId: 9 });
         } catch (err) {
           console.error('[ZIT] Execute error:', err);
+          if (isLoop) break;
+          i++;
+          continue;
         }
+        // 自动循环：等当前任务结束再投下一单
+        if (isLoop && submittedPromptId) {
+          await waitPromptComplete(submittedPromptId);
+        }
+        i++;
       }
     } finally {
       setIsGenerating(false);
+      if (isLoop && useAutoLoopStore.getState().active) {
+        useAutoLoopStore.getState().stopLoop();
+      }
     }
-  }, [clientId, isGenerating, unetModel, unetModels, loras, loraModels, shiftEnabled, shift, prompt, selectedPreset, customWidth, customHeight, steps, cfg, sampler, scheduler, customName, batchCount, addZitCard, startTask, sendMessage, sessionId]);
+  }, [clientId, isGenerating, unetModel, unetModels, loras, loraModels, shiftEnabled, shift, prompt, selectedPreset, customWidth, customHeight, steps, cfg, sampler, scheduler, customName, batchCount, taskExecutionMode, addZitCard, startTask, sendMessage, sessionId, setFlashingImage]);
 
   const handleQuickAction = useCallback(async (mode: 'naturalToTags' | 'tagsToNatural' | 'detailer') => {
     if (!prompt.trim()) return;
@@ -1004,53 +1037,82 @@ export function ZITSidebar({ width }: { width?: number }) {
           }}
         />
         <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            onClick={handleGenerate}
-            disabled={!clientId || isGenerating || unetModels.length === 0}
-            style={{
-              flex: 1,
-              padding: '10px',
-              backgroundColor: 'var(--color-primary)',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 8,
-              fontSize: '14px',
-              fontWeight: 600,
-              cursor: (!clientId || isGenerating || unetModels.length === 0) ? 'not-allowed' : 'pointer',
-              opacity: (!clientId || isGenerating || unetModels.length === 0) ? 0.5 : 1,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 6,
-              transition: 'opacity 0.15s',
-            }}
-          >
-            {isGenerating && <Loader size={14} style={{ animation: 'pulse 1s ease-in-out infinite' }} />}
-            生成
-          </button>
-          <input
-            type="number"
-            className="no-spin"
-            min={1}
-            max={32}
-            step={1}
-            value={batchCount}
-            onChange={(e) => setBatchCount(Math.min(32, Math.max(1, parseInt(e.target.value, 10) || 1)))}
-            style={{
-              width: 52,
-              padding: '0 6px',
-              border: '1px solid var(--color-border)',
-              borderRadius: 8,
-              backgroundColor: 'var(--color-bg)',
-              color: 'var(--color-text)',
-              fontSize: '14px',
-              fontWeight: 600,
-              textAlign: 'center',
-              outline: 'none',
-              fontFamily: 'inherit',
-              flexShrink: 0,
-            }}
-          />
+          {isMyLoop ? (
+            <button
+              onClick={() => useAutoLoopStore.getState().stopLoop()}
+              style={{
+                flex: 1,
+                padding: '10px',
+                backgroundColor: '#E53935',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 8,
+                fontSize: '14px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                transition: 'opacity 0.15s',
+              }}
+            >
+              <Square size={14} fill="#fff" />
+              停止循环
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={handleGenerate}
+                disabled={!clientId || isGenerating || unetModels.length === 0}
+                style={{
+                  flex: 1,
+                  padding: '10px',
+                  backgroundColor: 'var(--color-primary)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 8,
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  cursor: (!clientId || isGenerating || unetModels.length === 0) ? 'not-allowed' : 'pointer',
+                  opacity: (!clientId || isGenerating || unetModels.length === 0) ? 0.5 : 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                  transition: 'opacity 0.15s',
+                }}
+              >
+                {isGenerating && <Loader size={14} style={{ animation: 'pulse 1s ease-in-out infinite' }} />}
+                {taskExecutionMode === 'autoLoop' ? '开始循环' : '生成'}
+              </button>
+              {taskExecutionMode === 'manual' && (
+                <input
+                  type="number"
+                  className="no-spin"
+                  min={1}
+                  max={32}
+                  step={1}
+                  value={batchCount}
+                  onChange={(e) => setBatchCount(Math.min(32, Math.max(1, parseInt(e.target.value, 10) || 1)))}
+                  style={{
+                    width: 52,
+                    padding: '0 6px',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 8,
+                    backgroundColor: 'var(--color-bg)',
+                    color: 'var(--color-text)',
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    textAlign: 'center',
+                    outline: 'none',
+                    fontFamily: 'inherit',
+                    flexShrink: 0,
+                  }}
+                />
+              )}
+            </>
+          )}
         </div>
       </div>
 
