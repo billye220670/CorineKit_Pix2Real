@@ -752,6 +752,56 @@ router.get('/user-profile', (req, res) => {
   }
 });
 
+// GET /api/agent/user-profile-view - 获取可视化用的画像（附带 metadata 解析结果）
+// 前端设置面板"我的偏好"使用。与 /user-profile 区别：此接口把模型/LoRA 路径
+// 解析成 nickname/category/thumbnail/triggerWords，前端无需加载全量 metadata。
+router.get('/user-profile-view', (req, res) => {
+  try {
+    const profile = buildUserProfile();
+    const metadata = getMetadata();
+
+    const resolveMeta = (modelKey: string) => {
+      const m = metadata[modelKey];
+      if (!m || typeof m !== 'object') {
+        const fileName = modelKey.split(/[\\/]/).pop()?.replace(/\.safetensors$/i, '') ?? modelKey;
+        return { nickname: fileName, category: '其他', thumbnail: null as string | null, triggerWords: '' };
+      }
+      const r = m as Record<string, any>;
+      return {
+        nickname: (r.nickname as string) || modelKey,
+        category: (r.category as string) || '其他',
+        thumbnail: (r.thumbnail as string) || null,
+        triggerWords: (r.triggerWords as string) || '',
+      };
+    };
+
+    const view = {
+      usageStats: profile.usageStats,
+      paramPreferences: profile.paramPreferences,
+      styleFeatures: profile.styleFeatures,
+      modelPreferences: profile.modelPreferences.map((mp) => ({
+        ...mp,
+        ...resolveMeta(mp.model),
+      })),
+      loraPreferences: profile.loraPreferences.map((lp) => ({
+        ...lp,
+        ...resolveMeta(lp.model),
+      })),
+      frequentCombinations: profile.frequentCombinations.map((c) => ({
+        count: c.count,
+        model: { key: c.model, ...resolveMeta(c.model) },
+        loras: c.loras.map((l) => ({ key: l, ...resolveMeta(l) })),
+      })),
+    };
+
+    res.json(view);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Internal server error';
+    console.error('[Agent] user-profile-view error:', err);
+    res.status(500).json({ error: message });
+  }
+});
+
 // POST /api/agent/chat - AI 对话 + 意图解析
 router.post('/chat', async (req, res) => {
   try {

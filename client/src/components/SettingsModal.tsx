@@ -1,8 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, FolderOpen } from 'lucide-react';
 import { useSettingsStore, type ReversePromptModel, type LlmModel, type StartupBehavior, type DropdownMenuStyle } from '../hooks/useSettingsStore.js';
 import { SegmentedControl } from './SegmentedControl.js';
 import { ensureNotificationPermission } from '../services/desktopNotify.js';
+import { MyProfileSection } from './MyProfileSection.js';
 
 const REVERSE_PROMPT_MODELS: { value: ReversePromptModel; label: string }[] = [
   { value: 'Qwen3VL', label: 'Qwen3VL' },
@@ -32,6 +33,7 @@ const CATEGORIES = [
   { id: 'session', label: '会话' },
   { id: 'notification', label: '通知' },
   { id: 'prompt', label: '提示词管理' },
+  { id: 'profile', label: '我的偏好' },
 ];
 
 const TOGGLE_OPTIONS: { value: 'on' | 'off'; label: string }[] = [
@@ -49,8 +51,6 @@ const sectionTitleStyle: React.CSSProperties = {
   letterSpacing: '0.08em',
   marginBottom: 18,
 };
-
-const sectionGapStyle: React.CSSProperties = { height: 36 };
 
 const settingRowStyle: React.CSSProperties = {
   display: 'flex',
@@ -106,8 +106,6 @@ export function SettingsModal() {
 
   const [sessionsPathSaving, setSessionsPathSaving] = useState(false);
 
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [activeSection, setActiveSection] = useState('workflow');
 
   // Escape key
@@ -125,37 +123,7 @@ export function SettingsModal() {
     }
   }, [settingsOpen, sessionsPathLoaded, loadSessionsPath]);
 
-  // IntersectionObserver — highlight nav item whose section heading enters the top of the scroll area
-  useEffect(() => {
-    if (!settingsOpen) return;
-    const root = scrollRef.current;
-    if (!root) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            const id = entry.target.getAttribute('data-section');
-            if (id) setActiveSection(id);
-          }
-        }
-      },
-      {
-        root,
-        threshold: 0,
-        rootMargin: '-10% 0px -80% 0px',
-      }
-    );
-    for (const el of Object.values(sectionRefs.current)) {
-      if (el) observer.observe(el);
-    }
-    return () => observer.disconnect();
-  }, [settingsOpen]);
-
   if (!settingsOpen) return null;
-
-  const scrollTo = (sectionId: string) => {
-    sectionRefs.current[sectionId]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
 
   // 切换 sessions 路径后：清掉本地 session 标记，重载到欢迎页并刷新列表
   const applyAndReloadWelcome = () => {
@@ -289,7 +257,7 @@ export function SettingsModal() {
               return (
                 <button
                   key={cat.id}
-                  onClick={() => scrollTo(cat.id)}
+                  onClick={() => setActiveSection(cat.id)}
                   style={{
                     textAlign: 'left',
                     padding: '7px 16px',
@@ -310,13 +278,11 @@ export function SettingsModal() {
           </nav>
 
           {/* Right scrolling content */}
-          <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '28px 36px' }}>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '28px 36px' }}>
 
             {/* ── Section: 工作流 ── */}
-            <div
-              ref={(el) => { sectionRefs.current['workflow'] = el; }}
-              data-section="workflow"
-            >
+            {activeSection === 'workflow' && (
+            <div>
               <div style={sectionTitleStyle}>工作流</div>
 
               {/* Row: 反推模型 */}
@@ -358,14 +324,11 @@ export function SettingsModal() {
                 />
               </div>
             </div>
-
-            <div style={sectionGapStyle} />
+            )}
 
             {/* ── Section: 会话 ── */}
-            <div
-              ref={(el) => { sectionRefs.current['session'] = el; }}
-              data-section="session"
-            >
+            {activeSection === 'session' && (
+            <div>
               <div style={sectionTitleStyle}>会话</div>
 
               {/* Row: 启动时行为 */}
@@ -452,14 +415,11 @@ export function SettingsModal() {
                 </div>
               </div>
             </div>
-
-            <div style={sectionGapStyle} />
+            )}
 
             {/* ── Section: 通知 ── */}
-            <div
-              ref={(el) => { sectionRefs.current['notification'] = el; }}
-              data-section="notification"
-            >
+            {activeSection === 'notification' && (
+            <div>
               <div style={sectionTitleStyle}>通知</div>
 
               {/* Row: 任务完成桌面通知 */}
@@ -488,14 +448,11 @@ export function SettingsModal() {
                 />
               </div>
             </div>
-
-            <div style={sectionGapStyle} />
+            )}
 
             {/* ── Section: 提示词管理 ── */}
-            <div
-              ref={(el) => { sectionRefs.current['prompt'] = el; }}
-              data-section="prompt"
-            >
+            {activeSection === 'prompt' && (
+            <div>
               <div style={sectionTitleStyle}>提示词管理</div>
 
               {/* Row: 提示词数据库 */}
@@ -576,6 +533,12 @@ export function SettingsModal() {
                 </div>
               </div>
             </div>
+            )}
+
+            {/* ── 我的偏好分类 ── */}
+            {activeSection === 'profile' && (
+              <MyProfileSection />
+            )}
 
           </div>
         </div>
