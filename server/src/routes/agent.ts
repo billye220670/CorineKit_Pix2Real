@@ -858,7 +858,7 @@ function buildDiceDirective(ratioAuto: boolean, contentPolicy: DiceContentPolicy
     '',
     '## 🎲 批量随机模式专属要求（必读）',
     '本次调用来自「快速出图」骰子批量生成，除了常规的 generate_image 字段外，以下字段为**必填**：',
-    '- `cardName`：像为一幅画作/摄影作品起标题一样，给这张图一个有画面感、有意境的中文短名（4-12 字）。\n  ⛔ 不要机械罗列 character+pose+style（例：❌「赛博朋克菲谢尔壁尻」）。\n  ✅ 用动作/意境/氛围/情绪去表达：「独坐空山」「霓虹浅梦」「雨夜归人」「暮色独白」「回眸刹那」「森林低语」「失温的星」。\n  📌 角色名规则（条件性）：仅当你本次填写了 character 字段时，cardName 才需要自然包含该角色中文名（例：「菲谢尔的霓虹独白」）；若本次不涉及特定角色（character 为空），请不要硬塞任何人名。\n  禁止标点和英文，禁止直接搬 LoRA 名字。',
+    '- `cardName`：像为一幅画作/摄影作品起标题一样，给这张图一个有画面感、生动的中文短名（4-12 字）。\n  ⛔ 不要机械罗列 character+pose+style（例：❌「赛博朋克菲谢尔壁尻」）。\n  ✅ 用动作/意境/氛围/情绪去表达：「独坐空山」「霓虹浅梦」「雨夜归人」「暮色独白」「回眸刹那」「森林低语」「失温的星」。\n  📌 角色名规则（条件性）：仅当你本次填写了 character 字段时，cardName 才需要自然包含该角色中文名（例：「菲谢尔的霓虹独白」）；若本次不涉及特定角色（character 为空），请不要硬塞任何人名。\n  禁止标点和英文，禁止直接搬 LoRA 名字。',
   ];
   if (ratioAuto) {
     lines.push('- `ratio`：从 "1:1" / "3:4" / "9:16" / "4:3" / "16:9" 中选一个（人物立绘优先 3:4；风景横构图优先 4:3；群像/装饰性构图可选 1:1）。');
@@ -869,25 +869,17 @@ function buildDiceDirective(ratioAuto: boolean, contentPolicy: DiceContentPolicy
   if (contentPolicy === 'sfw') {
     lines.push('');
     lines.push('## 🛡️ 内容限制：SFW（Safe For Work / 强制安全向）');
-    lines.push('- `prompt` 必须严格保持 SFW：角色穿着**完整得体**，适合全年龄段展示。');
-    lines.push('- ⛔ 禁止出现：nude / naked / nsfw / topless / bottomless / cleavage / underwear / lingerie / swimsuit (bikini 除非是沙滩场景且主体不裸露) / panty / see-through / wet clothes / exposed skin 过多 / 色情暗示姿势 / 挑逗表情 / 性器官相关词 / 性行为描述。');
-    lines.push('- ⛔ 禁止在 negativePrompt 里"去掉" SFW 约束（例如不要加 "sfw, clothed" 到 negative 里）。');
-    lines.push('- ✅ 鼓励：日常着装、制服、古风服饰、正式礼服、外套披肩、生活场景（咖啡馆/图书馆/校园/街景/自然风光）、情绪化特写（眼神/回眸/微笑）。');
-    lines.push('- 风格允许偏艺术/写实/唯美，但主体必须"**能出现在官方周边图册**"的程度。');
+    lines.push('- `prompt` 严格保持 SFW：单允许适当的性暗示内容');
   } else if (contentPolicy === 'nsfw') {
     lines.push('');
     lines.push('## 🔞 内容限制：NSFW（Adult-leaning / 倾向成人向）');
-    lines.push('- `prompt` 可以自然融入 NSFW 元素：暴露度较高的服饰（bikini / lingerie / micro-shorts / see-through）、性感姿势（arched back / hand on thigh / from behind / lying on bed）、成人情境（卧室/浴室/沙滩/私人空间）、挑逗表情（sultry / seductive / teasing）。');
-    lines.push('- ✅ 强烈鼓励用 Danbooru 风格的 NSFW 标签（如 cleavage, large breasts, thighs, bare shoulders, nsfw 等）自然穿插，不要生硬堆砌。');
-    lines.push('- 📌 保持**艺术性与审美**：画面应"像杂志硬照/艺术摄影/同人本扉页"，而不是粗劣的色情描述。');
-    lines.push('- ⛔ 仍然禁止：未成年（loli/shota/underage/child）、极端暴力与血腥、非自愿情境、真实人物的成人化、任何违法内容。');
-    lines.push('- 可将 `1girl, solo` 与成人元素结合；character（特定角色）也可自然进入成人情境，但严禁上述禁区。');
+    lines.push('- `prompt` 请确保生成为 NSFW 内容，完全R18向');
   } else {
     // mixed：轻量提示，不强制任一方向
     lines.push('');
     lines.push('## ⚖️ 内容限制：混合（由你自由判断）');
-    lines.push('- 本次无硬性内容约束：可 SFW 可 NSFW，由你根据 seed 与画像自然取舍。');
-    lines.push('- 但仍要保持艺术性与审美，禁止未成年、极端暴力血腥、非自愿情境、违法内容。');
+    lines.push('- 本次无硬性内容约束：可 SFW 可 NSFW，由你根据 seed 与画像决定。');
+    
   }
 
   return lines.join('\n');
