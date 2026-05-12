@@ -3,7 +3,7 @@ import { useWorkflowStore, type Text2ImgConfig } from '../hooks/useWorkflowStore
 import { type LoraSlot } from '../services/sessionService.js';
 import { usePromptAssistantStore } from '../hooks/usePromptAssistantStore.js';
 import { useWebSocket } from '../hooks/useWebSocket.js';
-import { ChevronRight, ChevronDown, Loader, BookText, Hash, AlignLeft, Wand2, Loader2, AlertTriangle, Plus, Trash2, Upload, RefreshCw, X, Sparkles, Dices, Square } from 'lucide-react';
+import { ChevronRight, ChevronDown, ChevronUp, Loader, BookText, Hash, AlignLeft, Wand2, Loader2, AlertTriangle, Plus, Trash2, Upload, RefreshCw, X, Sparkles, Dices, Square, Snowflake, Thermometer, Flame } from 'lucide-react';
 import { SYSTEM_PROMPTS } from './prompt-assistant/systemPrompts.js';
 import { ModelSelect, useModelFavorites } from './ModelSelect.js';
 import { useModelMetadata } from '../hooks/useModelMetadata.js';
@@ -50,6 +50,19 @@ const DICE_MIX_LABEL: Record<DiceMixPreset, string> = {
   preference:  '更多偏好',
   balanced:    '均衡',
   exploration: '更多推荐',
+};
+
+// 意向面板专用简短叫法（与设置面板长文案 DICE_MIX_LABEL 数据驱动同一字段）
+const DICE_MIX_SHORT_LABEL: Record<DiceMixPreset, string> = {
+  preference:  '偏好向',
+  balanced:    '均衡向',
+  exploration: '探索向',
+};
+
+const DICE_MIX_PRESET_TITLE: Record<DiceMixPreset, string> = {
+  preference:  '70% 画像偏好 / 20% 画像微改 / 10% 探索',
+  balanced:    '50% 画像偏好 / 30% 画像微改 / 20% 探索（默认）',
+  exploration: '20% 画像偏好 / 30% 画像微改 / 50% 探索',
 };
 
 /**
@@ -313,10 +326,22 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
   const [batchCount, setBatchCount] = useState(1);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isRandomizing, setIsRandomizing] = useState(false);
+  // 随机生成 · 意向面板：用户点击骰子右侧 ChevronUp 弹出的浮动输入面板
+  const [intentPanelOpen, setIntentPanelOpen] = useState(false);
+  const [intentText, setIntentText] = useState('');
+  const intentPanelRef = useRef<HTMLDivElement | null>(null);
+  const intentToggleRef = useRef<HTMLButtonElement | null>(null);
+  const intentTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  // 意向面板内的「偏好档位」上拉菜单（与设置面板"随机生成偏好"数据驱动同一字段）
+  const [mixMenuOpen, setMixMenuOpen] = useState(false);
+  const mixMenuRef = useRef<HTMLDivElement | null>(null);
   const diceMixPreset = useSettingsStore((s) => s.diceMixPreset);
+  const setDiceMixPreset = useSettingsStore((s) => s.setDiceMixPreset);
   const diceRefMode = useSettingsStore((s) => s.diceRefMode);
   const diceRatioMode = useSettingsStore((s) => s.diceRatioMode);
   const diceContentPolicy = useSettingsStore((s) => s.diceContentPolicy);
+  const diceTemperature = useSettingsStore((s) => s.diceTemperature);
+  const setDiceTemperature = useSettingsStore((s) => s.setDiceTemperature);
   const taskExecutionMode = useSettingsStore((s) => s.taskExecutionMode);
   const loopActive = useAutoLoopStore((s) => s.active);
   const loopTabId = useAutoLoopStore((s) => s.tabId);
@@ -551,6 +576,59 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
     }
   }, [loraModels]);
 
+  // 意向面板：打开时自动聚焦 textarea；点击面板与触发按钮之外区域关闭；Esc 关闭
+  useEffect(() => {
+    if (!intentPanelOpen) return;
+    // 延迟一帧 focus，避免与 onClick 冲突
+    const focusTimer = window.setTimeout(() => {
+      intentTextareaRef.current?.focus();
+    }, 0);
+    const onMouseDown = (e: MouseEvent) => {
+      const target = e.target as Node | null;
+      if (!target) return;
+      if (intentPanelRef.current?.contains(target)) return;
+      if (intentToggleRef.current?.contains(target)) return;
+      setIntentPanelOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIntentPanelOpen(false);
+    };
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.clearTimeout(focusTimer);
+      document.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [intentPanelOpen]);
+
+  // 意向 textarea：随内容自动撑高（初始 1 行，换行后向上长；max-height 160px）
+  useLayoutEffect(() => {
+    if (!intentPanelOpen) return;
+    const ta = intentTextareaRef.current;
+    if (!ta) return;
+    ta.style.height = 'auto';
+    ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`;
+  }, [intentPanelOpen, intentText]);
+
+  // 偏好档位上拉菜单：点击菜单容器之外关闭（面板整体关闭时菜单也随之卸载）
+  useEffect(() => {
+    if (!mixMenuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node | null;
+      if (!t) return;
+      if (mixMenuRef.current?.contains(t)) return;
+      setMixMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [mixMenuOpen]);
+
+  // 意向面板关闭时同步收起子菜单
+  useEffect(() => {
+    if (!intentPanelOpen) setMixMenuOpen(false);
+  }, [intentPanelOpen]);
+
   const selectedPreset = ratio === 'original' ? undefined : RATIO_PRESETS.find((p) => p.label === ratio);
 
   // ── Reference image handlers ───────────────────────────────────────────────
@@ -673,9 +751,12 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
    * 随机骰子：按用户在设置面板选择的档位（更多偏好 / 均衡 / 更多推荐）拆分 batchCount，
    * 调后端 /api/agent/random-batch 拉取 N 条 prompt，覆盖当前 sidebar 其他配置后入照片墙。
    */
-  const handleRandomGenerate = useCallback(async () => {
+  const handleRandomGenerate = useCallback(async (userIntent?: string) => {
     if (!clientId || isGenerating || isRandomizing) return;
     if (models.length === 0) return;
+
+    // 用户意向（来自骰子右侧 ChevronUp 浮动面板）：裁剪并校验长度
+    const trimmedIntent = typeof userIntent === 'string' ? userIntent.trim().slice(0, 500) : '';
 
     // 跨 tab 守卫：若其它 tab 正在自动循环，弹模态框询问用户是否停止
     const guarded = await useAutoLoopStore.getState().guardBeforeSubmit(7);
@@ -710,7 +791,7 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
           const resp = await fetch('/api/agent/random-batch', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ preferenceCount, tweakCount, exploreCount, mixPreset: diceMixPreset, ratioMode: diceRatioMode, contentPolicy: diceContentPolicy }),
+            body: JSON.stringify({ preferenceCount, tweakCount, exploreCount, mixPreset: diceMixPreset, ratioMode: diceRatioMode, contentPolicy: diceContentPolicy, userIntent: trimmedIntent || undefined, temperature: diceTemperature }),
           });
           if (!resp.ok) {
             const errText = await resp.text();
@@ -834,7 +915,7 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
         useAutoLoopStore.getState().stopLoop();
       }
     }
-  }, [clientId, isGenerating, isRandomizing, batchCount, diceMixPreset, diceRefMode, diceRatioMode, diceContentPolicy, taskExecutionMode, model, models, loraModels, loras, negativePrompt, selectedPreset, customWidth, customHeight, steps, cfg, sampler, scheduler, referenceImage, poseStrength, depthStrength, ratio, refImageSize, addText2ImgCard, startTask, setFlashingImage, sendMessage, sessionId]);
+  }, [clientId, isGenerating, isRandomizing, batchCount, diceMixPreset, diceRefMode, diceRatioMode, diceContentPolicy, diceTemperature, taskExecutionMode, model, models, loraModels, loras, negativePrompt, selectedPreset, customWidth, customHeight, steps, cfg, sampler, scheduler, referenceImage, poseStrength, depthStrength, ratio, refImageSize, addText2ImgCard, startTask, setFlashingImage, sendMessage, sessionId]);
 
   const handleQuickAction = useCallback(async (mode: 'naturalToTags' | 'tagsToNatural' | 'detailer') => {
     if (!prompt.trim()) return;
@@ -1785,7 +1866,7 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
             boxSizing: 'border-box',
           }}
         />
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, position: 'relative' }}>
           {isMyLoop ? (
             <button
               onClick={() => useAutoLoopStore.getState().stopLoop()}
@@ -1836,38 +1917,101 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
                 {isGenerating && <Loader size={14} style={{ animation: 'pulse 1s ease-in-out infinite' }} />}
                 {taskExecutionMode === 'autoLoop' ? '开始循环' : '生成'}
               </button>
-              <button
-                onClick={handleRandomGenerate}
-                disabled={!clientId || isGenerating || isRandomizing || models.length === 0}
-                title={`随机生成（档位：${DICE_MIX_LABEL[diceMixPreset]} / 参考图：${diceRefMode === 'auto' ? '使用（如有）' : '不使用'} / 比例：${diceRatioMode === 'auto' ? '自动' : '手动'}，可在设置-随机生成中调整）${taskExecutionMode === 'autoLoop' ? ' · 自动循环模式' : ''}`}
-                style={{
-                  padding: '10px',
-                  width: 40,
-                  backgroundColor: 'var(--color-bg)',
-                  color: 'var(--color-text)',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 8,
-                  fontSize: '14px',
-                  fontWeight: 600,
-                  cursor: (!clientId || isGenerating || isRandomizing || models.length === 0) ? 'not-allowed' : 'pointer',
-                  opacity: (!clientId || isGenerating || isRandomizing || models.length === 0) ? 0.5 : 1,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'background-color 0.15s, opacity 0.15s',
-                  flexShrink: 0,
-                }}
-                onMouseEnter={(e) => {
-                  if (!e.currentTarget.disabled) e.currentTarget.style.backgroundColor = 'var(--color-surface-hover, rgba(255,255,255,0.06))';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--color-bg)';
-                }}
-              >
-                {isRandomizing
-                  ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
-                  : <Dices size={16} />}
-              </button>
+              {/* 随机生成组合控件：骰子 + 分隔线 + ChevronUp 意向面板触发，共用一个 border */}
+              {(() => {
+                const diceDisabled = !clientId || isGenerating || isRandomizing || models.length === 0;
+                return (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'stretch',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: 8,
+                      backgroundColor: 'var(--color-bg)',
+                      overflow: 'hidden',
+                      flexShrink: 0,
+                      opacity: diceDisabled ? 0.5 : 1,
+                      transition: 'opacity 0.15s',
+                    }}
+                  >
+                    <button
+                      onClick={() => handleRandomGenerate()}
+                      disabled={diceDisabled}
+                      title={`随机生成（档位：${DICE_MIX_LABEL[diceMixPreset]} / 参考图：${diceRefMode === 'auto' ? '使用（如有）' : '不使用'} / 比例：${diceRatioMode === 'auto' ? '自动' : '手动'}，可在设置-随机生成中调整）${taskExecutionMode === 'autoLoop' ? ' · 自动循环模式' : ''}`}
+                      style={{
+                        padding: '10px',
+                        width: 40,
+                        backgroundColor: 'transparent',
+                        color: 'var(--color-text)',
+                        border: 'none',
+                        borderRadius: 0,
+                        fontSize: '14px',
+                        fontWeight: 600,
+                        cursor: diceDisabled ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'background-color 0.15s',
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!e.currentTarget.disabled) e.currentTarget.style.backgroundColor = 'var(--color-surface-hover, rgba(255,255,255,0.06))';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }}
+                    >
+                      {isRandomizing
+                        ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                        : <Dices size={16} />}
+                    </button>
+                    {/* 竖向分隔细线：上下撑满容器 */}
+                    <div style={{ width: 1, backgroundColor: 'var(--color-border)', alignSelf: 'stretch', flexShrink: 0 }} />
+                    {/* 意向面板触发按钮（ChevronUp）：点击展开浮动输入面板 */}
+                    <button
+                      ref={intentToggleRef}
+                      onClick={() => setIntentPanelOpen((v) => !v)}
+                      disabled={diceDisabled}
+                      title={intentText.trim() ? `当前意向：${intentText.trim()}（点击编辑）` : '写下你的生成意向（可选，作为最高优先级影响随机生成）'}
+                      style={{
+                        padding: 0,
+                        width: 24,
+                        backgroundColor: intentPanelOpen ? 'var(--color-surface-hover, rgba(255,255,255,0.08))' : 'transparent',
+                        color: intentText.trim() ? 'var(--color-primary)' : 'var(--color-text)',
+                        border: 'none',
+                        borderRadius: 0,
+                        cursor: diceDisabled ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'background-color 0.15s, transform 0.15s',
+                        position: 'relative',
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!e.currentTarget.disabled) e.currentTarget.style.backgroundColor = 'var(--color-surface-hover, rgba(255,255,255,0.06))';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = intentPanelOpen ? 'var(--color-surface-hover, rgba(255,255,255,0.08))' : 'transparent';
+                      }}
+                    >
+                      <ChevronUp size={14} style={{ transform: intentPanelOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }} />
+                      {/* 已填入意向时的小圆点指示器 */}
+                      {intentText.trim() && !intentPanelOpen && (
+                        <span
+                          style={{
+                            position: 'absolute',
+                            top: 3,
+                            right: 3,
+                            width: 6,
+                            height: 6,
+                            borderRadius: '50%',
+                            backgroundColor: 'var(--color-primary)',
+                          }}
+                        />
+                      )}
+                    </button>
+                  </div>
+                );
+              })()}
               {taskExecutionMode === 'manual' && (
                 <input
                   type="number"
@@ -1892,6 +2036,229 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
                     flexShrink: 0,
                   }}
                 />
+              )}
+              {/* 意向浮动面板：向上弹出，包含 textarea（1 行起步，随内容向上撑高） + toolbar（温度图标 + 发送按钮） */}
+              {intentPanelOpen && (
+                <div
+                  ref={intentPanelRef}
+                  style={{
+                    position: 'absolute',
+                    bottom: 'calc(100% + 8px)',
+                    right: 0,
+                    width: 300,
+                    padding: 10,
+                    backgroundColor: 'var(--color-surface, var(--color-bg))',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 10,
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.24)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 8,
+                    zIndex: 20,
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <textarea
+                    ref={intentTextareaRef}
+                    value={intentText}
+                    onChange={(e) => setIntentText(e.target.value.slice(0, 500))}
+                    onKeyDown={(e) => {
+                      // Ctrl/Cmd + Enter 或纯 Enter 发送；Shift+Enter 换行
+                      if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                        e.preventDefault();
+                        const txt = intentText.trim();
+                        setIntentPanelOpen(false);
+                        handleRandomGenerate(txt || undefined);
+                      }
+                    }}
+                    placeholder="请输入生成的主题 / 意向"
+                    rows={1}
+                    style={{
+                      width: '100%',
+                      padding: '8px 10px',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: 6,
+                      backgroundColor: 'var(--color-bg)',
+                      color: 'var(--color-text)',
+                      fontSize: 12,
+                      lineHeight: 1.5,
+                      outline: 'none',
+                      resize: 'none',
+                      fontFamily: 'inherit',
+                      boxSizing: 'border-box',
+                      overflowY: 'auto',
+                      // 单行起步，随内容撑高；关闭仍可用 Esc 或点击面板外
+                      minHeight: 36,
+                      display: 'block',
+                      verticalAlign: 'top',
+                    }}
+                  />
+                  {/* toolbar：文本框下方右侧 · 温度图标（无底色） + 发送按钮（蓝底白字） */}
+                  {(() => {
+                    const isLoop = taskExecutionMode === 'autoLoop';
+                    const sendDisabled = !clientId || isGenerating || isRandomizing || isMyLoop || models.length === 0;
+                    const hasIntent = intentText.trim().length > 0;
+                    const sendLabel = isLoop ? '开始' : '生成';
+                    const sendTitle = isMyLoop
+                      ? '当前正在自动循环中，无法发起新任务'
+                      : isLoop
+                        ? (hasIntent
+                            ? '围绕该意向开始自动循环随机生成（持续到手动停止）'
+                            : '未填写意向，将按画像开始自动循环随机生成')
+                        : (hasIntent
+                            ? '围绕该意向发起随机生成（按当前批量数一次性生成）'
+                            : '未填写意向，将按画像随机生成（按当前批量数一次性生成）');
+                    // 温度循环按钮：low → medium → high → low
+                    // 语义层（系统提示词里的"意向发散温度"）+ API 层（LLM temperature：0.6/0.9/1.15）双重影响
+                    const tempNext = diceTemperature === 'low' ? 'medium' : diceTemperature === 'medium' ? 'high' : 'low';
+                    const tempIcon = diceTemperature === 'low'
+                      ? <Snowflake size={16} />
+                      : diceTemperature === 'high'
+                        ? <Flame size={16} />
+                        : <Thermometer size={16} />;
+                    const tempColor = diceTemperature === 'low'
+                      ? '#4ea8ff'
+                      : diceTemperature === 'high'
+                        ? '#ff6b4a'
+                        : '#f0a500';
+                    const tempLabel = diceTemperature === 'low' ? '低' : diceTemperature === 'high' ? '高' : '中';
+                    const tempDesc = diceTemperature === 'low'
+                      ? '严格紧贴意向字面，尽量少变奏'
+                      : diceTemperature === 'high'
+                        ? '在保持意向主体前提下大胆发散'
+                        : '在保持意向主体前提下自然变奏';
+                    const tempTitle = `发散温度：${tempLabel}（${tempDesc}）。点击切换至「${tempNext === 'low' ? '低' : tempNext === 'high' ? '高' : '中'}」。`;
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                        {/* 左下：偏好档位上拉菜单 + 温度图标（数据驱动 · 与设置-随机生成-随机生成偏好同一字段） */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <div ref={mixMenuRef} style={{ position: 'relative' }}>
+                          <button
+                            onClick={() => setMixMenuOpen((v) => !v)}
+                            title={`当前档位：${DICE_MIX_SHORT_LABEL[diceMixPreset]}（${DICE_MIX_PRESET_TITLE[diceMixPreset]}）。点击切换；与设置面板"随机生成偏好"同步。`}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              height: 26,
+                              padding: '0 8px',
+                              backgroundColor: 'transparent',
+                              color: 'var(--color-text-secondary)',
+                              border: '1px solid var(--color-border)',
+                              borderRadius: 6,
+                              fontSize: 12,
+                              cursor: 'pointer',
+                              lineHeight: 1,
+                              flexShrink: 0,
+                            }}
+                          >
+                            {DICE_MIX_SHORT_LABEL[diceMixPreset]}
+                            <ChevronUp size={12} style={{ transform: mixMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }} />
+                          </button>
+                          {mixMenuOpen && (
+                            <div
+                              style={{
+                                position: 'absolute',
+                                bottom: 'calc(100% + 4px)',
+                                left: 0,
+                                minWidth: 120,
+                                padding: 4,
+                                backgroundColor: 'var(--color-surface, var(--color-bg))',
+                                border: '1px solid var(--color-border)',
+                                borderRadius: 8,
+                                boxShadow: '0 6px 18px rgba(0,0,0,0.24)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: 2,
+                                zIndex: 30,
+                              }}
+                            >
+                              {(['preference', 'balanced', 'exploration'] as DiceMixPreset[]).map((v) => {
+                                const active = v === diceMixPreset;
+                                return (
+                                  <button
+                                    key={v}
+                                    onClick={() => { setDiceMixPreset(v); setMixMenuOpen(false); }}
+                                    title={DICE_MIX_PRESET_TITLE[v]}
+                                    style={{
+                                      padding: '6px 10px',
+                                      textAlign: 'left',
+                                      fontSize: 12,
+                                      backgroundColor: active ? 'var(--color-primary)' : 'transparent',
+                                      color: active ? '#fff' : 'var(--color-text)',
+                                      border: 'none',
+                                      borderRadius: 4,
+                                      cursor: 'pointer',
+                                      fontWeight: active ? 600 : 400,
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      if (!active) e.currentTarget.style.backgroundColor = 'var(--color-surface-hover, rgba(255,255,255,0.08))';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      if (!active) e.currentTarget.style.backgroundColor = 'transparent';
+                                    }}
+                                  >
+                                    {DICE_MIX_SHORT_LABEL[v]}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                          {/* 温度图标（无底色）：紧贴偏好档位菜单右侧 */}
+                          <button
+                            onClick={() => setDiceTemperature(tempNext)}
+                            title={tempTitle}
+                            style={{
+                              width: 26,
+                              height: 26,
+                              padding: 0,
+                              backgroundColor: 'transparent',
+                              color: tempColor,
+                              border: 'none',
+                              borderRadius: 4,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0,
+                            }}
+                          >
+                            {tempIcon}
+                          </button>
+                        </div>
+                        {/* 右下：发送按钮（蓝底白字） */}
+                        <button
+                          onClick={() => {
+                            const txt = intentText.trim();
+                            setIntentPanelOpen(false);
+                            handleRandomGenerate(txt || undefined);
+                          }}
+                          disabled={sendDisabled}
+                          title={sendTitle}
+                          style={{
+                            height: 26,
+                            padding: '0 12px',
+                            backgroundColor: 'var(--color-primary)',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: 6,
+                            fontSize: 12,
+                            fontWeight: 600,
+                            cursor: sendDisabled ? 'not-allowed' : 'pointer',
+                            opacity: sendDisabled ? 0.5 : 1,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                          }}
+                        >
+                          {sendLabel}
+                        </button>
+                      </div>
+                    );
+                  })()}
+                </div>
               )}
             </>
           )}

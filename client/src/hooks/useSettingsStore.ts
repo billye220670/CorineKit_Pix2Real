@@ -11,6 +11,8 @@ export type DiceRefMode = 'auto' | 'none';
 export type DiceRatioMode = 'manual' | 'auto';
 /** 随机生成 · 内容限制：sfw=强制安全向；mixed=不加约束由 AI 自由发挥；nsfw=倾向成人向 */
 export type DiceContentPolicy = 'sfw' | 'mixed' | 'nsfw';
+/** 随机生成 · 意向发散温度：低=紧贴意向字面；中=自然变奏；高=大胆发散（同时影响 LLM API temperature 与系统提示词指令） */
+export type DiceTemperature = 'low' | 'medium' | 'high';
 /** 任务执行模式：manual=按数量一次性提交；autoLoop=持续循环直到手动停止 */
 export type TaskExecutionMode = 'manual' | 'autoLoop';
 
@@ -24,6 +26,7 @@ interface SettingsState {
   diceRefMode: DiceRefMode;
   diceRatioMode: DiceRatioMode;
   diceContentPolicy: DiceContentPolicy;
+  diceTemperature: DiceTemperature;
   taskExecutionMode: TaskExecutionMode;
   settingsOpen: boolean;
   // 服务端托管的设置
@@ -39,6 +42,7 @@ interface SettingsState {
   setDiceRefMode: (mode: DiceRefMode) => void;
   setDiceRatioMode: (mode: DiceRatioMode) => void;
   setDiceContentPolicy: (policy: DiceContentPolicy) => void;
+  setDiceTemperature: (t: DiceTemperature) => void;
   setTaskExecutionMode: (mode: TaskExecutionMode) => void;
   openSettings: () => void;
   closeSettings: () => void;
@@ -68,6 +72,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   diceContentPolicy: (() => {
     const v = localStorage.getItem('settings_diceContentPolicy');
     return v === 'sfw' || v === 'mixed' || v === 'nsfw' ? v : 'mixed';
+  })(),
+  diceTemperature: (() => {
+    const v = localStorage.getItem('settings_diceTemperature');
+    return v === 'low' || v === 'high' ? v : 'medium';
   })(),
   taskExecutionMode: (() => {
     const v = localStorage.getItem('settings_taskExecutionMode');
@@ -112,6 +120,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setDiceContentPolicy: (policy) => {
     localStorage.setItem('settings_diceContentPolicy', policy);
     set({ diceContentPolicy: policy });
+  },
+  setDiceTemperature: (t) => {
+    localStorage.setItem('settings_diceTemperature', t);
+    set({ diceTemperature: t });
   },
   setTaskExecutionMode: (mode) => {
     localStorage.setItem('settings_taskExecutionMode', mode);

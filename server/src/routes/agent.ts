@@ -765,8 +765,35 @@ function buildRandomSeed(
   category: 'preference' | 'tweak' | 'explore',
   profile: any,
   metadata: any,
+  userIntent?: string,
+  temperature: DiceTemperature = 'medium',
 ): string {
   const pick = <T,>(arr: T[]): T | undefined => arr.length === 0 ? undefined : arr[Math.floor(Math.random() * arr.length)];
+
+  // 用户意向优先：若用户在浮动面板显式输入了意向，则以意向为本次 seed 主轴。
+  // 种子只描述"档位职责 + 温度下的发散尺度"，具体的变奏方向完全交给 LLM 自主决定（纯开放式），
+  // 不再用预设词库挑选场景/光线/视角——避免把骰子退化成前端的 Random 拼词器。
+  if (userIntent && userIntent.trim().length > 0) {
+    const intent = userIntent.trim();
+
+    // 温度尺度词：供 LLM 理解本条 item 的发散幅度
+    const scaleHint =
+      temperature === 'low'
+        ? '严格紧贴用户意向字面描述，不做额外改编或联想'
+        : temperature === 'high'
+          ? '在保持用户意向主体（角色/服装/事件等具体元素）绝对不变的前提下，大胆发散——场景、光线、构图、视角、叙事、风格都可以做激进的变奏与创造性联想'
+          : '在保持用户意向主体不变的前提下，做自然的变奏';
+
+    if (category === 'preference') {
+      return `用户本次生成意向：${intent}。请围绕该意向生成一张图（${scaleHint}），可结合用户画像中的常用风格/构图偏好来强化表达，但不得偏离用户意向。`;
+    }
+    if (category === 'tweak') {
+      return `用户本次生成意向：${intent}。请围绕该意向生成一张图，并在场景/光线/构图/视角等维度上自主做${temperature === 'high' ? '大幅' : temperature === 'low' ? '克制的小幅' : '自然的'}变奏（具体方向由你根据意向与画像自主决定，无需套用任何固定模板），但核心主体必须严格围绕用户意向。`;
+    }
+    // explore：鼓励使用未用过的风格/LoRA，但主题仍围绕意向
+    return `用户本次生成意向：${intent}。请围绕该意向，在风格化表达上${temperature === 'high' ? '做跨风格的激进探索（可打破画像常规做大胆融合）' : temperature === 'low' ? '做克制的风格尝试' : '做较大胆的探索'}（可尝试用户画像中未使用过的风格/元素搭配），呈现更具探索感的画面，但主题绝不能偏离用户意向。`;
+  }
+
   const chars  = extractLorasByCategory(profile, metadata, '角色', 10);
   const poses  = extractLorasByCategory(profile, metadata, '姿势', 10);
   const exprs  = extractLorasByCategory(profile, metadata, '表情', 10);
@@ -852,8 +879,18 @@ function getDiceTools(ratioAuto: boolean): any[] {
 /** 骰子模式的内容限制策略 */
 type DiceContentPolicy = 'sfw' | 'mixed' | 'nsfw';
 
+/** 骰子模式的意向发散温度：low=紧贴意向字面；medium=自然变奏；high=大胆发散 */
+type DiceTemperature = 'low' | 'medium' | 'high';
+
+/** 档位温度 → LLM API temperature 的映射（底层 token 采样熵） */
+const DICE_TEMPERATURE_TO_API: Record<DiceTemperature, number> = {
+  low:    0.6,
+  medium: 0.9,
+  high:   1.15,
+};
+
 /** 骰子模式追加到 system prompt 末尾的专属指令 */
-function buildDiceDirective(ratioAuto: boolean, contentPolicy: DiceContentPolicy = 'mixed'): string {
+function buildDiceDirective(ratioAuto: boolean, contentPolicy: DiceContentPolicy = 'mixed', userIntent?: string, temperature: DiceTemperature = 'medium'): string {
   const lines = [
     '',
     '## 🎲 批量随机模式专属要求（必读）',
@@ -882,6 +919,48 @@ function buildDiceDirective(ratioAuto: boolean, contentPolicy: DiceContentPolicy
     
   }
 
+  // 用户意向优先级指令：若用户通过浮动面板 Send 按钮显式输入了本次生成意向，则此意向为最高优先级
+  if (userIntent && userIntent.trim().length > 0) {
+    const intent = userIntent.trim();
+    lines.push('');
+    lines.push('## 🎯 用户本次生成意向（最高优先级，必须严格围绕）');
+    lines.push(`用户通过骰子旁的意向面板，主动输入了以下生成意向：\n> "${intent}"`);
+    lines.push('**本次批量随机的全部条目（无论 preference / tweak / explore 任何档位）必须全部围绕上述用户意向展开，不得偏离。**');
+    lines.push('优先级顺序（从高到低）：');
+    lines.push('1. 用户意向（最高）：意向中明确的角色、服装、场景、动作、氛围等具体元素必须精准地出现在 prompt 中，不得被画像或随机元素覆盖或替换；');
+    lines.push('2. 档位职责：preference 档可结合画像常用风格强化；tweak 档在保持意向核心的前提下在场景/光线/构图上做变奏；explore 档在保持意向核心的前提下尝试较大胆的风格化探索；');
+    lines.push('3. 用户画像偏好（常用风格标签、常用模型等）：仅在不与用户意向冲突时作为辅助强化；');
+    lines.push('4. 内容限制策略（SFW / NSFW / 混合）：在不违背用户意向的前提下叠加。');
+    lines.push('⚠️ 特别注意：若用户意向已经明确指定了角色（例如"安琪拉"），请以用户指定的角色为准，**不要**再使用画像中其他常用角色替代或混入；若用户意向已指定服装/场景，也不要被档位随机替换。');
+    lines.push('⚠️ cardName 也应体现用户意向的主体与氛围（例如用户意向为"安琪拉穿泳装"，cardName 可取"安琪拉的夏日泳滩"而非随机意境短语）。');
+
+    // 意向发散温度（语义层；与 LLM API temperature 底层熵叠加生效）
+    lines.push('');
+    lines.push('## 🌡️ 意向发散温度（与本批次所有条目相关）');
+    if (temperature === 'low') {
+      lines.push('当前温度：**低**——严格紧扣用户意向的字面描述。');
+      lines.push('- prompt 应尽量贴近用户意向文本中明确提到的角色/服装/场景/动作元素，不做大幅改编、不做创造性联想；');
+      lines.push('- preference/tweak/explore 三档之间的差异应保持克制，以"用户意向的字面表达"作为最大公约数；');
+      lines.push('- 避免引入意向中未提及的新元素（如新角色、新道具、新叙事），保持画面稳定与可预期。');
+    } else if (temperature === 'high') {
+      lines.push('当前温度：**高**——在保持用户意向**主体不变**的前提下，大胆发散。');
+      lines.push('- prompt 可以对场景、光线、构图、视角、叙事氛围、风格化表达做**激进**的变奏与创造性联想；');
+      lines.push('- preference 档可探索不同氛围；tweak 档可做较大胆的镜头/叙事改编；explore 档可跨风格融合、打破画像常规；');
+      lines.push('- 用词可更具表现力、更多样化；同一批次的 N 条应呈现明显的差异感，避免同质化；');
+      lines.push('- ⛔ 红线：用户意向中明确指定的主体（角色、服装、事件等具体元素）**绝不允许丢失、替换或被削弱**，发散只能施加在这些主体之外的维度。');
+    } else {
+      lines.push('当前温度：**中**——均衡模式。');
+      lines.push('- 在用户意向主体不变的前提下，按档位职责自然变奏（preference 紧贴画像强化、tweak 自由变奏场景/光线/构图、explore 尝试新风格搭配）；');
+      lines.push('- 同一批次 N 条之间应有可察觉但不过度的差异。');
+    }
+  } else {
+    // 没有用户意向时也给一个发散温度（但语义稍弱，因为档位本身已经承担了发散职责）
+    if (temperature === 'low' || temperature === 'high') {
+      lines.push('');
+      lines.push(`## 🌡️ 档位发散温度：${temperature === 'low' ? '低（各档位更克制、更贴近画像）' : '高（各档位更大胆、更发散）'}`);
+    }
+  }
+
   return lines.join('\n');
 }
 
@@ -897,18 +976,25 @@ async function runGenerateImageForSeed(
   metadata: any,
   ratioAuto: boolean,
   contentPolicy: DiceContentPolicy = 'mixed',
+  userIntent?: string,
+  temperature: DiceTemperature = 'medium',
 ): Promise<RunGenerateResult | null> {
-  const systemPrompt = buildSystemPrompt(profile, metadata) + buildDiceDirective(ratioAuto, contentPolicy);
+  const systemPrompt = buildSystemPrompt(profile, metadata) + buildDiceDirective(ratioAuto, contentPolicy, userIntent, temperature);
   // user message 末尾再强调一次——Grok 对 user 最后一句注意力最高
-  const reinforcement = ratioAuto
+  const intentReinforce = (userIntent && userIntent.trim().length > 0)
+    ? `\n\n🎯 用户意向（最高优先级，必须严格围绕）："${userIntent.trim()}"`
+    : '';
+  const reinforcement = (ratioAuto
     ? '\n\n⚠️ 请务必在 generate_image 的参数中同时返回 cardName（4-12 汉字中文短名）和 ratio（画面比例枚举）。'
-    : '\n\n⚠️ 请务必在 generate_image 的参数中返回 cardName（4-12 汉字中文短名）。';
+    : '\n\n⚠️ 请务必在 generate_image 的参数中返回 cardName（4-12 汉字中文短名）。') + intentReinforce;
   const messages: LLMMessage[] = [
     { role: 'system', content: systemPrompt },
     { role: 'user', content: seed + reinforcement },
   ];
   const tools = getDiceTools(ratioAuto);
-  const llmResponse = await callLLM({ messages, tools, toolChoice: 'required', temperature: 0.9 });
+  // 意向发散温度同时影响 LLM API temperature（token 采样熵）：低=0.6 / 中=0.9 / 高=1.15
+  const apiTemperature = DICE_TEMPERATURE_TO_API[temperature];
+  const llmResponse = await callLLM({ messages, tools, toolChoice: 'required', temperature: apiTemperature });
   if (!llmResponse.toolCalls || llmResponse.toolCalls.length === 0) return null;
   const tc = llmResponse.toolCalls[0];
   if (tc.function?.name !== 'generate_image') return null;
@@ -944,6 +1030,8 @@ router.post('/random-batch', express.json(), async (req, res) => {
       exploreCount = 0,
       ratioMode = 'auto',
       contentPolicy: rawContentPolicy = 'mixed',
+      userIntent: rawUserIntent = '',
+      temperature: rawTemperature = 'medium',
     } = (req.body || {}) as {
       preferenceCount?: number;
       tweakCount?: number;
@@ -951,9 +1039,16 @@ router.post('/random-batch', express.json(), async (req, res) => {
       mixPreset?: 'preference' | 'balanced' | 'exploration';
       ratioMode?: 'manual' | 'auto';
       contentPolicy?: 'sfw' | 'mixed' | 'nsfw';
+      userIntent?: string;
+      temperature?: 'low' | 'medium' | 'high';
     };
     const ratioAuto = ratioMode === 'auto';
     const contentPolicy: DiceContentPolicy = (rawContentPolicy === 'sfw' || rawContentPolicy === 'nsfw') ? rawContentPolicy : 'mixed';
+    // 用户通过浮动意向面板显式输入的本次生成意向（最高优先级）；裁剪长度防滥用
+    const userIntent: string = typeof rawUserIntent === 'string' ? rawUserIntent.trim().slice(0, 500) : '';
+    const hasIntent = userIntent.length > 0;
+    // 意向发散温度（浮动面板左下角温度图标循环切换：低 / 中 / 高）
+    const temperature: DiceTemperature = (rawTemperature === 'low' || rawTemperature === 'high') ? rawTemperature : 'medium';
 
     const pc = Math.max(0, Math.floor(Number(preferenceCount) || 0));
     const tc = Math.max(0, Math.floor(Number(tweakCount) || 0));
@@ -1001,22 +1096,24 @@ router.post('/random-batch', express.json(), async (req, res) => {
     };
 
     // cold 画像：LLM 难以命中，直接本地合成 + LoRA 反推
-    if (maturity === 'cold') {
+    // 例外：当用户通过浮动面板显式输入了意向时，即使 cold 也必须走 LLM 路径，
+    //       否则本地合成的 English tags 无法围绕用户的中文意向展开
+    if (maturity === 'cold' && !hasIntent) {
       const raw = buildRandomBatchFallback(profile, metadata, pc, tc, ec);
       const coldItems: RandomItem[] = raw.map(r => buildFallbackItem(r.category, r.prompt));
       res.json({ items: coldItems, fallback: true, maturity });
       return;
     }
 
-    // ── warm / hot：按档位构造 N 条中文种子，并发跑 chat 同款 generate_image LLM ──
+    // ── warm / hot（或 cold + hasIntent）：按档位构造 N 条中文种子，并发跑 chat 同款 generate_image LLM ──
     const seeds: Array<{ category: 'preference' | 'tweak' | 'explore'; seed: string }> = [];
-    for (let i = 0; i < pc; i++) seeds.push({ category: 'preference', seed: buildRandomSeed('preference', profile, metadata) });
-    for (let i = 0; i < tc; i++) seeds.push({ category: 'tweak',      seed: buildRandomSeed('tweak',      profile, metadata) });
-    for (let i = 0; i < ec; i++) seeds.push({ category: 'explore',    seed: buildRandomSeed('explore',    profile, metadata) });
+    for (let i = 0; i < pc; i++) seeds.push({ category: 'preference', seed: buildRandomSeed('preference', profile, metadata, userIntent, temperature) });
+    for (let i = 0; i < tc; i++) seeds.push({ category: 'tweak',      seed: buildRandomSeed('tweak',      profile, metadata, userIntent, temperature) });
+    for (let i = 0; i < ec; i++) seeds.push({ category: 'explore',    seed: buildRandomSeed('explore',    profile, metadata, userIntent, temperature) });
 
     const settled = await Promise.all(seeds.map(async (s): Promise<RandomItem | null> => {
       try {
-        const result = await runGenerateImageForSeed(s.seed, profile, metadata, ratioAuto, contentPolicy);
+        const result = await runGenerateImageForSeed(s.seed, profile, metadata, ratioAuto, contentPolicy, userIntent, temperature);
         if (!result || !result.intent || !result.intent.prompt) return null;
         const intent = result.intent;
         const size = result.ratio ? DICE_RATIO_TO_SIZE[result.ratio] : undefined;
