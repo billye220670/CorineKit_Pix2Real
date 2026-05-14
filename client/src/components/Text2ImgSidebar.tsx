@@ -327,8 +327,13 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isRandomizing, setIsRandomizing] = useState(false);
   // 随机生成 · 意向面板：用户点击骰子右侧 ChevronUp 弹出的浮动输入面板
+  // 注：intentText 随 DRAFT_KEY 一起持久化到 localStorage，切换 tab / 刷新页面后都会恢复；
+  // 面板展开态（intentPanelOpen）属于临时 UI 状态，不做持久化，保持默认收起。
   const [intentPanelOpen, setIntentPanelOpen] = useState(false);
-  const [intentText, setIntentText] = useState('');
+  const [intentText, setIntentText] = useState<string>(() => {
+    const v = readDraft().intentText;
+    return typeof v === 'string' ? v.slice(0, 500) : '';
+  });
   const intentPanelRef = useRef<HTMLDivElement | null>(null);
   const intentToggleRef = useRef<HTMLButtonElement | null>(null);
   const intentTextareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -556,8 +561,8 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
 
   // Persist config to localStorage whenever it changes
   useEffect(() => {
-    localStorage.setItem(DRAFT_KEY, JSON.stringify({ model, loras, prompt, negativePrompt, ratio, steps, cfg, sampler, scheduler, customName, width: customWidth, height: customHeight, referenceImage, refImageSize, poseStrength, depthStrength }));
-  }, [model, loras, prompt, negativePrompt, ratio, steps, cfg, sampler, scheduler, customName, customWidth, customHeight, referenceImage, refImageSize, poseStrength, depthStrength]);
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({ model, loras, prompt, negativePrompt, ratio, steps, cfg, sampler, scheduler, customName, width: customWidth, height: customHeight, referenceImage, refImageSize, poseStrength, depthStrength, intentText }));
+  }, [model, loras, prompt, negativePrompt, ratio, steps, cfg, sampler, scheduler, customName, customWidth, customHeight, referenceImage, refImageSize, poseStrength, depthStrength, intentText]);
 
   // Default model once loaded (only if none was saved or saved model not in list)
   useEffect(() => {
@@ -1935,9 +1940,9 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
                     }}
                   >
                     <button
-                      onClick={() => handleRandomGenerate()}
+                      onClick={() => handleRandomGenerate(intentText.trim() || undefined)}
                       disabled={diceDisabled}
-                      title={`随机生成（档位：${DICE_MIX_LABEL[diceMixPreset]} / 参考图：${diceRefMode === 'auto' ? '使用（如有）' : '不使用'} / 比例：${diceRatioMode === 'auto' ? '自动' : '手动'}，可在设置-随机生成中调整）${taskExecutionMode === 'autoLoop' ? ' · 自动循环模式' : ''}`}
+                      title={`${intentText.trim() ? `围绕意向「${intentText.trim()}」` : '完全随机'}${taskExecutionMode === 'autoLoop' ? '开始自动循环' : '生成'}（档位：${DICE_MIX_LABEL[diceMixPreset]} / 参考图：${diceRefMode === 'auto' ? '使用（如有）' : '不使用'} / 比例：${diceRatioMode === 'auto' ? '自动' : '手动'}，可在设置-随机生成中调整）`}
                       style={{
                         padding: '10px',
                         width: 40,
@@ -2093,21 +2098,9 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
                       verticalAlign: 'top',
                     }}
                   />
-                  {/* toolbar：文本框下方右侧 · 温度图标（无底色） + 发送按钮（蓝底白字） */}
+                  {/* toolbar：文本框下方左对齐 · 偏好档位上拉菜单 + 温度图标（无底色）
+                     执行入口已统一收敛到外层骰子按钮，本面板不再单独提供发送按钮 */}
                   {(() => {
-                    const isLoop = taskExecutionMode === 'autoLoop';
-                    const sendDisabled = !clientId || isGenerating || isRandomizing || isMyLoop || models.length === 0;
-                    const hasIntent = intentText.trim().length > 0;
-                    const sendLabel = isLoop ? '开始' : '生成';
-                    const sendTitle = isMyLoop
-                      ? '当前正在自动循环中，无法发起新任务'
-                      : isLoop
-                        ? (hasIntent
-                            ? '围绕该意向开始自动循环随机生成（持续到手动停止）'
-                            : '未填写意向，将按画像开始自动循环随机生成')
-                        : (hasIntent
-                            ? '围绕该意向发起随机生成（按当前批量数一次性生成）'
-                            : '未填写意向，将按画像随机生成（按当前批量数一次性生成）');
                     // 温度循环按钮：low → medium → high → low
                     // 语义层（系统提示词里的"意向发散温度"）+ API 层（LLM temperature：0.6/0.9/1.15）双重影响
                     const tempNext = diceTemperature === 'low' ? 'medium' : diceTemperature === 'medium' ? 'high' : 'low';
@@ -2129,8 +2122,8 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
                         : '在保持意向主体前提下自然变奏';
                     const tempTitle = `发散温度：${tempLabel}（${tempDesc}）。点击切换至「${tempNext === 'low' ? '低' : tempNext === 'high' ? '高' : '中'}」。`;
                     return (
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                        {/* 左下：偏好档位上拉菜单 + 温度图标（数据驱动 · 与设置-随机生成-随机生成偏好同一字段） */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 8 }}>
+                        {/* 偏好档位上拉菜单 + 温度图标（数据驱动 · 与设置-随机生成-随机生成偏好同一字段） */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                           <div ref={mixMenuRef} style={{ position: 'relative' }}>
                           <button
@@ -2227,34 +2220,6 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
                             {tempIcon}
                           </button>
                         </div>
-                        {/* 右下：发送按钮（蓝底白字） */}
-                        <button
-                          onClick={() => {
-                            const txt = intentText.trim();
-                            setIntentPanelOpen(false);
-                            handleRandomGenerate(txt || undefined);
-                          }}
-                          disabled={sendDisabled}
-                          title={sendTitle}
-                          style={{
-                            height: 26,
-                            padding: '0 12px',
-                            backgroundColor: 'var(--color-primary)',
-                            color: '#fff',
-                            border: 'none',
-                            borderRadius: 6,
-                            fontSize: 12,
-                            fontWeight: 600,
-                            cursor: sendDisabled ? 'not-allowed' : 'pointer',
-                            opacity: sendDisabled ? 0.5 : 1,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            flexShrink: 0,
-                          }}
-                        >
-                          {sendLabel}
-                        </button>
                       </div>
                     );
                   })()}
