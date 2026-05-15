@@ -162,6 +162,7 @@ ${loraList}
 4. 如果用户使用自然语言描述，在末尾以逗号分隔的 tag 格式追加触发词
 5. 如果用户使用 tag 格式，在语义合适的位置插入触发词
 6. 如果某个触发词已存在于提示词中，不要重复添加
+7. 🎭 **角色 LoRA 外貌约束**：若你推荐了分类为"角色"的 LoRA，modifiedPrompt 中严禁为该角色补写发色、发型、瞳色、体型、招牌配饰等外貌固有标签（LoRA 的权重层面已隐含这些外貌，重复描写会造成混乱或冲突）。你只能保留/追加 triggerWords，以及用户原始描述里已有的服装、场景、动作、表情、风格等可分离维度。若用户原始 prompt 中已存在此类固有外貌词且与角色 LoRA 默认冲突（如用户写了 "blonde hair" 但你推荐的角色 LoRA 默认为绿发），请在 modifiedPrompt 里**剔除**这些冲突的固有外貌词。
 
 ## 输出格式
 严格输出纯 JSON，不要包含任何 markdown 标记或解释文字：
@@ -200,7 +201,7 @@ export function getAgentTools(): Tool[] {
           properties: {
             prompt: {
               type: 'string',
-              description: '英文提示词，描述要生成的图片内容。包括角色、姿势、场景、风格等。⛔ 严禁输出质量/画质标签（如 masterpiece, best quality, ultra detailed, highres, 8K, HDR, score_9 等），这些已由工作流底层固定拼接。例如: "fischl, standing, cyberpunk city, neon lights, cinematic lighting"',
+              description: '英文提示词，描述要生成的图片内容。包括角色、姿势、场景、风格等。⛔ 严禁输出质量/画质标签（如 masterpiece, best quality, ultra detailed, highres, 8K, HDR, score_9 等），这些已由工作流底层固定拼接。例如: "fischl, standing, outdoors, sunlight, soft lighting"',
             },
             negative_prompt: {
               type: 'string',
@@ -216,7 +217,7 @@ export function getAgentTools(): Tool[] {
             },
             style: {
               type: 'string',
-              description: '风格关键词（中文），用于匹配风格 LoRA。如果用户提到风格，必须填写。例如: "赛博朋克", "写实", "水彩"',
+              description: '风格关键词（中文），用于匹配风格 LoRA。如果用户提到风格，必须填写。例如: "写实", "水彩", "油画"',
             },
            quality: {
               type: 'string',
@@ -449,11 +450,27 @@ ${loraList}
    特别是视角类标签（from behind, from above, pov 等）必须放在最前面，不要追加到末尾。
 8. LoRA 选择必须与用户当前描述的主题直接相关，不要因为用户历史偏好而添加与当前主题无关的 LoRA
 9. ⛔ **禁止输出质量标签**：工作流已内置完整质量/画质标签（masterpiece, best quality, ultra detailed, highres, 8K, HDR, score_9, realistic 等），prompt 中**严禁**出现这些标签；若用户原 prompt 里有也必须清理
+10. 🎭 **角色 LoRA 外貌约束（最高优先级硬约束）**：
+    **触发条件**：本轮 loras 数组中包含任何 "分类: 角色" 的 LoRA（或 variants 某条包含）。
+    **核心理念**：角色 LoRA 已在权重层面隐含了该角色的全部固有外貌（发色、发型、瞳色、瞳孔形状、招牌配饰、体型、肤色、种族标志等）。你只需把该 LoRA 的**触发词原样写入** prompt，其余固有外貌**一律不写**——多写就是画蛇添足，会与 LoRA 特征叠加产生混乱甚至冲突。
+    **禁写维度清单**（选中角色 LoRA 后，prompt 中**不得**出现以下任何类型的标签）：
+    - 发色：green hair / blonde hair / silver hair / black hair / long green hair 等任何 xxx hair 颜色词
+    - 发型：long hair / short hair / ponytail / twintails / braids / bob cut / side ponytail 等发型形态词
+    - 瞳色：blue eyes / red eyes / heterochromia / star-shaped pupils 等瞳色/瞳孔词
+    - 招牌固定配饰：该角色 LoRA 默认已带的配饰（如某角色的专属领结/围巾/帽子/耳饰）
+    - 体型/身高/肤色：loli / mature body / tall / petite / tan / pale skin 等描述身体本身的词
+    - 种族形态标志：当它是该角色默认属性时（如兽耳/翅膀/尾巴/恶魔角等）
+    **可写维度清单**（这些才是 prompt 里真正该写的）：服装（swimsuit, school uniform, dress 等）、表情（smile, disgusted, shy）、姿势/动作、场景/背景、光线/色调/时间、视角/构图、画面风格、LoRA 触发词。
+    **覆写例外（仅限服装/配饰）**：用户明确说"穿泳装/换制服/戴眼镜/加猫耳（非角色默认）"时，对应标签**必须**写进 prompt；若与角色默认服装冲突，还可向 negativePrompt 追加旧服装词。
+    **身体特征请求的处理**：若用户说"把头发染黑"、"换成短发"、"眼睛改成红色"等修改角色固有外貌的请求——**不要**把 black hair / short hair / red eyes 写进 prompt；改用 text_response 工具告诉用户："这会与角色 LoRA 默认外貌冲突，如需坚持请降低该 LoRA 权重到 0.4-0.5 或关闭该 LoRA。"
+    **正反例**（用户："安琪拉穿着泳装"，选中角色 LoRA 的触发词为 fish_anj_v2）：
+    - ✅ 正确：1girl, solo, from side, swimsuit, standing, beach, summer, sunlight, fish_anj_v2
+    - ❌ 错误：1girl, solo, green long hair, long ponytail, teal eyes, blue bow tie, swimsuit, ..., fish_anj_v2（绿发/长马尾/蓝领结等全部是 LoRA 已隐含的画蛇添足）
 
 # 重要：参数填写规范
 - 如果用户提到角色名（如 "菲谢尔"、"安琪拉"、"胡桃" 等），**必须**在 character 参数中填写中文角色名
 - 如果用户提到姿势（如 "壁尻"、"站立"），**必须**在 pose 参数中填写
-- 如果用户提到风格（如 "赛博朋克"、"写实"），**必须**在 style 参数中填写
+- 如果用户提到风格（如 "写实"、"水彩"），**必须**在 style 参数中填写
 - 这些参数用于自动匹配 LoRA 模型，非常重要，不要遗漏
 
 # 多轮编辑能力
@@ -523,7 +540,7 @@ export function buildConfigAssistantPrompt(profile: UserPreferenceProfile, metad
 1. **角色匹配**：用户提到角色名（如"安琪拉"、"菲谢尔"、"胡桃"等），在可用 LoRA 列表中找到分类为"角色"的匹配项，添加到 loras 数组
 2. **姿势匹配**：用户提到姿势（如"壁尻"、"站立"、"坐姿"等），找到分类为"姿势"的匹配 LoRA
 3. **表情匹配**：用户提到表情（如"嫌弃脸"、"害羞"等），找到分类为"表情"的匹配 LoRA
-4. **风格匹配**：用户提到风格（如"赛博朋克"、"写实"等），找到分类为"风格"的匹配 LoRA
+4. **风格匹配**：用户提到风格（如"写实"、"水彩"等），找到分类为"风格"的匹配 LoRA
 
 匹配规则：
 - 在 LoRA 列表中按 nickname、触发词、分类进行模糊匹配
@@ -544,7 +561,7 @@ export function buildConfigAssistantPrompt(profile: UserPreferenceProfile, metad
    - 添加新角色的 LoRA（如菲谢尔）
    - 更新 prompt：删除旧角色触发词，添加新角色触发词
 
-2. **换风格**（如"改成赛博朋克"）：
+2. **换风格**（如"改成水彩插画"）：
    - 移除旧风格的 LoRA（如果之前有风格 LoRA）
    - 添加新风格的 LoRA
    - 更新 prompt：删除旧风格触发词，添加新风格触发词
@@ -559,7 +576,30 @@ export function buildConfigAssistantPrompt(profile: UserPreferenceProfile, metad
    - 找到则添加对应 LoRA 并追加触发词
    - 未找到则仅修改 prompt
 
-5. **核心原则**：每次调用 apply_config 修改 prompt 时，都必须同时传入更新后的完整 loras 数组，确保 LoRA 列表与 prompt 内容始终一致。不要只改 prompt 不改 loras。`
+5. **核心原则**：每次调用 apply_config 修改 prompt 时，都必须同时传入更新后的完整 loras 数组，确保 LoRA 列表与 prompt 内容始终一致。不要只改 prompt 不改 loras。
+
+### 🎭 角色 LoRA 外貌约束（最高优先级硬约束，与 LoRA 匹配同时生效）
+**触发条件**：本次或多轮后 loras 中含有任何 "分类: 角色" 的 LoRA。
+**核心理念**：角色 LoRA 已隐含该角色的全部固有外貌（发色/发型/瞳色/招牌配饰/体型/肤色/种族形态标志）。prompt 里**仅**保留/追加该 LoRA 的触发词，禁止再写以下维度的标签：
+- 发色（green hair、blonde hair、silver hair 等）
+- 发型（long hair、short hair、ponytail、twintails、braids、bob cut 等）
+- 瞳色与瞳孔（blue eyes、red eyes、heterochromia、star-shaped pupils 等）
+- 该角色 LoRA 默认已带的招牌配饰（专属领结/围巾/帽子/耳饰）
+- 体型/身高/肤色（loli、mature body、tall、petite、tan 等）
+- 种族形态标志（兽耳/翅膀/尾巴/恶魔角——当它是角色默认属性时）
+
+**切换角色场景**（用户说"换成菲谢尔"、"改成胡桃"）：除按前述规则移除旧 LoRA、添加新 LoRA 外，还必须**主动从 prompt 中删除旧角色遗留的固有外貌词**（若之前误加过）；新角色也**不要**补写任何固有外貌词，只追加触发词。
+
+**可写维度**：服装、表情、姿势/动作、场景/背景、光线/色调、视角/构图、风格、LoRA 触发词。
+
+**覆写例外（仅服装/配饰）**：用户明确说"穿泳装/换制服/戴眼镜"→ 必须写入 prompt，若与默认服装冲突可向 negativePrompt 追加旧服装词。
+
+**身体特征覆写的处理（重要）**：若用户说"把头发染黑"、"换成短发"、"眼睛改成红色"等修改角色固有外貌的请求——**禁止**调用 apply_config 把 black hair / short hair / red eyes 写进 prompt。应改为调用 text_response 工具回复用户：
+"这会与当前角色 LoRA 的默认外貌冲突（它已隐含该角色的发色/发型/瞳色等固有特征）。如需坚持，请手动将该 LoRA 权重降至 0.4-0.5，或在右下角面板中关闭该 LoRA，然后再让我修改提示词。"
+
+**正反例**（用户："安琪拉穿着泳装"，匹配到安琪拉角色 LoRA 的触发词为 fish_anj_v2）：
+- ✅ 正确 prompt：1girl, solo, from side, swimsuit, standing, beach, summer, sunlight, fish_anj_v2
+- ❌ 错误 prompt：1girl, solo, green long hair, long ponytail, teal eyes, blue bow tie, swimsuit, ..., fish_anj_v2`
     : `## 🔒 LoRA 锁定模式（最高优先级硬约束，违反即为错误）
 
 当前用户已**关闭 LoRA 修改权限**。本次对话你的能力被严格收窄：
@@ -589,6 +629,21 @@ ${triggerWordsBlock}
 - ✅ 删除**不在受保护清单中**的其他标签
 - ✅ 修改 negativePrompt、width/height、steps、cfg、sampler、scheduler 等参数
 
+### 三·五、🎭 角色 LoRA 外貌约束（锁定模式下同样生效）
+即便 LoRA 已锁定，你仍然需要遵守以下约束——它与"受保护触发词必须原样出现"**并列**存在：
+
+**触发条件**：当前已启用的 loras 中含有任何 "分类: 角色" 的 LoRA。
+**核心理念**：角色 LoRA 已隐含该角色的固有外貌（发色、发型、瞳色、招牌配饰、体型、肤色、种族形态标志）。触发词已经承担了表达这些外貌的职责，你**不得**在 prompt 里新增以下维度的标签（即使用户要求也不行）：
+- 发色：green hair / blonde hair / silver hair / black hair 等
+- 发型：long hair / short hair / ponytail / twintails / braids 等
+- 瞳色与瞳孔：blue eyes / red eyes / heterochromia / star-shaped pupils 等
+- 体型/身高/肤色：loli / mature body / tall / petite / tan 等
+- 种族形态标志（当它是角色默认属性时）：兽耳/翅膀/尾巴/恶魔角等
+
+**允许新增的维度**：服装、表情、姿势、场景、光线、视角、构图、风格（这些 LoRA 不涵盖）。
+
+**若用户要求修改角色固有外貌**（如"把头发改成银色"、"换成短发"、"眼睛改成红色"）：这属于下方「五、冲突检测」的冲突类型之一，**必须**走 report_lora_conflict 流程（而非 apply_config）。
+
 ### 四、输出前的强制自检流程（每次调用 apply_config 前必须执行）
 1. 将你即将输出的 prompt 字符串对照上方「受保护触发词清单」
 2. 对每一条触发词执行**精确子串匹配**（区分大小写、区分空格/下划线）
@@ -604,6 +659,12 @@ ${triggerWordsBlock}
 - 用户说"改成二次元风格"，而受保护清单有 \`photorealistic\`、\`realistic\` 等写实风格 → 冲突
 - 用户说"角度改成仰视"，而受保护清单有 \`from above\`、\`bird's eye view\` → 冲突
 - 用户说"改成白天场景"，而受保护清单有 \`night\`、\`moonlight\` → 冲突
+- 【角色外貌冲突】用户要求修改**角色固有外貌**（发色/发型/瞳色/体型/肤色等），而当前已启用任意角色 LoRA → 冲突
+  · 例1：用户"把头发改成银色"，已启用安琪拉角色 LoRA → 冲突（角色 LoRA 隐含固定发色）
+  · 例2：用户"换成短发"，已启用任何角色 LoRA → 冲突（角色 LoRA 隐含固定发型）
+  · 例3：用户"眼睛改成红色"，已启用任何角色 LoRA → 冲突（角色 LoRA 隐含固定瞳色）
+  · 冲突对象：当前已启用的全部角色 LoRA（在 conflicts 数组中逐一列出）
+  · 建议用户解决路径：降低该 LoRA 权重到 0.4-0.5，或关闭该 LoRA 后再修改外貌
 
 **非冲突示例**（仅是补充，不冲突）：
 - 用户说"加上雨天氛围"，受保护清单只有角色/姿势/表情触发词 → 不冲突，按常规修改 prompt 即可

@@ -173,6 +173,11 @@ interface WorkflowStore {
   agentPromptEditTick: number;
   bumpAgentPromptEdit: () => void;
 
+  // 生成来源跟踪：防止骰子批量生成的未收藏图污染用户偏好画像。
+  // 默认未设置的 imageId 视为 'manual'。仅 'dice' / 'agent-chat' 需主动标记。
+  imageSourceMap: Record<string, 'manual' | 'dice' | 'agent-chat'>;
+  setImageSource: (imageId: string, source: 'manual' | 'dice' | 'agent-chat') => void;
+
   // Session restore
   restoreSession: (activeTab: number, tabData: Record<number, SerializedTabData>, restoredImages: Record<number, ImageItem[]>) => void;
 }
@@ -202,6 +207,10 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   clientId: null,
   sessionId: null,
   selectedImageIds: [],
+  imageSourceMap: {},
+
+  setImageSource: (imageId, source) =>
+    set((state) => ({ imageSourceMap: { ...state.imageSourceMap, [imageId]: source } })),
 
   setActiveTab: (tab) => set({ activeTab: tab, selectedImageIds: [] }),
 

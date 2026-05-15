@@ -241,7 +241,7 @@ function coldStartSuggestions(metadata: any): string[] {
   // 兜底保底
   const defaults = [
     '生成一张二次元风格的角色图',
-    '帮我画一张赛博朋克风格的壁纸',
+    '帮我画一张水彩风格的场景壁纸',
     '画一张可爱风格的角色立绘',
   ];
   while (suggestions.length < 3) {
@@ -328,7 +328,7 @@ function fallbackSuggestions(profile: any, metadata: any): string[] {
 
   const defaults = [
     '生成一张二次元风格的角色图',
-    '帮我画一张赛博朋克风格的壁纸',
+    '帮我画一张水彩风格的场景壁纸',
     '画一张可爱风格的角色立绘',
   ];
   while (suggestions.length < 3) {
@@ -380,7 +380,7 @@ ${exploreSection}
 - 只输出建议文本，每行一条，不要编号
 
 示例（展示差异性）：
-菲谢尔穿白袜嫌弃脸的赛博朋克风格图
+菲谢尔穿白袜嫌弃脸的水彩插画
 安琪拉的壁尻姿势，宫崎骏画风
 试试雷电将军，清冷风格
 一张暗黑哥特风的城堡场景壁纸`;
@@ -434,7 +434,7 @@ ${hotProfileSummary}
 - 只输出建议文本，每行一条，不要编号
 
 示例（展示差异性）：
-菲谢尔穿白袜嫌弃脸的赛博朋克风格图
+菲谢尔穿白袜嫌弃脸的水彩插画
 安琪拉的壁尻姿势，宫崎骏画风
 画一个害羞表情的校园风女孩
 一张暗黑哥特风的城堡场景壁纸`;
@@ -501,7 +501,7 @@ ${profileSummary}
 只输出建议文本，每行一条，不要编号。
 
 示例（展示差异性）：
-换成赛博朋克风格
+换成水彩插画风格
 改成壁尻姿势加嫌弃脸
 试试用菲谢尔
 加上黄昏海边的氛围`;
@@ -566,7 +566,7 @@ ${profileSummary}
 只输出建议文本，每行一条，不要编号。
 
 示例（展示差异性）：
-换成赛博朋克风格
+换成水彩插画风格
 改成壁尻姿势加嫌弃脸
 试试用菲谢尔
 加上黄昏海边的氛围`;
@@ -643,7 +643,7 @@ router.get('/suggestions', async (req, res) => {
     res.json({ suggestions: [
       '生成一张二次元风格的图',
       '帮我画一张壁纸',
-      '画一张赛博朋克风格的角色图',
+      '画一张油画风格的角色图',
     ]});
   }
 });
@@ -812,7 +812,7 @@ function buildRandomSeed(
 
   if (category === 'tweak') {
     const c = pick(chars);
-    const scenes = ['在咖啡馆', '在夜色街头', '在樱花树下', '在海边黄昏', '在雪地', '在屋顶天台', '在森林小径', '在图书馆', '在雨中', '在霓虹都市'];
+    const scenes = ['在咖啡馆', '在樱花树下', '在海边黄昏', '在雪地', '在屋顶天台', '在森林小径', '在图书馆', '在雨中', '在清晨阳台', '在油菜花田'];
     const lights = ['逆光剪影', '柔和光线', '电影感打光', '侧光', '夕阳金光', '冷色调氛围'];
     const views  = ['侧面视角', '仰视视角', '俯视视角', '背后视角', '特写'];
     const parts: string[] = [];
@@ -857,7 +857,7 @@ function getDiceTools(ratioAuto: boolean): any[] {
         : ' 【批量随机模式】调用本工具时必须额外返回 cardName 字段（中文短名）。');
     cloned.function.parameters.properties.cardName = {
       type: 'string',
-      description: '【必填】像为画作/摄影作品起标题一样，为这张图起一个有画面感、有意境的中文短名（4-12 个汉字）。⛔ 不要机械堆叠 character+pose+style 元素（例如 ❌「赛博朋克菲谢尔壁尻」）。✅ 推荐用动作、意境、氛围、情绪表达：「独坐空山」「霓虹浅梦」「雨夜归人」「暮色独白」「回眸刹那」「森林低语」。📌 关于角色名——仅当你本次填写了 character 字段时，cardName 才需要自然地包含该角色中文原名（例「菲谢尔的霓虹独白」「雪原上的安琪拉」）；若本次不涉及特定角色（character 留空），请不要在 cardName 里硬塞任何人名。不要使用标点符号和英文，不要直接搬运 LoRA 名字。',
+      description: '【必填】为这张图起一个简短自然的中文短名（4-12 个汉字），平实概括画面主体即可，不需要刻意追求文学性、画面感或意境。⛔ 不要机械堆叠 character+pose+style 元素（例如 ❌「水彩风菲谢尔壁尻」这种把风格+角色+姿势硬拼在一起的写法）。✅ 自然描述主体即可，例如「泳池边的少女」「森林里的精灵」「雪地独行」「咖啡馆午后」「深夜街角」。📌 关于角色名——仅当你本次填写了 character 字段时，cardName 才需要自然地包含该角色中文原名（例「泳池边的安琪拉」「雪地里的菲谢尔」）；若本次不涉及特定角色（character 留空），请不要在 cardName 里硬塞任何人名。不要使用标点符号和英文，不要直接搬运 LoRA 名字。',
     };
     if (ratioAuto) {
       cloned.function.parameters.properties.ratio = {
@@ -895,7 +895,7 @@ function buildDiceDirective(ratioAuto: boolean, contentPolicy: DiceContentPolicy
     '',
     '## 🎲 批量随机模式专属要求（必读）',
     '本次调用来自「快速出图」骰子批量生成，除了常规的 generate_image 字段外，以下字段为**必填**：',
-    '- `cardName`：像为一幅画作/摄影作品起标题一样，给这张图一个有画面感、生动的中文短名（4-12 字）。\n  ⛔ 不要机械罗列 character+pose+style（例：❌「赛博朋克菲谢尔壁尻」）。\n  ✅ 用动作/意境/氛围/情绪去表达：「独坐空山」「霓虹浅梦」「雨夜归人」「暮色独白」「回眸刹那」「森林低语」「失温的星」。\n  📌 角色名规则（条件性）：仅当你本次填写了 character 字段时，cardName 才需要自然包含该角色中文名（例：「菲谢尔的霓虹独白」）；若本次不涉及特定角色（character 为空），请不要硬塞任何人名。\n  禁止标点和英文，禁止直接搬 LoRA 名字。',
+    '- `cardName`：为这张图起一个简短自然的中文短名（4-12 字），平实概括画面主体即可，不必追求文学性或意境。\n  ⛔ 不要机械罗列 character+pose+style（例：❌「水彩风菲谢尔壁尻」这种把风格+角色+姿势硬拼的写法）。\n  ✅ 自然描述主体即可：「泳池边的少女」「森林里的精灵」「雪地独行」「咖啡馆午后」「深夜街角」。\n  📌 角色名规则（条件性）：仅当你本次填写了 character 字段时，cardName 才需要自然包含该角色中文名（例：「泳池边的安琪拉」）；若本次不涉及特定角色（character 为空），请不要硬塞任何人名。\n  禁止标点和英文，禁止直接搬 LoRA 名字。',
   ];
   if (ratioAuto) {
     lines.push('- `ratio`：从 "1:1" / "3:4" / "9:16" / "4:3" / "16:9" 中选一个（人物立绘优先 3:4；风景横构图优先 4:3；群像/装饰性构图可选 1:1）。');
@@ -905,16 +905,16 @@ function buildDiceDirective(ratioAuto: boolean, contentPolicy: DiceContentPolicy
   // 内容限制指令：按档位追加不同侧重
   if (contentPolicy === 'sfw') {
     lines.push('');
-    lines.push('## 🛡️ 内容限制：SFW（Safe For Work / 强制安全向）');
-    lines.push('- `prompt` 严格保持 SFW：单允许适当的性暗示内容');
+    lines.push('## 内容限制：SFW（Safe For Work / 强制安全向）');
+    lines.push('- `prompt` 严格保持 SFW：但允许性暗示内容');
   } else if (contentPolicy === 'nsfw') {
     lines.push('');
-    lines.push('## 🔞 内容限制：NSFW（Adult-leaning / 倾向成人向）');
+    lines.push('## 内容限制：NSFW（Adult-leaning / 强制成人向）');
     lines.push('- `prompt` 请确保生成为 NSFW 内容，完全R18向');
   } else {
     // mixed：轻量提示，不强制任一方向
     lines.push('');
-    lines.push('## ⚖️ 内容限制：混合（由你自由判断）');
+    lines.push('## 内容限制：混合（由你自由判断）');
     lines.push('- 本次无硬性内容约束：可 SFW 可 NSFW，由你根据 seed 与画像决定。');
     
   }
@@ -932,7 +932,8 @@ function buildDiceDirective(ratioAuto: boolean, contentPolicy: DiceContentPolicy
     lines.push('3. 用户画像偏好（常用风格标签、常用模型等）：仅在不与用户意向冲突时作为辅助强化；');
     lines.push('4. 内容限制策略（SFW / NSFW / 混合）：在不违背用户意向的前提下叠加。');
     lines.push('⚠️ 特别注意：若用户意向已经明确指定了角色（例如"安琪拉"），请以用户指定的角色为准，**不要**再使用画像中其他常用角色替代或混入；若用户意向已指定服装/场景，也不要被档位随机替换。');
-    lines.push('⚠️ cardName 也应体现用户意向的主体与氛围（例如用户意向为"安琪拉穿泳装"，cardName 可取"安琪拉的夏日泳滩"而非随机意境短语）。');
+    lines.push('⚠️ cardName 也应自然反映用户意向的主体（例如用户意向为"安琪拉穿泳装"，cardName 可取"泳池边的安琪拉"这类平实短名，不必追求意境化）。');
+    lines.push('🎭 **角色 LoRA 外貌约束**：若用户意向中指定了角色名（如"安琪拉"），请遵循主提示词中「角色 LoRA 外貌约束」——本批次所有条目在 loras 中纳入该角色 LoRA 后，prompt 里**不得重复**该角色的固有外貌（发色、发型、瞳色、瞳孔、体型、招牌配饰、种族形态标志等），**只写**服装、表情、姿势、场景、光线、构图、视角、风格与 LoRA 触发词。即使用户意向口语里提到"绿发"、"长马尾"等，也不要写进 prompt（这些由角色 LoRA 自行承担）。');
 
     // 意向发散温度（语义层；与 LLM API temperature 底层熵叠加生效）
     lines.push('');

@@ -9,6 +9,14 @@ export interface GenerationRecord {
   workflowId: number;
   workflowName: string;
   tabId: number;
+  /**
+   * 生成来源，用于防止骰子批量生成的图片污染用户偏好画像。
+   * - 'manual'：用户主动在 sidebar 生成（默认）
+   * - 'dice'：骰子批量随机生成（未被收藏时不入画像）
+   * - 'agent-chat'：聊天 Agent 驱动生成
+   * 未填则视为 'manual'（向后兼容旧日志）。
+   */
+  source?: 'manual' | 'dice' | 'agent-chat';
   config: {
     model: string;
     loras: Array<{model: string; enabled: boolean; strength: number}>;

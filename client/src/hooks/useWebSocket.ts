@@ -79,6 +79,7 @@ function getOrCreateConnection(): WebSocket {
               if (!config) continue;
 
               const isText2Img = tabId === 7;
+              const imageSource = fullState.imageSourceMap[imageId] ?? 'manual';
               const record = {
                 id: crypto.randomUUID(),
                 sessionId: fullState.sessionId,
@@ -86,6 +87,7 @@ function getOrCreateConnection(): WebSocket {
                 workflowId: tabId,
                 workflowName: isText2Img ? '快速出图' : 'ZIT快出',
                 tabId,
+                source: imageSource,
                 config: isText2Img ? {
                   model: (config as Text2ImgConfig).model,
                   loras: (config as Text2ImgConfig).loras || [],

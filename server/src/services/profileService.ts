@@ -100,9 +100,19 @@ export function buildUserProfile(): UserPreferenceProfile {
 
   const favoriteImageIds = new Set(Object.keys(favorites));
 
+  // 防污染过滤：骰子批量随机生成的未收藏图不入画像。
+  // 骰子图的 prompt / LoRA / 尺寸 都是 LLM 自动决策，如果用户没收藏，
+  // 说明用户未表达认可，不能当作偏好证据。一旦被收藏则视为用户主动认可，正常计入。
+  const filteredLogs = logs.filter((log) => {
+    if (log.source !== 'dice') return true;
+    return favoriteImageIds.has(log.result.imageId);
+  });
+
+  // 后续统计都基于 filteredLogs（仅 usageStats.totalGenerations 仍使用原始 logs 反映真实使用量）。
+
   // ── 1. 模型偏好 ──
   const modelStats = new Map<string, { useCount: number; favoriteCount: number }>();
-  for (const log of logs) {
+  for (const log of filteredLogs) {
     const m = log.config.model;
     if (!m) continue;
     const entry = modelStats.get(m) ?? { useCount: 0, favoriteCount: 0 };
@@ -113,7 +123,8 @@ export function buildUserProfile(): UserPreferenceProfile {
   const modelPreferences = Array.from(modelStats.entries())
     .map(([model, s]) => ({
       model,
-      score: s.useCount * 1 + s.favoriteCount * 3,
+      // 收藏是用户主动认可的强信号，权重提升至 5
+      score: s.useCount * 1 + s.favoriteCount * 5,
       useCount: s.useCount,
       favoriteCount: s.favoriteCount,
     }))
@@ -121,7 +132,7 @@ export function buildUserProfile(): UserPreferenceProfile {
 
   // ── 2. LoRA 偏好 ──
   const loraStats = new Map<string, { useCount: number; favoriteCount: number; totalStrength: number }>();
-  for (const log of logs) {
+  for (const log of filteredLogs) {
     const loras = log.config.loras ?? [];
     const isFav = favoriteImageIds.has(log.result.imageId);
     for (const lora of loras) {
@@ -136,7 +147,7 @@ export function buildUserProfile(): UserPreferenceProfile {
   const loraPreferences = Array.from(loraStats.entries())
     .map(([model, s]) => ({
       model,
-      score: s.useCount * 1 + s.favoriteCount * 3,
+      score: s.useCount * 1 + s.favoriteCount * 5,
       useCount: s.useCount,
       favoriteCount: s.favoriteCount,
       avgStrength: s.useCount > 0 ? Math.round((s.totalStrength / s.useCount) * 100) / 100 : 0,
@@ -151,7 +162,7 @@ export function buildUserProfile(): UserPreferenceProfile {
   const samplers: string[] = [];
   const schedulers: string[] = [];
 
-  for (const log of logs) {
+  for (const log of filteredLogs) {
     const p = log.config.params;
     if (!p) continue;
     if (p.width) widths.push(p.width);
@@ -174,8 +185,9 @@ export function buildUserProfile(): UserPreferenceProfile {
   };
 
   // ── 4. 风格特征提取（统计所有高频 tag） ──
+  // 使用 filteredLogs：避免骰子未收藏图的 LLM-生成 prompt（如 cyberpunk/neon）污染 styleFeatures
   const tagCounts = new Map<string, number>();
-  for (const log of logs) {
+  for (const log of filteredLogs) {
     const prompt = log.config.prompt ?? '';
     const parts = prompt.split(',');
     for (const raw of parts) {
@@ -209,7 +221,7 @@ export function buildUserProfile(): UserPreferenceProfile {
 
   // ── 6. 常用模型+LoRA 组合 ──
   const comboCounts = new Map<string, { model: string; loras: string[]; count: number }>();
-  for (const log of logs) {
+  for (const log of filteredLogs) {
     const m = log.config.model ?? '';
     const loraModels = (log.config.loras ?? [])
       .filter(l => l.enabled)

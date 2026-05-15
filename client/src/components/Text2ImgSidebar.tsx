@@ -163,6 +163,7 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
   const sessionId = useWorkflowStore((s) => s.sessionId);
   const startTask = useWorkflowStore((s) => s.startTask);
   const addText2ImgCard = useWorkflowStore((s) => s.addText2ImgCard);
+    const setImageSource = useWorkflowStore((s) => s.setImageSource);
   const setFlashingImage = useWorkflowStore((s) => s.setFlashingImage);
   const { sendMessage } = useWebSocket();
 
@@ -884,6 +885,8 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
           usedNames.add(displayName);
 
           const imageId = addText2ImgCard(cfg, displayName);
+          // 标记为骰子生成，避免未收藏时污染用户偏好画像
+          setImageSource(imageId, 'dice');
           if (firstImageId === null) {
             firstImageId = imageId;
             setFlashingImage(imageId);
