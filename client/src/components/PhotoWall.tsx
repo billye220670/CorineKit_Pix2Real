@@ -4,7 +4,7 @@ import { useMaskStore } from '../hooks/useMaskStore.js';
 import { useDragStore } from '../hooks/useDragStore.js';
 import { maskKey } from '../config/maskConfig.js';
 import { ImageCard } from './ImageCard.js';
-import { Play, Trash2, Type, Check, Minus, Eraser, Pencil } from 'lucide-react';
+import { Play, Trash2, Type, Check, Minus, Eraser, Pencil, Replace } from 'lucide-react';
 import { useWebSocket } from '../hooks/useWebSocket.js';
 import { showToast } from '../hooks/useToast.js';
 import { renameCardsBatch } from '../services/sessionService.js';
@@ -184,6 +184,11 @@ export function PhotoWall({ viewSize }: PhotoWallProps) {
       setSelectedImageIds(images.map((img) => img.id));
     }
   }, [allSelected, images, clearSelection, setSelectedImageIds]);
+
+  const handleInvertSelection = useCallback(() => {
+    const inverted = images.filter((img) => !selectedImageIds.includes(img.id)).map((img) => img.id);
+    setSelectedImageIds(inverted);
+  }, [images, selectedImageIds, setSelectedImageIds]);
 
   const hasIdleSelected = activeTab === 7 ? false : images.some((img) => {
     if (!selectedImageIds.includes(img.id)) return false;
@@ -449,6 +454,32 @@ export function PhotoWall({ viewSize }: PhotoWallProps) {
               {someSelected && <Minus size={9} strokeWidth={3} />}
             </span>
             全选
+          </button>
+        )}
+
+        {/* 反选按钮 */}
+        {isMultiSelectMode && (
+          <button
+            onClick={handleInvertSelection}
+            title="反选（将未选中的选中，已选中的取消）"
+            disabled={images.length === 0}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 'var(--spacing-xs)',
+              padding: 'var(--spacing-xs) var(--spacing-sm)',
+              backgroundColor: 'transparent',
+              color: 'var(--color-text-secondary)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 6,
+              fontSize: '12px',
+              cursor: images.length === 0 ? 'not-allowed' : 'pointer',
+              opacity: images.length === 0 ? 0.5 : 1,
+              flexShrink: 0,
+            }}
+          >
+            <Replace size={12} />
+            反选
           </button>
         )}
 
