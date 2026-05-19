@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { readGenerationLog, appendGenerationLog, readFavorites, writeFavorite, updateGenerationLogFavorite } from '../services/agentService.js';
-import { buildUserProfile } from '../services/profileService.js';
+import { buildUserProfile, type ProfileScope } from '../services/profileService.js';
 import { callLLM, buildSystemPrompt, getAgentTools, buildConfigAssistantPrompt, getConfigAssistantTools, buildSmartQAPrompt, buildSmartLoraPrompt } from '../services/llmService.js';
 import { parseToolCall } from '../services/intentParser.js';
 import { queuePrompt, uploadImage } from '../services/comfyui.js';
@@ -11,6 +11,18 @@ import { getAdapter } from '../adapters/index.js';
 import type { ParsedIntent, ParsedVariant } from '../services/intentParser.js';
 import type { GenerationRecord } from '../services/agentService.js';
 import type { LLMMessage } from '../services/llmService.js';
+
+/**
+ * 把请求里的 tabId（7 / 9 / '7' / '9'）解析成 ProfileScope。
+ * 不存在"全局画像" — 7 和 9 在生成技术上完全不通用，必须二选一。
+ * 非法或缺失返回 null，路由层应回 400。
+ */
+function parseProfileScope(raw: unknown): ProfileScope | null {
+  const n = typeof raw === 'string' ? Number(raw) : raw;
+  if (n === 7) return 'tab7';
+  if (n === 9) return 'tab9';
+  return null;
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const metadataPath = path.resolve(__dirname, '../../../model_meta/metadata.json');
@@ -342,14 +354,90 @@ function fallbackSuggestions(profile: any, metadata: any): string[] {
 
 // ── 暖场建议生成（LLM 驱动） ────────────────────────────────────────────────
 
-async function generateWarmUpSuggestions(profile: any, metadata: any): Promise<string[]> {
+/** ZIT 冷启动静态兜底种子池 —— LLM 失败时使用 */
+const ZIT_COLD_FALLBACK_SUGGESTIONS = [
+  '穿宽松毛衣的少女坐在窗边咖啡馆，晨光透过百叶窗洒在她翻开的书上',
+  '黄昏海边礁石上回头的女孩，海风掀起白色长裙，远处灯塔刚刚亮起',
+  '赛博朋克风紫发少女戴耳机走过夜市，霓虹倒映在湿润的石板路面',
+  '老胶片质感的午后空教室，阳光斜射在木地板上，粉笔灰在光柱中漂浮',
+];
+
+/**
+ * ZIT 冷启动暖场建议 — 用前端传入的 customPrompts 调 LLM。
+ * 没传 prompts、LLM 失败、或输出不达标 → 回退到静态种子池。
+ */
+async function generateZitColdSuggestions(
+  customPrompts?: { system: string; user: string }
+): Promise<{ suggestions: string[]; debug: any }> {
+  const debug: any = {
+    branch: 'zit_cold',
+    receivedCustomPrompts: !!customPrompts,
+    customSystemLen: customPrompts?.system.length ?? 0,
+    customUserLen: customPrompts?.user.length ?? 0,
+  };
+  if (!customPrompts) {
+    console.log('[Agent] ZIT cold-start: no customPrompts, using static fallback');
+    debug.reason = 'no_custom_prompts';
+    return { suggestions: ZIT_COLD_FALLBACK_SUGGESTIONS.slice(0, 4), debug };
+  }
+  try {
+    const messages: LLMMessage[] = [
+      { role: 'system', content: customPrompts.system },
+      { role: 'user', content: customPrompts.user },
+    ];
+    console.log('[Agent] ZIT cold-start: calling LLM, sysLen=%d userLen=%d', customPrompts.system.length, customPrompts.user.length);
+    const result = await callLLM({ messages, temperature: 0.95 });
+    debug.llmAttempted = true;
+    debug.llmRawContent = result.content ?? null;
+    if (result.content) {
+      const allLines = result.content
+        .split('\n')
+        .map((l: string) => l.trim())
+        .filter((l: string) => l.length > 0);
+      debug.allLineCount = allLines.length;
+      debug.allLineLengths = allLines.map(l => l.length);
+      const lines = allLines
+        .filter((l: string) => l.length <= 80)
+        .map((l: string) => l.replace(/^\d+[.、)\]]\s*/, ''))
+        .filter((l: string) => l.length > 0)
+        .slice(0, 4);
+      debug.acceptedLineCount = lines.length;
+      debug.acceptedLines = lines;
+      if (lines.length >= 2) {
+        console.log('[Agent] ZIT cold-start: LLM ok, %d lines accepted', lines.length);
+        return { suggestions: lines, debug: { ...debug, source: 'llm' } };
+      }
+      debug.reason = 'too_few_accepted_lines';
+    } else {
+      debug.reason = 'llm_empty_content';
+    }
+  } catch (err: any) {
+    console.error('[Agent] ZIT cold-start LLM failed:', err);
+    debug.llmAttempted = true;
+    debug.reason = 'llm_exception';
+    debug.llmError = String(err?.message || err);
+  }
+  return { suggestions: ZIT_COLD_FALLBACK_SUGGESTIONS.slice(0, 4), debug };
+}
+
+async function generateWarmUpSuggestions(
+  profile: any,
+  metadata: any,
+  scope: ProfileScope,
+  customPrompts?: { system: string; user: string }
+): Promise<{ suggestions: string[]; debug?: any }> {
   try {
     const maturity = getProfileMaturity(profile, metadata);
-    console.log(`[Agent] Profile maturity: ${maturity}, totalGens: ${profile.usageStats?.totalGenerations ?? 0}`);
+    console.log(`[Agent] Profile maturity: ${maturity}, scope: ${scope}, totalGens: ${profile.usageStats?.totalGenerations ?? 0}`);
 
-    // ── Cold: 跳过 LLM，分类抽样 ──
+    // ── Cold: 按 scope 分流 ──
     if (maturity === 'cold') {
-      return coldStartSuggestions(metadata);
+      if (scope === 'tab9') {
+        const result = await generateZitColdSuggestions(customPrompts);
+        return { suggestions: result.suggestions, debug: { ...result.debug, maturity } };
+      }
+      // tab7：维持原 LoRA 元数据抽样逻辑
+      return { suggestions: coldStartSuggestions(metadata), debug: { branch: 'tab7_cold_lora_sample', maturity } };
     }
 
     let profileSummary = buildProfileSummary(profile, metadata);
@@ -401,7 +489,7 @@ ${exploreSection}
           .filter((l: string) => l.length > 0)
           .slice(0, 4);
 
-        if (lines.length >= 2) return lines;
+        if (lines.length >= 2) return { suggestions: lines, debug: { branch: 'warm', maturity } };
       }
     }
 
@@ -455,14 +543,14 @@ ${hotProfileSummary}
         .filter((l: string) => l.length > 0)
         .slice(0, 4);
 
-      if (lines.length >= 2) return lines;
+      if (lines.length >= 2) return { suggestions: lines, debug: { branch: 'hot', maturity: getProfileMaturity(profile, metadata) } };
     }
   } catch (err) {
     console.error('[Agent] LLM warm-up suggestion generation failed:', err);
   }
 
   // 兜底
-  return fallbackSuggestions(profile, metadata);
+  return { suggestions: fallbackSuggestions(profile, metadata), debug: { branch: 'fallback_after_llm_fail' } };
 }
 
 // ── 后续建议生成（LLM 驱动） ────────────────────────────────────────────────
@@ -610,17 +698,22 @@ ${profileSummary}
 
 const router = Router();
 
-// GET /api/agent/suggestions - 暖场建议
-router.get('/suggestions', async (req, res) => {
+// GET /api/agent/suggestions - 暖场建议（tab7 默认通道；tab9 也可走 GET 但拿不到 customPrompts）
+// POST /api/agent/suggestions - tab9 ZIT 通道，body 携带 customSystemPrompt/customUserPrompt
+async function handleSuggestionsRequest(
+  mode: string,
+  scope: ProfileScope,
+  customPrompts: { system: string; user: string } | undefined,
+  res: any,
+) {
   try {
-    const mode = req.query.mode as string || 'agent';
-    const profile = buildUserProfile();
+    const profile = buildUserProfile(scope);
     const metadata = getMetadata();
 
     if (mode === 'config_assistant') {
       // 配置助理暖场建议 — 与智能体模式保持一致的创意描绘风格
-      const suggestions = await generateWarmUpSuggestions(profile, metadata);
-      res.json({ suggestions });
+      const result = await generateWarmUpSuggestions(profile, metadata, scope, customPrompts);
+      res.json({ suggestions: result.suggestions, _debug: result.debug });
       return;
     }
 
@@ -636,8 +729,8 @@ router.get('/suggestions', async (req, res) => {
     }
 
     // 默认智能体模式
-    const suggestions = await generateWarmUpSuggestions(profile, metadata);
-    res.json({ suggestions });
+    const result = await generateWarmUpSuggestions(profile, metadata, scope, customPrompts);
+    res.json({ suggestions: result.suggestions, _debug: result.debug });
   } catch (err) {
     // 无画像或出错时返回默认建议
     res.json({ suggestions: [
@@ -646,6 +739,32 @@ router.get('/suggestions', async (req, res) => {
       '画一张油画风格的角色图',
     ]});
   }
+}
+
+router.get('/suggestions', async (req, res) => {
+  const mode = req.query.mode as string || 'agent';
+  const scope = parseProfileScope(req.query.tabId);
+  if (!scope) {
+    res.status(400).json({ error: 'Missing or invalid query param: tabId (must be 7 or 9)' });
+    return;
+  }
+  await handleSuggestionsRequest(mode, scope, undefined, res);
+});
+
+router.post('/suggestions', express.json(), async (req, res) => {
+  const body = req.body || {};
+  const mode = (body.mode as string) || 'agent';
+  const scope = parseProfileScope(body.tabId);
+  if (!scope) {
+    res.status(400).json({ error: 'Missing or invalid body field: tabId (must be 7 or 9)' });
+    return;
+  }
+  const sys = typeof body.customSystemPrompt === 'string' ? body.customSystemPrompt.trim() : '';
+  const usr = typeof body.customUserPrompt === 'string' ? body.customUserPrompt.trim() : '';
+  const customPrompts = (sys.length > 0 && usr.length > 0)
+    ? { system: sys, user: usr }
+    : undefined;
+  await handleSuggestionsRequest(mode, scope, customPrompts, res);
 });
 
 // ── 批量随机生成（骰子按钮） ────────────────────────────────────────────────
@@ -1061,7 +1180,7 @@ router.post('/random-batch', express.json(), async (req, res) => {
       return;
     }
 
-    const profile = buildUserProfile();
+    const profile = buildUserProfile('tab7');
     const metadata = getMetadata();
     const maturity = getProfileMaturity(profile, metadata);
 
@@ -1252,10 +1371,15 @@ router.get('/favorites', (req, res) => {
   }
 });
 
-// GET /api/agent/user-profile - 获取用户偏好画像（全局，跨所有 session）
+// GET /api/agent/user-profile - 获取用户偏好画像（必须按 tab 严格隔离，不支持全局）
 router.get('/user-profile', (req, res) => {
   try {
-    const profile = buildUserProfile();
+    const scope = parseProfileScope(req.query.tabId);
+    if (!scope) {
+      res.status(400).json({ error: 'Missing or invalid query param: tabId (must be 7 or 9)' });
+      return;
+    }
+    const profile = buildUserProfile(scope);
     res.json(profile);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Internal server error';
@@ -1269,7 +1393,12 @@ router.get('/user-profile', (req, res) => {
 // 解析成 nickname/category/thumbnail/triggerWords，前端无需加载全量 metadata。
 router.get('/user-profile-view', (req, res) => {
   try {
-    const profile = buildUserProfile();
+    const scope = parseProfileScope(req.query.tabId);
+    if (!scope) {
+      res.status(400).json({ error: 'Missing or invalid query param: tabId (must be 7 or 9)' });
+      return;
+    }
+    const profile = buildUserProfile(scope);
     const metadata = getMetadata();
 
     const resolveMeta = (modelKey: string) => {
@@ -1317,7 +1446,7 @@ router.get('/user-profile-view', (req, res) => {
 // POST /api/agent/chat - AI 对话 + 意图解析
 router.post('/chat', async (req, res) => {
   try {
-    const { sessionId, message, messages: historyMessages, images, hasImage, mode, currentConfig, allowLoraModification } = req.body as {
+    const { sessionId, message, messages: historyMessages, images, hasImage, mode, currentConfig, allowLoraModification, tabId } = req.body as {
       sessionId?: string;
       message?: string;
       messages?: LLMMessage[];
@@ -1326,6 +1455,8 @@ router.post('/chat', async (req, res) => {
       mode?: string;
       currentConfig?: any;
       allowLoraModification?: boolean;
+      /** 当前对话所属的 sidebar tab：7=快速出图(SD)，9=ZIT快出(ZImage)。两者画像严格隔离。 */
+      tabId?: number;
     };
 
     if (!sessionId || !message) {
@@ -1333,8 +1464,14 @@ router.post('/chat', async (req, res) => {
       return;
     }
 
-    // 1. 获取用户画像
-    const profile = buildUserProfile();
+    const scope = parseProfileScope(tabId);
+    if (!scope) {
+      res.status(400).json({ error: 'Missing or invalid field: tabId (must be 7 or 9)' });
+      return;
+    }
+
+    // 1. 获取用户画像（按当前 tab 严格隔离）
+    const profile = buildUserProfile(scope);
 
     // 2. 读取模型元数据（带缓存）
     const metadata = getMetadata();

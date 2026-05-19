@@ -2,6 +2,14 @@ import { create } from 'zustand';
 
 export type ChatMode = 'agent' | 'config_assistant' | 'smart_qa';
 
+/**
+ * Agent 面板的 tab 范围。
+ * Tab 7 = 快速出图（Stable Diffusion），Tab 9 = ZIT 快出（ZImage）。
+ * 两者底层模型/LoRA/提示词类型完全不通用，因此聊天历史、上传图、
+ * 当前对话模式都按 tab 严格隔离，不存在"全局"概念。
+ */
+export type AgentTabId = 7 | 9;
+
 export interface ConfigSnapshot {
   id: string;           // 与消息 ID 绑定
   tabId: number;        // 7 或 9
@@ -107,20 +115,32 @@ interface AgentState {
   closeDialog: () => void;
   toggleDialog: () => void;
 
-  // Messages
+  // ── 按 tab 严格隔离的状态 ─────────────────────────────────────────────
+  /** 当前激活的 agent tab（由 AgentDialog 同步 useWorkflowStore.activeTab 来设置） */
+  activeAgentTab: AgentTabId;
+  setActiveAgentTab: (tab: AgentTabId) => void;
+
+  /** 按 tab 拆 bucket 的消息历史（持久化在内存，刷新清空） */
+  messagesByTab: Record<AgentTabId, ChatMessage[]>;
+  /** 按 tab 拆 bucket 的上传图列表 */
+  uploadedImagesByTab: Record<AgentTabId, UploadedImage[]>;
+  /** 按 tab 拆 bucket 的对话模式（每个 tab 独立记忆上次模式） */
+  chatModeByTab: Record<AgentTabId, ChatMode>;
+
+  // ── 当前 tab 对应的扁平访问字段（写时双写、切换时同步，订阅者无感） ──
   messages: ChatMessage[];
   addMessage: (msg: Omit<ChatMessage, 'id' | 'timestamp'>) => void;
   updateMessage: (id: string, updates: Partial<ChatMessage>) => void;
   removeMessage: (id: string) => void;
   clearMessages: () => void;
 
-  // Execution state
+  // Execution state（全局，因为 ComfyUI 同时只跑一个工作流）
   isExecuting: boolean;
   executionStatus: string;
   setExecutionStatus: (status: string) => void;
   setIsExecuting: (executing: boolean) => void;
 
-  // Uploaded images
+  // Uploaded images（当前 tab 视图）
   uploadedImages: UploadedImage[];
   addUploadedImage: (img: UploadedImage) => void;
   removeUploadedImage: (id: string) => void;
@@ -237,22 +257,63 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   closeDialog: () => set({ isDialogOpen: false }),
   toggleDialog: () => set((s) => ({ isDialogOpen: !s.isDialogOpen })),
 
-  // Messages
+  // ── 按 tab 隔离的状态 ──────────────────────────────────────────────
+  activeAgentTab: 7,
+  messagesByTab: { 7: [], 9: [] },
+  uploadedImagesByTab: { 7: [], 9: [] },
+  chatModeByTab: { 7: 'agent', 9: 'agent' },
+
+  /**
+   * 切换当前 agent tab。把目标 tab bucket 的数据同步到扁平访问字段
+   * （messages / uploadedImages / chatMode），让现有订阅 selector 无感切换。
+   */
+  setActiveAgentTab: (tab) => set((s) => {
+    if (s.activeAgentTab === tab) return s;
+    return {
+      activeAgentTab: tab,
+      messages: s.messagesByTab[tab] ?? [],
+      uploadedImages: s.uploadedImagesByTab[tab] ?? [],
+      chatMode: s.chatModeByTab[tab] ?? 'agent',
+    };
+  }),
+
+  // Messages（写时双写：bucket + 扁平字段）
   messages: [],
-  addMessage: (msg) => set((s) => ({
-    messages: [...s.messages, {
+  addMessage: (msg) => set((s) => {
+    const tab = s.activeAgentTab;
+    const next = [...(s.messagesByTab[tab] ?? []), {
       ...msg,
       id: crypto.randomUUID(),
       timestamp: Date.now(),
-    }],
-  })),
-  updateMessage: (id, updates) => set((s) => ({
-    messages: s.messages.map((m) => m.id === id ? { ...m, ...updates } : m),
-  })),
-  removeMessage: (id) => set((s) => ({
-    messages: s.messages.filter((m) => m.id !== id),
-  })),
-  clearMessages: () => set({ messages: [] }),
+    }];
+    return {
+      messagesByTab: { ...s.messagesByTab, [tab]: next },
+      messages: next,
+    };
+  }),
+  updateMessage: (id, updates) => set((s) => {
+    const tab = s.activeAgentTab;
+    const next = (s.messagesByTab[tab] ?? []).map((m) => m.id === id ? { ...m, ...updates } : m);
+    return {
+      messagesByTab: { ...s.messagesByTab, [tab]: next },
+      messages: next,
+    };
+  }),
+  removeMessage: (id) => set((s) => {
+    const tab = s.activeAgentTab;
+    const next = (s.messagesByTab[tab] ?? []).filter((m) => m.id !== id);
+    return {
+      messagesByTab: { ...s.messagesByTab, [tab]: next },
+      messages: next,
+    };
+  }),
+  clearMessages: () => set((s) => {
+    const tab = s.activeAgentTab;
+    return {
+      messagesByTab: { ...s.messagesByTab, [tab]: [] },
+      messages: [],
+    };
+  }),
 
   // Execution state
   isExecuting: false,
@@ -260,15 +321,31 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   setExecutionStatus: (status) => set({ executionStatus: status }),
   setIsExecuting: (executing) => set({ isExecuting: executing }),
 
-  // Uploaded images
+  // Uploaded images（写时双写：bucket + 扁平字段）
   uploadedImages: [],
-  addUploadedImage: (img) => set((s) => ({
-    uploadedImages: [...s.uploadedImages, img],
-  })),
-  removeUploadedImage: (id) => set((s) => ({
-    uploadedImages: s.uploadedImages.filter((i) => i.id !== id),
-  })),
-  clearUploadedImages: () => set({ uploadedImages: [] }),
+  addUploadedImage: (img) => set((s) => {
+    const tab = s.activeAgentTab;
+    const next = [...(s.uploadedImagesByTab[tab] ?? []), img];
+    return {
+      uploadedImagesByTab: { ...s.uploadedImagesByTab, [tab]: next },
+      uploadedImages: next,
+    };
+  }),
+  removeUploadedImage: (id) => set((s) => {
+    const tab = s.activeAgentTab;
+    const next = (s.uploadedImagesByTab[tab] ?? []).filter((i) => i.id !== id);
+    return {
+      uploadedImagesByTab: { ...s.uploadedImagesByTab, [tab]: next },
+      uploadedImages: next,
+    };
+  }),
+  clearUploadedImages: () => set((s) => {
+    const tab = s.activeAgentTab;
+    return {
+      uploadedImagesByTab: { ...s.uploadedImagesByTab, [tab]: [] },
+      uploadedImages: [],
+    };
+  }),
 
   // Last parsed intent
   lastIntent: null,
@@ -316,9 +393,15 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
   clearAgentExecution: () => set({ agentExecution: null }),
 
-  // Chat mode
+  // Chat mode（写时双写：bucket + 扁平字段）
   chatMode: 'agent',
-  setChatMode: (mode) => set({ chatMode: mode }),
+  setChatMode: (mode) => set((s) => {
+    const tab = s.activeAgentTab;
+    return {
+      chatModeByTab: { ...s.chatModeByTab, [tab]: mode },
+      chatMode: mode,
+    };
+  }),
 
   // Config assistant: 允许修改 LoRA 开关（持久化到 localStorage）
   allowLoraModification: loadAllowLoraMod(),

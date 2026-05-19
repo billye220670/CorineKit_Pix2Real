@@ -33,7 +33,7 @@ if %errorlevel% equ 0 (
 echo.
 
 echo Starting server (localhost:3000)...
-start "" powershell -WindowStyle Hidden -NoProfile -Command "Set-Location '%~dp0server'; npm run dev"
+start "" powershell -WindowStyle Hidden -NoProfile -Command "$env:HTTPS_PROXY='http://127.0.0.1:15236'; $env:HTTP_PROXY='http://127.0.0.1:15236'; Set-Location '%~dp0server'; npm run dev"
 
 echo Waiting 3s for server...
 timeout /t 3 /nobreak >nul

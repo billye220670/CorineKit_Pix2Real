@@ -71,6 +71,24 @@ ${loraList}
 5. 质量要求默认为高质量，除非用户明确说要快速出图
 6. 回复用中文，但 prompt 参数用英文
 7. LoRA 选择必须与用户当前描述的主题直接相关，不要因为用户历史偏好而添加与当前主题无关的 LoRA
+8. 提示词排序：视角/构图 > 人数/主体 > 角色特征 > 表情 > 动作/姿势 > 服装 > 背景 > 风格 > LoRA触发词
+9. ⛔ 禁止输出质量标签（masterpiece, best quality, ultra detailed 等工作流已内置）
+10. 🎭 **角色 LoRA 外貌约束（最高优先级硬约束）**：
+    **触发条件**：loras 中包含任何"分类: 角色"的 LoRA。
+    **核心理念**：角色 LoRA 已隐含全部固有外貌（发色/发型/瞳色/招牌配饰/体型/肤色/种族形态标志）。你只需把触发词原样写入 prompt，其余固有外貌一律不写——否则会与 LoRA 叠加产生混乱或冲突。
+    **禁写维度**：
+    - 发色（green hair / blonde hair / silver hair 等）
+    - 发型（long hair / short hair / ponytail / twintails / braids 等）
+    - 瞳色与瞳孔（blue eyes / red eyes / heterochromia / star-shaped pupils）
+    - 招牌固定配饰（角色 LoRA 默认已带的领结/围巾/帽子/耳饰）
+    - 体型/身高/肤色（loli / mature body / tall / petite / tan 等）
+    - 种族形态标志（兽耳/翅膀/尾巴/恶魔角，当它是角色默认属性时）
+    **可写维度**：服装、表情、姿势/动作、场景、光线/色调、视角/构图、风格、LoRA 触发词。
+    **覆写例外（仅服装/配饰）**：用户明确说"穿泳装/换制服/戴眼镜"→ 必须写入，可向 negativePrompt 追加旧服装词。
+    **身体特征请求的处理**：用户说"把头发染黑"、"换成短发"、"眼睛改成红色" → 不要写进 prompt，改用 text_response 告知用户降权（0.4-0.5）或关闭角色 LoRA。
+    **正反例**（用户："安琪拉穿着泳装"，触发词 fish_anj_v2）：
+    - ✅ 正确：1girl, solo, from side, swimsuit, standing, beach, summer, sunlight, fish_anj_v2
+    - ❌ 错误：1girl, solo, green long hair, long ponytail, teal eyes, blue bow tie, swimsuit, ..., fish_anj_v2
 
 # 重要：参数填写规范
 - 如果用户提到角色名（如 "菲谢尔"、"安琪拉"、"胡桃" 等），**必须**在 character 参数中填写中文角色名

@@ -797,7 +797,7 @@ export function Text2ImgSidebar({ width }: { width?: number }) {
           const resp = await fetch('/api/agent/random-batch', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ preferenceCount, tweakCount, exploreCount, mixPreset: diceMixPreset, ratioMode: diceRatioMode, contentPolicy: diceContentPolicy, userIntent: trimmedIntent || undefined, temperature: diceTemperature }),
+            body: JSON.stringify({ tabId: 7, preferenceCount, tweakCount, exploreCount, mixPreset: diceMixPreset, ratioMode: diceRatioMode, contentPolicy: diceContentPolicy, userIntent: trimmedIntent || undefined, temperature: diceTemperature }),
           });
           if (!resp.ok) {
             const errText = await resp.text();

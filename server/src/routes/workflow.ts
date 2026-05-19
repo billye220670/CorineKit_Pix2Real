@@ -11,7 +11,7 @@ import { workflow5Adapter } from '../adapters/Workflow5Adapter.js';
 import { workflow10Adapter } from '../adapters/Workflow10Adapter.js';
 import { uploadImage, uploadVideo, queuePrompt, deleteQueueItem, getSystemStats, getQueue, prioritizeQueueItem, getHistory, getImageBuffer, getCheckpointModels, getUnetModels, getLoraModels } from '../services/comfyui.js';
 import { getSessionsBase } from '../services/sessionManager.js';
-import { callLLM, buildSmartLoraPrompt, buildTriggerInsertPrompt } from '../services/llmService.js';
+import { callLLM, buildSmartLoraPrompt, buildTriggerInsertPrompt, PROXY_AGENT } from '../services/llmService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const releaseMemoryTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-释放内存.json');
@@ -1066,7 +1066,8 @@ router.post('/reverse-prompt', upload.single('image'), async (req, res) => {
             max_tokens: 4096,
             temperature: 1,
           }),
-        });
+          agent: PROXY_AGENT,
+        } as any);
 
         if (!grokResponse.ok) {
           const errorText = await grokResponse.text();
@@ -1348,7 +1349,8 @@ router.post('/prompt-assistant-grok', express.json(), async (req, res) => {
         max_tokens: 4096,
         temperature: 0.7,
       }),
-    });
+      agent: PROXY_AGENT,
+    } as any);
 
     if (!grokResponse.ok) {
       const errorText = await grokResponse.text();

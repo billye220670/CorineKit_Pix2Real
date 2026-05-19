@@ -1961,7 +1961,12 @@
   "角色\\Airi罪恶地狱.safetensors": {
     "thumbnail": "cc3a2b10-f77e-4f4e-9409-707c738c2025.png",
     "triggerWords": "amazing quality,absurdres,best quality,masterpiece,highres,newest,detailed,detailed body,detailed face,masterpiece,best quality,solo,3d,realistic, GuiltyHell,1girl,solo,thighhighs,high heels,midriff,navel,skirt,long hair,shoes,earrings,jewelry,wings,red hair,<lora:GuiltyHell:0.8>,",
-    "category": "角色"
+    "category": "角色",
+    "description": "Airi罪恶地狱 (角色)",
+    "compatibleModels": [
+      "光辉系列"
+    ],
+    "recommendedStrength": 0.8
   },
   "角色\\VTuber言之叶.safetensors": {
     "triggerWords": "cotonoha vee, black bow, black shoes, blonde hair, blue bow, blue eyes, blue ribbon, blue skirt, crown braid, footwear bow, frilled skirt,frilled sleeves, high-waist skirt, kneehighs, long hair, low twintails, platform footwear, puffy long sleeves, white shirt, white socks,",

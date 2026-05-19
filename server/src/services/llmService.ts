@@ -2,9 +2,19 @@ import fetch from 'node-fetch';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { HttpsProxyAgent } from 'https-proxy-agent';
 import type { UserPreferenceProfile } from './profileService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// ── 出站代理：若设置了 HTTPS_PROXY/HTTP_PROXY 环境变量则透过代理访问外网 LLM API ──
+const PROXY_URL = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || '';
+export const PROXY_AGENT = PROXY_URL ? new HttpsProxyAgent(PROXY_URL) : undefined;
+if (PROXY_AGENT) {
+  console.log(`[LLM] Outbound HTTPS via proxy: ${PROXY_URL}`);
+} else {
+  console.log('[LLM] No HTTPS_PROXY set, using direct connection');
+}
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
 
@@ -72,7 +82,8 @@ export async function callLLM(request: LLMRequest): Promise<LLMResponse> {
       'Authorization': `Bearer ${GROK_API_KEY}`,
     },
     body: JSON.stringify(body),
-  });
+    agent: PROXY_AGENT,
+  } as any);
 
   if (!response.ok) {
     const errorText = await response.text();

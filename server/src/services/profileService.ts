@@ -3,6 +3,16 @@ import type { GenerationRecord } from './agentService.js';
 import { getSessionsBase } from './sessionManager.js';
 import fs from 'fs';
 
+/**
+ * 画像范围：Tab 7（快速出图 / Stable Diffusion）和 Tab 9（ZIT快出 / ZImage）
+ * 两个 tab 的模型类型、LoRA、提示词风格完全不通用，必须严格隔离，不存在"全局画像"。
+ */
+export type ProfileScope = 'tab7' | 'tab9';
+
+function scopeToTabId(scope: ProfileScope): 7 | 9 {
+  return scope === 'tab7' ? 7 : 9;
+}
+
 // 用户偏好画像接口
 export interface UserPreferenceProfile {
   modelPreferences: Array<{
@@ -34,11 +44,14 @@ export interface UserPreferenceProfile {
   }>;
 
   usageStats: {
+    /** 当前 scope 内的总生成数（不含被过滤的骰子未收藏图） */
     totalGenerations: number;
+    /** 当前 scope 内的总收藏数 */
     totalFavorites: number;
-    tab7Count: number;
-    tab9Count: number;
+    /** 当前 scope 内最后活跃时间 */
     lastActiveTime: number;
+    /** 画像范围标记 */
+    scope: ProfileScope;
   };
 
   frequentCombinations: Array<{
@@ -74,7 +87,9 @@ function mode<T>(values: T[]): T | undefined {
 
 // ── 主函数 ────────────────────────────────────────────────────────────────────
 
-export function buildUserProfile(): UserPreferenceProfile {
+export function buildUserProfile(scope: ProfileScope): UserPreferenceProfile {
+  const targetTabId = scopeToTabId(scope);
+
   // 遍历所有 session 目录，合并全量数据
   const logs: GenerationRecord[] = [];
   const favorites: Record<string, { tabId: number; favoritedAt: number }> = {};
@@ -88,12 +103,18 @@ export function buildUserProfile(): UserPreferenceProfile {
     for (const sid of sessionDirs) {
       try {
         const sessionLogs = readGenerationLog(sid);
-        logs.push(...sessionLogs);
+        // ── tab 维度严格过滤：只保留当前 scope 的日志 ──
+        for (const log of sessionLogs) {
+          if (log.tabId === targetTabId) logs.push(log);
+        }
       } catch { /* skip unreadable session */ }
 
       try {
         const sessionFavs = readFavorites(sid);
-        Object.assign(favorites, sessionFavs);
+        // ── tab 维度严格过滤：只保留当前 scope 的收藏 ──
+        for (const [imgId, fav] of Object.entries(sessionFavs)) {
+          if (fav.tabId === targetTabId) favorites[imgId] = fav;
+        }
       } catch { /* skip unreadable session */ }
     }
   }
@@ -203,20 +224,15 @@ export function buildUserProfile(): UserPreferenceProfile {
 
   // ── 5. 使用模式统计 ──
   let lastActiveTime = 0;
-  let tab7Count = 0;
-  let tab9Count = 0;
   for (const log of logs) {
     if (log.timestamp > lastActiveTime) lastActiveTime = log.timestamp;
-    if (log.tabId === 7) tab7Count++;
-    if (log.tabId === 9) tab9Count++;
   }
 
   const usageStats = {
     totalGenerations: logs.length,
     totalFavorites: favoriteImageIds.size,
-    tab7Count,
-    tab9Count,
     lastActiveTime,
+    scope,
   };
 
   // ── 6. 常用模型+LoRA 组合 ──

@@ -1,9 +1,62 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Send, Paperclip, X, AlertCircle, RefreshCw, Loader2, ExternalLink, ChevronDown, Bot, Settings, MessageCircle, Check, Undo2, Sparkles, Trash2, FileText, XCircle } from 'lucide-react';
-import { useAgentStore, type ChatMessage, type CardDropResult, type ChatMode, type ConfigSnapshot } from '../hooks/useAgentStore.js';
+import { useAgentStore, type ChatMessage, type CardDropResult, type ChatMode, type ConfigSnapshot, type AgentTabId } from '../hooks/useAgentStore.js';
 import { useWorkflowStore } from '../hooks/useWorkflowStore.js';
 import { useWebSocket } from '../hooks/useWebSocket.js';
+import { readZitWarmupPrompts } from '../data/zitWarmupPrompts.js';
 import { PromptDiff } from './PromptDiff.js';
+
+/**
+ * 把 useWorkflowStore.activeTab 的任意 tabId 归一到 agent 面板的 tab 范围（7 或 9）。
+ * 仅 Tab 7（快速出图）和 Tab 9（ZIT快出）支持 AI 聊天，其它 tab 不打开此对话框，
+ * 兜底为 7 防御性返回。
+ */
+function resolveAgentTab(activeTab: number | string | undefined): AgentTabId {
+  return Number(activeTab) === 9 ? 9 : 7;
+}
+
+/**
+ * 统一发起暖场/后续建议请求。
+ * ZIT（tab9）走 POST，携带 ZITSidebar 顶部 debug 区里的 customSystemPrompt/customUserPrompt；
+ * Tab7 维持 GET 不变。
+ */
+async function fetchAgentSuggestions(params: {
+  sessionId: string;
+  mode: string;
+  tabId: AgentTabId;
+}): Promise<string[]> {
+  const { sessionId, mode, tabId } = params;
+  try {
+    if (tabId === 9) {
+      const { system, user } = readZitWarmupPrompts();
+      const reqBody = {
+        sessionId: sessionId || 'default',
+        mode,
+        tabId,
+        customSystemPrompt: system,
+        customUserPrompt: user,
+      };
+      console.log('[Agent] suggestions POST →', { ...reqBody, customSystemPrompt: `<${system.length} chars>`, customUserPrompt: `<${user.length} chars>` });
+      const res = await fetch('/api/agent/suggestions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(reqBody),
+      });
+      const data = await res.json();
+      if (data._debug) console.log('[Agent] suggestions ← _debug:', data._debug);
+      return data.suggestions || [];
+    }
+    const res = await fetch(
+      `/api/agent/suggestions?sessionId=${sessionId || 'default'}&mode=${mode}&tabId=${tabId}`
+    );
+    const data = await res.json();
+    if (data._debug) console.log('[Agent] suggestions ← _debug:', data._debug);
+    return data.suggestions || [];
+  } catch (err) {
+    console.warn('[Agent] suggestions fetch failed:', err);
+    return [];
+  }
+}
 
 function getCurrentSidebarConfig(): { tabId: number; config: any } {
   const store = useWorkflowStore.getState();
@@ -51,6 +104,16 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
   const setAllowLoraModification = useAgentStore((s) => s.setAllowLoraModification);
   const saveConfigSnapshot = useAgentStore((s) => s.saveConfigSnapshot);
   const clearMessages = useAgentStore((s) => s.clearMessages);
+
+  // ── 当前 agent 面板归属的 tab（7=SD 快速出图，9=ZImage ZIT快出，画像严格隔离） ──
+  const workflowActiveTab = useWorkflowStore((s) => s.activeTab);
+  const activeAgentTab = useAgentStore((s) => s.activeAgentTab);
+  const setActiveAgentTab = useAgentStore((s) => s.setActiveAgentTab);
+
+  // 跟随 sidebar 的 activeTab 同步 agent 面板的 tab，触发 messages/uploadedImages/chatMode 切桶
+  useEffect(() => {
+    setActiveAgentTab(resolveAgentTab(workflowActiveTab));
+  }, [workflowActiveTab, setActiveAgentTab]);
 
   const { sendMessage: wsSendMessage } = useWebSocket();
 
@@ -229,9 +292,13 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
     setSuggestionsLoading(true);
     try {
       const sessionId = useWorkflowStore.getState().sessionId;
-      const res = await fetch(`/api/agent/suggestions?sessionId=${sessionId || 'default'}&mode=${useAgentStore.getState().chatMode}`);
-      const data = await res.json();
-      setWarmUpSuggestions(data.suggestions || []);
+      const tabId = useAgentStore.getState().activeAgentTab;
+      const suggestions = await fetchAgentSuggestions({
+        sessionId: sessionId || 'default',
+        mode: useAgentStore.getState().chatMode,
+        tabId,
+      });
+      setWarmUpSuggestions(suggestions);
     } catch {
       setWarmUpSuggestions([]);
     } finally {
@@ -245,6 +312,16 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
       fetchWarmUpSuggestions();
     }
   }, [isOpen]);
+
+  // 切换 agent tab 时：清空暖场缓存（不同 tab 画像不同，建议必须重拉）
+  useEffect(() => {
+    setWarmUpSuggestions([]);
+    setFollowUpSuggestions([]);
+    pendingFollowUpRef.current = [];
+    if (isOpen && useAgentStore.getState().messages.length === 0) {
+      fetchWarmUpSuggestions();
+    }
+  }, [activeAgentTab]);
 
   const handleClose = useCallback(() => {
     setClosing(true);
@@ -269,9 +346,13 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
       setSuggestionsLoading(true);
       try {
         const sessionId = useWorkflowStore.getState().sessionId;
-        const res = await fetch(`/api/agent/suggestions?sessionId=${sessionId || 'default'}&mode=${mode}`);
-        const data = await res.json();
-        setWarmUpSuggestions(data.suggestions || []);
+        const tabId = useAgentStore.getState().activeAgentTab;
+        const suggestions = await fetchAgentSuggestions({
+          sessionId: sessionId || 'default',
+          mode,
+          tabId,
+        });
+        setWarmUpSuggestions(suggestions);
       } catch {
         setWarmUpSuggestions([]);
       } finally {
@@ -661,6 +742,8 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
           images,
           hasImage: !!images?.length,
           mode: useAgentStore.getState().chatMode,
+          // 当前 agent 面板归属的 tab，决定后端用哪个画像（7=SD，9=ZImage 严格隔离）
+          tabId: useAgentStore.getState().activeAgentTab,
           ...(useAgentStore.getState().chatMode === 'config_assistant' ? {
             currentConfig: getCurrentSidebarConfig().config,
             allowLoraModification: useAgentStore.getState().allowLoraModification,
@@ -882,9 +965,13 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
     setSuggestionsLoading(true);
     try {
       const sessionId = useWorkflowStore.getState().sessionId;
-      const res = await fetch(`/api/agent/suggestions?sessionId=${sessionId || 'default'}&mode=${useAgentStore.getState().chatMode}`);
-      const data = await res.json();
-      setFollowUpSuggestions(data.suggestions || []);
+      const tabId = useAgentStore.getState().activeAgentTab;
+      const suggestions = await fetchAgentSuggestions({
+        sessionId: sessionId || 'default',
+        mode: useAgentStore.getState().chatMode,
+        tabId,
+      });
+      setFollowUpSuggestions(suggestions);
     } catch {
       setFollowUpSuggestions([]);
     } finally {

@@ -21,9 +21,8 @@ interface LoraPref extends ModelPref {
 interface UsageStats {
   totalGenerations: number;
   totalFavorites: number;
-  tab7Count: number;
-  tab9Count: number;
   lastActiveTime: number;
+  scope: 'tab7' | 'tab9';
 }
 
 interface ParamPreferences {
@@ -203,16 +202,33 @@ function LoraChip({ lp }: { lp: LoraPref }) {
 
 // ── 主组件 ───────────────────────────────────────────────────────────────────
 
+type ProfileScopeId = 7 | 9;
+const SCOPE_OPTIONS: Array<{ id: ProfileScopeId; label: string; hint: string }> = [
+  { id: 7, label: '快速出图', hint: 'Stable Diffusion' },
+  { id: 9, label: 'ZIT快出', hint: 'ZImage' },
+];
+const PROFILE_SCOPE_KEY = 'my_profile_scope';
+
+function loadInitialScope(): ProfileScopeId {
+  try {
+    const raw = localStorage.getItem(PROFILE_SCOPE_KEY);
+    return raw === '9' ? 9 : 7;
+  } catch {
+    return 7;
+  }
+}
+
 export function MyProfileSection() {
+  const [scope, setScope] = useState<ProfileScopeId>(loadInitialScope);
   const [data, setData] = useState<ProfileView | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (targetScope: ProfileScopeId) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/agent/user-profile-view');
+      const res = await fetch(`/api/agent/user-profile-view?tabId=${targetScope}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       setData(json);
@@ -223,7 +239,13 @@ export function MyProfileSection() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(scope); }, [load, scope]);
+
+  const handleScopeChange = useCallback((next: ProfileScopeId) => {
+    if (next === scope) return;
+    try { localStorage.setItem(PROFILE_SCOPE_KEY, String(next)); } catch {}
+    setScope(next);
+  }, [scope]);
 
   const loraGroups = useMemo(() => (data ? groupLoras(data.loraPreferences) : {}), [data]);
   const topModels = useMemo(() => (data ? data.modelPreferences.slice(0, 8) : []), [data]);
@@ -232,6 +254,7 @@ export function MyProfileSection() {
 
   // 空状态
   const isEmpty = data && data.usageStats.totalGenerations === 0;
+  const currentScopeMeta = SCOPE_OPTIONS.find((o) => o.id === scope)!;
 
   return (
     <div style={{ marginBottom: 32 }}>
@@ -239,7 +262,7 @@ export function MyProfileSection() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
         <h3 style={{ fontSize: 18, fontWeight: 600, color: 'var(--color-text)', margin: 0 }}>我的偏好</h3>
         <button
-          onClick={load}
+          onClick={() => load(scope)}
           disabled={loading}
           title="重新聚合"
           style={{
@@ -260,8 +283,37 @@ export function MyProfileSection() {
           {loading ? '加载中' : '刷新'}
         </button>
       </div>
-      <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 4 }}>
-        基于你所有会话的生成历史和收藏聚合。用于 AI 助手的个性化推荐。
+      <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 10 }}>
+        {currentScopeMeta.label}（{currentScopeMeta.hint}）的偏好画像。
+        快速出图与 ZIT 快出在模型/LoRA/提示词上完全不通用，因此画像严格隔离。
+      </div>
+
+      {/* Tab 切换：单选 chip */}
+      <div style={{ display: 'inline-flex', gap: 0, padding: 2, border: '1px solid var(--color-border)', borderRadius: 8, marginBottom: 8 }}>
+        {SCOPE_OPTIONS.map((opt) => {
+          const active = opt.id === scope;
+          return (
+            <button
+              key={opt.id}
+              onClick={() => handleScopeChange(opt.id)}
+              disabled={loading && active}
+              style={{
+                padding: '6px 14px',
+                fontSize: 12,
+                fontWeight: active ? 600 : 400,
+                border: 'none',
+                borderRadius: 6,
+                background: active ? 'var(--color-primary)' : 'transparent',
+                color: active ? '#fff' : 'var(--color-text-secondary)',
+                cursor: 'pointer',
+                transition: 'background 0.15s',
+              }}
+              title={opt.hint}
+            >
+              {opt.label}
+            </button>
+          );
+        })}
       </div>
 
       {error && (
@@ -273,8 +325,8 @@ export function MyProfileSection() {
       {isEmpty && (
         <div style={{ ...cardStyle, marginTop: 16, textAlign: 'center', padding: '40px 20px', color: 'var(--color-text-secondary)', fontSize: 13 }}>
           <Sparkles size={28} style={{ opacity: 0.5, marginBottom: 8 }} />
-          <div>还没有生成记录。</div>
-          <div style={{ fontSize: 11, marginTop: 4 }}>在 ZIT快出 或 文生图 Tab 生成几张图后，这里会出现你的画像。</div>
+          <div>{currentScopeMeta.label} 还没有生成记录。</div>
+          <div style={{ fontSize: 11, marginTop: 4 }}>在该 Tab 生成几张图后，这里会出现你的画像。</div>
         </div>
       )}
 
@@ -285,7 +337,7 @@ export function MyProfileSection() {
           <div style={{ display: 'flex', gap: 10 }}>
             <StatCard icon={<ImageIcon size={12} />} label="总生成数" value={data.usageStats.totalGenerations} />
             <StatCard icon={<Heart size={12} />} label="总收藏数" value={data.usageStats.totalFavorites} />
-            <StatCard icon={<Zap size={12} />} label="快速出图" value={data.usageStats.tab7Count} hint={`ZIT ${data.usageStats.tab9Count}`} />
+            <StatCard icon={<Zap size={12} />} label="所属 Tab" value={currentScopeMeta.label} hint={currentScopeMeta.hint} />
             <StatCard icon={<Clock size={12} />} label="最后活跃" value={formatLastActive(data.usageStats.lastActiveTime)} />
           </div>
 

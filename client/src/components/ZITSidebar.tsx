@@ -12,6 +12,12 @@ import { ModelSelect, useModelFavorites } from './ModelSelect.js';
 import { useModelMetadata } from '../hooks/useModelMetadata.js';
 import { showToast } from '../hooks/useToast.js';
 import { callPromptAssistant } from '../services/api.js';
+import {
+  ZIT_WARMUP_DEFAULT_SYSTEM,
+  ZIT_WARMUP_DEFAULT_USER,
+  ZIT_WARMUP_SYSTEM_KEY,
+  ZIT_WARMUP_USER_KEY,
+} from '../data/zitWarmupPrompts.js';
 
 const RATIO_PRESETS = [
   { label: '1:1',  width: 1024, height: 1024 },
@@ -148,6 +154,29 @@ export function ZITSidebar({ width }: { width?: number }) {
   const [samplerOpen, setSamplerOpen] = useState(false);
   const [batchCount,  setBatchCount]  = useState(1);
   const [isGenerating, setIsGenerating] = useState(false);
+
+  // ── 暖场建议 prompt 调试（仅 ZIT cold-start 使用） ───────────────────────
+  const [warmupDebugOpen, setWarmupDebugOpen] = useState(true);
+  const [warmupSystem, setWarmupSystem] = useState<string>(() => {
+    try { return localStorage.getItem(ZIT_WARMUP_SYSTEM_KEY) ?? ZIT_WARMUP_DEFAULT_SYSTEM; }
+    catch { return ZIT_WARMUP_DEFAULT_SYSTEM; }
+  });
+  const [warmupUser, setWarmupUser] = useState<string>(() => {
+    try { return localStorage.getItem(ZIT_WARMUP_USER_KEY) ?? ZIT_WARMUP_DEFAULT_USER; }
+    catch { return ZIT_WARMUP_DEFAULT_USER; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(ZIT_WARMUP_SYSTEM_KEY, warmupSystem); } catch {}
+  }, [warmupSystem]);
+  useEffect(() => {
+    try { localStorage.setItem(ZIT_WARMUP_USER_KEY, warmupUser); } catch {}
+  }, [warmupUser]);
+  const resetWarmupPrompts = () => {
+    if (!window.confirm('恢复 System / User Prompt 为默认值？当前内容会被覆盖。')) return;
+    setWarmupSystem(ZIT_WARMUP_DEFAULT_SYSTEM);
+    setWarmupUser(ZIT_WARMUP_DEFAULT_USER);
+  };
+
   const [promptFocused, setPromptFocused] = useState(false);
   const [promptBtnHovered, setPromptBtnHovered] = useState(false);
   const [quickActionLoading, setQuickActionLoading] = useState<string | null>(null);
@@ -529,6 +558,106 @@ export function ZITSidebar({ width }: { width?: number }) {
         </div>
       )}
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 0 }}>
+
+        {/* ── 🛠 暖场建议 Prompt 调试区（仅 ZIT cold-start 生效） ────────────── */}
+        <div style={{
+          ...cardStyle,
+          paddingTop: 0,
+          paddingBottom: 16,
+          marginBottom: 12,
+          border: '1px dashed var(--color-border)',
+          borderRadius: 6,
+          padding: 10,
+          background: 'rgba(255, 200, 0, 0.04)',
+        }}>
+          <div
+            onClick={() => setWarmupDebugOpen(o => !o)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              cursor: 'pointer',
+              userSelect: 'none',
+              marginBottom: warmupDebugOpen ? 8 : 0,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)' }}>
+              {warmupDebugOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              <span>🛠 暖场建议 Prompt 调试</span>
+              <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--color-text-tertiary)', marginLeft: 4 }}>
+                ZIT cold-start
+              </span>
+            </div>
+            {warmupDebugOpen && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); resetWarmupPrompts(); }}
+                style={{
+                  fontSize: 11,
+                  padding: '2px 8px',
+                  background: 'transparent',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 4,
+                  color: 'var(--color-text-secondary)',
+                  cursor: 'pointer',
+                }}
+              >
+                恢复默认
+              </button>
+            )}
+          </div>
+          {warmupDebugOpen && (
+            <>
+              <div style={{ fontSize: 10, color: 'var(--color-text-tertiary)', marginBottom: 8, lineHeight: 1.5 }}>
+                编辑后立即持久化到本地存储。仅当 AI Chat 处于 ZIT 模式且画像数据不足（cold）时，作为暖场建议的 LLM 提示词使用。
+              </div>
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: 4 }}>System Prompt</div>
+                <textarea
+                  value={warmupSystem}
+                  onChange={(e) => setWarmupSystem(e.target.value)}
+                  spellCheck={false}
+                  style={{
+                    width: '100%',
+                    minHeight: 80,
+                    resize: 'vertical',
+                    fontSize: 11,
+                    fontFamily: 'Menlo, Consolas, monospace',
+                    padding: 6,
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 4,
+                    background: 'var(--color-bg)',
+                    color: 'var(--color-text)',
+                    lineHeight: 1.5,
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: 4 }}>User Prompt</div>
+                <textarea
+                  value={warmupUser}
+                  onChange={(e) => setWarmupUser(e.target.value)}
+                  spellCheck={false}
+                  style={{
+                    width: '100%',
+                    minHeight: 200,
+                    resize: 'vertical',
+                    fontSize: 11,
+                    fontFamily: 'Menlo, Consolas, monospace',
+                    padding: 6,
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 4,
+                    background: 'var(--color-bg)',
+                    color: 'var(--color-text)',
+                    lineHeight: 1.5,
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+            </>
+          )}
+        </div>
 
         {/* UNet Model */}
         <div style={{ ...cardStyle, paddingTop: 0, paddingBottom: 16 }}>
