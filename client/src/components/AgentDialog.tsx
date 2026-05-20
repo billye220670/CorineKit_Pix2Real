@@ -3,7 +3,7 @@ import { Send, Paperclip, X, AlertCircle, RefreshCw, Loader2, ExternalLink, Chev
 import { useAgentStore, type ChatMessage, type CardDropResult, type ChatMode, type ConfigSnapshot, type AgentTabId } from '../hooks/useAgentStore.js';
 import { useWorkflowStore } from '../hooks/useWorkflowStore.js';
 import { useWebSocket } from '../hooks/useWebSocket.js';
-import { readZitWarmupPrompts } from '../data/zitWarmupPrompts.js';
+import { readZitWarmupPrompts, readZitWarmupHotPrompts, readZitChatPrompts, readZitConfigPrompt, readZitSmartQAPrompt, readZitFollowupAgentPrompts, readZitFollowupConfigPrompts } from '../data/zitWarmupPrompts.js';
 import { PromptDiff } from './PromptDiff.js';
 
 /**
@@ -29,14 +29,23 @@ async function fetchAgentSuggestions(params: {
   try {
     if (tabId === 9) {
       const { system, user } = readZitWarmupPrompts();
+      const { system: hotSystem, userTemplate: hotUserTemplate } = readZitWarmupHotPrompts();
       const reqBody = {
         sessionId: sessionId || 'default',
         mode,
         tabId,
         customSystemPrompt: system,
         customUserPrompt: user,
+        customHotSystemPrompt: hotSystem,
+        customHotUserPrompt: hotUserTemplate,
       };
-      console.log('[Agent] suggestions POST →', { ...reqBody, customSystemPrompt: `<${system.length} chars>`, customUserPrompt: `<${user.length} chars>` });
+      console.log('[Agent] suggestions POST →', {
+        ...reqBody,
+        customSystemPrompt: `<${system.length} chars>`,
+        customUserPrompt: `<${user.length} chars>`,
+        customHotSystemPrompt: `<${hotSystem.length} chars>`,
+        customHotUserPrompt: `<${hotUserTemplate.length} chars>`,
+      });
       const res = await fetch('/api/agent/suggestions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -744,9 +753,58 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
           mode: useAgentStore.getState().chatMode,
           // 当前 agent 面板归属的 tab，决定后端用哪个画像（7=SD，9=ZImage 严格隔离）
           tabId: useAgentStore.getState().activeAgentTab,
+          // ZIT (tab9) agent 模式：透传 ZITSidebar 调试区的自定义 system/user template + follow-up
+          ...(useAgentStore.getState().activeAgentTab === 9 && useAgentStore.getState().chatMode === 'agent' ? (() => {
+            const { system, userTemplate } = readZitChatPrompts();
+            const { system: fuSystem, userTemplate: fuUserTemplate } = readZitFollowupAgentPrompts();
+            console.log('[Agent] chat POST →', {
+              tabId: 9,
+              mode: 'agent',
+              customChatSystemPrompt: `<${system.length} chars>`,
+              customChatUserTemplate: `<${userTemplate.length} chars>`,
+              customFollowupAgentSystemPrompt: `<${fuSystem.length} chars>`,
+              customFollowupAgentUserPrompt: `<${fuUserTemplate.length} chars>`,
+            });
+            return {
+              customChatSystemPrompt: system,
+              customChatUserTemplate: userTemplate,
+              customFollowupAgentSystemPrompt: fuSystem,
+              customFollowupAgentUserPrompt: fuUserTemplate,
+            };
+          })() : {}),
+          // ZIT (tab9) smart_qa 模式：透传自定义 system prompt
+          ...(useAgentStore.getState().activeAgentTab === 9 && useAgentStore.getState().chatMode === 'smart_qa' ? (() => {
+            const sys = readZitSmartQAPrompt();
+            console.log('[Agent] chat POST →', {
+              tabId: 9,
+              mode: 'smart_qa',
+              customSmartQASystemPrompt: `<${sys.length} chars>`,
+            });
+            return { customSmartQASystemPrompt: sys };
+          })() : {}),
+          // ZIT (tab9) config_assistant 模式：透传配置助理 system prompt + follow-up 模板
+          ...(useAgentStore.getState().activeAgentTab === 9 && useAgentStore.getState().chatMode === 'config_assistant' ? (() => {
+            const cfgSys = readZitConfigPrompt();
+            const { system: fuSys, userTemplate: fuUser } = readZitFollowupConfigPrompts();
+            console.log('[Agent] chat POST →', {
+              tabId: 9,
+              mode: 'config_assistant',
+              customConfigSystemPrompt: `<${cfgSys.length} chars>`,
+              customFollowupConfigSystemPrompt: `<${fuSys.length} chars>`,
+              customFollowupConfigUserPrompt: `<${fuUser.length} chars>`,
+            });
+            return {
+              customConfigSystemPrompt: cfgSys,
+              customFollowupConfigSystemPrompt: fuSys,
+              customFollowupConfigUserPrompt: fuUser,
+            };
+          })() : {}),
           ...(useAgentStore.getState().chatMode === 'config_assistant' ? {
             currentConfig: getCurrentSidebarConfig().config,
-            allowLoraModification: useAgentStore.getState().allowLoraModification,
+            // ZIT (tab9) 配置助理一律不改 LoRA，强制 false 进入锁定模式；其他 tab 跟随用户开关
+            allowLoraModification: useAgentStore.getState().activeAgentTab === 9
+              ? false
+              : useAgentStore.getState().allowLoraModification,
           } : {}),
         }),
       });
@@ -1503,7 +1561,7 @@ export function AgentDialog({ rightOffset = 0 }: { rightOffset?: number }) {
               )}
             </div>
             {/* LoRA 修改开关 - 仅配置助理模式显示 */}
-            {chatMode === 'config_assistant' && (
+            {chatMode === 'config_assistant' && activeAgentTab !== 9 && (
               <button
                 onClick={() => setAllowLoraModification(!allowLoraModification)}
                 title={allowLoraModification

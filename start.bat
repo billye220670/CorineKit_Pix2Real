@@ -33,13 +33,13 @@ if %errorlevel% equ 0 (
 echo.
 
 echo Starting server (localhost:3000)...
-start "" powershell -WindowStyle Hidden -NoProfile -Command "$env:HTTPS_PROXY='http://127.0.0.1:15236'; $env:HTTP_PROXY='http://127.0.0.1:15236'; Set-Location '%~dp0server'; npm run dev"
+start "Pix2Real-Server" powershell -WindowStyle Hidden -NoProfile -Command "Set-Location '%~dp0server'; npm run dev"
 
 echo Waiting 3s for server...
 timeout /t 3 /nobreak >nul
 
 echo Starting client (localhost:5173)...
-start "" powershell -WindowStyle Hidden -NoProfile -Command "Set-Location '%~dp0client'; npm run dev"
+start "Pix2Real-Client" powershell -WindowStyle Hidden -NoProfile -Command "Set-Location '%~dp0client'; npm run dev"
 
 echo Waiting 5s for client...
 timeout /t 5 /nobreak >nul

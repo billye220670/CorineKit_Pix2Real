@@ -484,7 +484,14 @@ function recommendBaseModel(
 
 // ── 工具调用解析 ─────────────────────────────────────────────────────────────
 
-export function parseToolCall(toolCall: any, metadata: any, userProfile?: UserPreferenceProfile): ParsedIntent {
+export type IntentScope = 'tab7' | 'tab9';
+
+export function parseToolCall(
+  toolCall: any,
+  metadata: any,
+  userProfile?: UserPreferenceProfile,
+  scope: IntentScope = 'tab7',
+): ParsedIntent {
   const fnName: string = toolCall.function?.name ?? '';
   let args: Record<string, any> = {};
   try {
@@ -494,19 +501,20 @@ export function parseToolCall(toolCall: any, metadata: any, userProfile?: UserPr
   }
 
   if (fnName === 'generate_image') {
-    return parseGenerateImage(args, metadata, userProfile);
+    return parseGenerateImage(args, metadata, userProfile, scope);
   } else if (fnName === 'process_image') {
     return parseProcessImage(args, metadata);
   }
 
   // 未知工具 — 回退为文生图
-  return parseGenerateImage(args, metadata, userProfile);
+  return parseGenerateImage(args, metadata, userProfile, scope);
 }
 
 function parseGenerateImage(
   args: Record<string, any>,
   metadata: any,
   userProfile?: UserPreferenceProfile,
+  scope: IntentScope = 'tab7',
 ): ParsedIntent {
   const prompt: string = args.prompt ?? '';
   const negativePrompt: string = args.negative_prompt ?? '';
@@ -539,10 +547,12 @@ function parseGenerateImage(
     recommendedLoras = findMatchingLoras(searchKeywords, metadata);
   }
 
-  // 根据质量决定参数
-  const parameters = quality === 'fast'
-    ? { width: 768, height: 1152, steps: 20, cfg: 7 }
-    : { width: 1024, height: 1536, steps: 35, cfg: 7 };
+  // 根据质量决定参数（tab9 ZIT 走 ZImage 专属默认，忽略 quality）
+  const parameters = scope === 'tab9'
+    ? { width: 720, height: 1280, steps: 9, cfg: 1 }
+    : (quality === 'fast'
+        ? { width: 768, height: 1152, steps: 20, cfg: 7 }
+        : { width: 1024, height: 1536, steps: 35, cfg: 7 });
 
   // 如果 LLM 传了 model 参数（用户明确指定），优先使用
   let recommendedModel: string | undefined;
@@ -550,22 +560,22 @@ function parseGenerateImage(
     recommendedModel = findCheckpointByName(String(args.model), metadata);
   }
 
-  // 否则走 recommendBaseModel 自动推荐
-  if (!recommendedModel) {
+  // 否则走 recommendBaseModel 自动推荐（tab9 ZIT 不走 SD 模型推荐）
+  if (!recommendedModel && scope !== 'tab9') {
     recommendedModel = recommendBaseModel(recommendedLoras, metadata, userProfile);
   }
 
   const intent: ParsedIntent = {
     taskType: 'generate',
-    workflowId: 7,       // 快速出图
-    workflowName: '快速出图',
+    workflowId: scope === 'tab9' ? 9 : 7,
+    workflowName: scope === 'tab9' ? 'ZIT快出' : '快速出图',
     prompt,
     negativePrompt: negativePrompt || undefined,
     character: character || undefined,
     pose: pose || undefined,
     style: style || undefined,
     quality,
-    recommendedLoras,
+    recommendedLoras: scope === 'tab9' ? [] : recommendedLoras,
     recommendedModel,
     parameters,
   };
