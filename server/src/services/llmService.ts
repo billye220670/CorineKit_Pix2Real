@@ -172,6 +172,55 @@ export function buildTriggerInsertPrompt(triggerWords: string): string {
  */
 export function getAgentTools(scope?: string): Tool[] {
   const isZit = scope === 'tab9';
+
+  // ── ZIT (tab9) 专属精简工具集：仅 generate_image（中文自然语言 prompt） + text_response ──
+  // 原因：LLM 会优先服从工具 schema 的字段说明（比 system prompt 约束更强），若 description 写"英文提示词"，
+  // ZIT 模板中的中文要求将被覆盖，导致 LLM 输出英文逗号标签。
+  if (isZit) {
+    return [
+      {
+        type: 'function',
+        function: {
+          name: 'generate_image',
+          description: '根据用户的描述生成一张 ZImage 图片。请用中文自然语言描述画面，不要输出 SD/Danbooru 风格的英文标签。',
+          parameters: {
+            type: 'object',
+            properties: {
+              prompt: {
+                type: 'string',
+                description: '中文自然语言描述（紧凑的描述性段落或长句，25–60 字）。用流畅句子覆盖主体/动作/场景/光线与氛围。可保留少量英文专有名词（如 cyberpunk、bokeh、film grain），但主体描述必须为中文。⛔ 严禁：逗号分隔的英文标签串（如 "1girl, standing, outdoors, sunlight"）；masterpiece / best quality / score_9 / ultra detailed / highres / 8K 等质量标签；1girl/1boy 等主体计数标签。示例：「夕阳下的港口，少女靠在铁栏边眺望远方，海面泛起金色波光，余晖柔和带点胶片颗粒感」。',
+              },
+              cardName: {
+                type: 'string',
+                description: '为这张图起一个 4–12 字的中文短名，平实概括画面主体。例：「泳池边的少女」「雪地独行」。',
+              },
+              ratio: {
+                type: 'string',
+                enum: ['1:1', '3:4', '9:16', '4:3', '16:9'],
+                description: '画面比例（人物立绘 3:4；竖屏 9:16；风景 4:3 或 16:9；装饰性构图 1:1）。',
+              },
+            },
+            required: ['prompt'],
+          },
+        },
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'text_response',
+          description: '当用户的问题不涉及图片生成或修改时，使用此工具进行纯文本回复。例如：用户问"你能做什么"、"怎么使用"、闲聊等。',
+          parameters: {
+            type: 'object',
+            properties: {
+              message: { type: 'string', description: '回复给用户的中文文本消息' },
+            },
+            required: ['message'],
+          },
+        },
+      },
+    ];
+  }
+
   const tools: Tool[] = [
     {
       type: 'function',
@@ -388,7 +437,7 @@ export function buildProfileSummary(profile: UserPreferenceProfile, metadata: an
 ${comboSection}${loraPrefSection}`.trim();
 }
 
-export function buildSystemPrompt(profile: UserPreferenceProfile, metadata: any): string {
+export function buildSystemPrompt(profile: UserPreferenceProfile, metadata: any, scope: 'tab7' | 'tab9' = 'tab7'): string {
   // 提取 top 模型
   const topModels = profile.modelPreferences
     .slice(0, 5)
@@ -440,14 +489,26 @@ export function buildSystemPrompt(profile: UserPreferenceProfile, metadata: any)
     }
   }
 
-  const checkpointList = buildCheckpointList(metadata);
-  const loraList = buildLoraList(metadata);
-
   // 构建 profileSection 供模板使用
   const profileSection = `- 常用模型: ${topModels}
 - 偏好风格: ${styleFeatures}
 - 常用参数: ${paramPreferences}
 ${comboSection}${loraPrefSection}`.trim();
+
+  // ── ZIT (tab9) 专属模板：不包含 checkpointList / loraList，变量名为 {{profile}} ──
+  if (scope === 'tab9') {
+    const renderedZit = renderPrompt('agent-chat-tab9', { profile: profileSection });
+    if (renderedZit) return renderedZit.system;
+    // 兑底：模板丢失时返回一个最小 ZIT 提示词，避免错误地走 SD 那一套
+    return `你是 CorineKit Pix2Real 的 AI 图像生成助手（ZIT 快出 Tab，ZImage 模型）。
+prompt 用中文自然语言描述，不堆叠 SD/Danbooru 标签。
+默认参数 720x1280 / 9 步 / CFG 1 / euler / simple。
+
+用户偏好画像：\n${profileSection}`;
+  }
+
+  const checkpointList = buildCheckpointList(metadata);
+  const loraList = buildLoraList(metadata);
 
   // 从 promptStore 读取模板
   const rendered = renderPrompt('agent-chat-tab7', { profileSection, checkpointList, loraList });

@@ -3,9 +3,9 @@ import { useWorkflowStore, type ZitConfig } from '../hooks/useWorkflowStore.js';
 import { type LoraSlot } from '../services/sessionService.js';
 import { usePromptAssistantStore } from '../hooks/usePromptAssistantStore.js';
 import { useWebSocket } from '../hooks/useWebSocket.js';
-import { useSettingsStore } from '../hooks/useSettingsStore.js';
+import { useSettingsStore, type DiceMixPreset } from '../hooks/useSettingsStore.js';
 import { useAutoLoopStore, waitPromptComplete } from '../hooks/useAutoLoopStore.js';
-import { ChevronRight, ChevronDown, Loader, BookText, Hash, AlignLeft, Wand2, Loader2, AlertTriangle, Plus, Trash2, Square } from 'lucide-react';
+import { ChevronRight, ChevronDown, ChevronUp, Loader, BookText, Hash, AlignLeft, Wand2, Loader2, AlertTriangle, Plus, Trash2, Square, Dices, Snowflake, Thermometer, Flame } from 'lucide-react';
 import PromptContextMenu from './PromptContextMenu';
 import { SYSTEM_PROMPTS } from './prompt-assistant/systemPrompts.js';
 import { ModelSelect, useModelFavorites } from './ModelSelect.js';
@@ -40,6 +40,91 @@ const SCHEDULERS = [
 const SAMPLER_VALUES = SAMPLERS.map(s => s.value);
 const SCHEDULER_VALUES = SCHEDULERS.map(s => s.value);
 
+// ── 随机骰子按钮的档位 → 比例映射 ────────────────────────────────
+const DICE_MIX_RATIOS: Record<DiceMixPreset, [number, number, number]> = {
+  preference:  [0.7, 0.2, 0.1],
+  balanced:    [0.5, 0.3, 0.2],
+  exploration: [0.2, 0.3, 0.5],
+};
+
+const DICE_MIX_LABEL: Record<DiceMixPreset, string> = {
+  preference:  '更多偏好',
+  balanced:    '均衡',
+  exploration: '更多推荐',
+};
+
+const DICE_MIX_SHORT_LABEL: Record<DiceMixPreset, string> = {
+  preference:  '偏好向',
+  balanced:    '均衡向',
+  exploration: '探索向',
+};
+
+const DICE_MIX_PRESET_TITLE: Record<DiceMixPreset, string> = {
+  preference:  '70% 画像偏好 / 20% 画像微改 / 10% 探索',
+  balanced:    '50% 画像偏好 / 30% 画像微改 / 20% 探索（默认）',
+  exploration: '20% 画像偏好 / 30% 画像微改 / 50% 探索',
+};
+
+// LLM 返回的 ratio 枚举 → ZIT 像素宽高（与快出 Tab 一致，避免两边出图尺寸不对齐）
+const DICE_RATIO_TO_SIZE: Record<string, { width: number; height: number }> = {
+  '1:1':  { width: 1024, height: 1024 },
+  '3:4':  { width: 832,  height: 1216 },
+  '9:16': { width: 768,  height: 1344 },
+  '4:3':  { width: 1216, height: 832  },
+  '16:9': { width: 1344, height: 768  },
+};
+
+function computeMix(n: number, preset: DiceMixPreset): { preferenceCount: number; tweakCount: number; exploreCount: number } {
+  const [pr, tr, er] = DICE_MIX_RATIOS[preset];
+  if (n <= 0) return { preferenceCount: 0, tweakCount: 0, exploreCount: 0 };
+  if (n === 1) {
+    const r = Math.random();
+    if (r < pr) return { preferenceCount: 1, tweakCount: 0, exploreCount: 0 };
+    if (r < pr + tr) return { preferenceCount: 0, tweakCount: 1, exploreCount: 0 };
+    return { preferenceCount: 0, tweakCount: 0, exploreCount: 1 };
+  }
+  if (n === 2) {
+    const arr = [
+      { key: 'p' as const, w: pr },
+      { key: 't' as const, w: tr },
+      { key: 'e' as const, w: er },
+    ].sort((a, b) => b.w - a.w);
+    const counts = { p: 0, t: 0, e: 0 };
+    counts[arr[0].key] += 1;
+    counts[arr[1].key] += 1;
+    return { preferenceCount: counts.p, tweakCount: counts.t, exploreCount: counts.e };
+  }
+  if (n === 3) {
+    return { preferenceCount: 1, tweakCount: 1, exploreCount: 1 };
+  }
+  let pc = Math.round(n * pr);
+  let tc = Math.round(n * tr);
+  let ec = n - pc - tc;
+  if (ec < 0) {
+    if (pc >= tc) pc += ec; else tc += ec;
+    ec = 0;
+  }
+  if (ec === 0 && preset === 'exploration' && pc > 0) {
+    pc -= 1;
+    ec = 1;
+  }
+  return { preferenceCount: pc, tweakCount: tc, exploreCount: ec };
+}
+
+/** 生成一个 48 位的唯一随机种子，避免批量场景下出现重复。 */
+function genUniqueSeed(): number {
+  const buf = new Uint32Array(2);
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    crypto.getRandomValues(buf);
+  } else {
+    buf[0] = Math.floor(Math.random() * 0x100000000);
+    buf[1] = Math.floor(Math.random() * 0x100000000);
+  }
+  const high = buf[0] & 0xFFFF;
+  const low  = buf[1];
+  return high * 0x100000000 + low;
+}
+
 const DRAFT_KEY = 'zit_draft';
 const DEFAULT_LORAS: LoraSlot[] = [];
 function readDraft() {
@@ -70,6 +155,7 @@ export function ZITSidebar({ width }: { width?: number }) {
   const startTask   = useWorkflowStore((s) => s.startTask);
   const addZitCard  = useWorkflowStore((s) => s.addZitCard);
   const setFlashingImage = useWorkflowStore((s) => s.setFlashingImage);
+  const setImageSource = useWorkflowStore((s) => s.setImageSource);
   const { sendMessage } = useWebSocket();
 
   // 任务执行模式（手动/自动循环）与循环状态
@@ -149,6 +235,27 @@ export function ZITSidebar({ width }: { width?: number }) {
   const [samplerOpen, setSamplerOpen] = useState(false);
   const [batchCount,  setBatchCount]  = useState(1);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isRandomizing, setIsRandomizing] = useState(false);
+  // 随机生成 · 意向面板：用户点击骰子右侧 ChevronUp 弹出的浮动输入面板
+  // 注：intentText 随 DRAFT_KEY 一起持久化到 localStorage，切换 tab / 刷新页面后都会恢复；
+  // 面板展开态（intentPanelOpen）属于临时 UI 状态，不做持久化，保持默认收起。
+  const [intentPanelOpen, setIntentPanelOpen] = useState(false);
+  const [intentText, setIntentText] = useState<string>(() => {
+    const v = readDraft().intentText;
+    return typeof v === 'string' ? v.slice(0, 500) : '';
+  });
+  const intentPanelRef = useRef<HTMLDivElement | null>(null);
+  const intentToggleRef = useRef<HTMLButtonElement | null>(null);
+  const intentTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  // 意向面板内的「偏好档位」上拉菜单（与设置面板"随机生成偏好"数据驱动同一字段）
+  const [mixMenuOpen, setMixMenuOpen] = useState(false);
+  const mixMenuRef = useRef<HTMLDivElement | null>(null);
+  const diceMixPreset = useSettingsStore((s) => s.diceMixPreset);
+  const setDiceMixPreset = useSettingsStore((s) => s.setDiceMixPreset);
+  const diceRatioMode = useSettingsStore((s) => s.diceRatioMode);
+  const diceContentPolicy = useSettingsStore((s) => s.diceContentPolicy);
+  const diceTemperature = useSettingsStore((s) => s.diceTemperature);
+  const setDiceTemperature = useSettingsStore((s) => s.setDiceTemperature);
 
 
 
@@ -313,9 +420,61 @@ export function ZITSidebar({ width }: { width?: number }) {
   // Persist to localStorage
   useEffect(() => {
     localStorage.setItem(DRAFT_KEY, JSON.stringify({
-      unetModel, loras, shiftEnabled, shift, prompt, ratio, steps, cfg, sampler, scheduler, customName, width: customWidth, height: customHeight,
+      unetModel, loras, shiftEnabled, shift, prompt, ratio, steps, cfg, sampler, scheduler, customName, width: customWidth, height: customHeight, intentText,
     }));
-  }, [unetModel, loras, shiftEnabled, shift, prompt, ratio, steps, cfg, sampler, scheduler, customName, customWidth, customHeight]);
+  }, [unetModel, loras, shiftEnabled, shift, prompt, ratio, steps, cfg, sampler, scheduler, customName, customWidth, customHeight, intentText]);
+
+  // 意向面板：打开时自动聚焦 textarea；点击面板与触发按钮之外区域关闭；Esc 关闭
+  useEffect(() => {
+    if (!intentPanelOpen) return;
+    const focusTimer = window.setTimeout(() => {
+      intentTextareaRef.current?.focus();
+    }, 0);
+    const onMouseDown = (e: MouseEvent) => {
+      const target = e.target as Node | null;
+      if (!target) return;
+      if (intentPanelRef.current?.contains(target)) return;
+      if (intentToggleRef.current?.contains(target)) return;
+      setIntentPanelOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIntentPanelOpen(false);
+    };
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.clearTimeout(focusTimer);
+      document.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [intentPanelOpen]);
+
+  // 意向 textarea：随内容自动撑高（初始 1 行，换行后向上长；max-height 160px）
+  useLayoutEffect(() => {
+    if (!intentPanelOpen) return;
+    const ta = intentTextareaRef.current;
+    if (!ta) return;
+    ta.style.height = 'auto';
+    ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`;
+  }, [intentPanelOpen, intentText]);
+
+  // 偏好档位上拉菜单：点击菜单容器之外关闭（面板整体关闭时菜单也随之卸载）
+  useEffect(() => {
+    if (!mixMenuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node | null;
+      if (!t) return;
+      if (mixMenuRef.current?.contains(t)) return;
+      setMixMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [mixMenuOpen]);
+
+  // 意向面板关闭时同步收起子菜单
+  useEffect(() => {
+    if (!intentPanelOpen) setMixMenuOpen(false);
+  }, [intentPanelOpen]);
 
   // 全局 dragend 防御：确保拖拽结束后清除覆盖层
   useEffect(() => {
@@ -421,6 +580,170 @@ export function ZITSidebar({ width }: { width?: number }) {
       }
     }
   }, [clientId, isGenerating, unetModel, unetModels, loras, loraModels, shiftEnabled, shift, prompt, selectedPreset, customWidth, customHeight, steps, cfg, sampler, scheduler, customName, batchCount, taskExecutionMode, addZitCard, startTask, sendMessage, sessionId, setFlashingImage]);
+
+  /**
+   * 随机骰子：按用户在设置面板选择的档位（更多偏好 / 均衡 / 更多推荐）拆分 batchCount，
+   * 调后端 /api/agent/random-batch（tabId=9）拉取 N 条 prompt，覆盖当前 sidebar 其他配置后入照片墙。
+   */
+  const handleRandomGenerate = useCallback(async (userIntent?: string) => {
+    if (!clientId || isGenerating || isRandomizing) return;
+    if (unetModels.length === 0) return;
+
+    // 用户意向（来自骰子右侧 ChevronUp 浮动面板）：裁剪并校验长度
+    const trimmedIntent = typeof userIntent === 'string' ? userIntent.trim().slice(0, 500) : '';
+
+    // 跨 tab 守卫：若其它 tab 正在自动循环，弹模态框询问用户是否停止
+    const guarded = await useAutoLoopStore.getState().guardBeforeSubmit(9);
+    if (!guarded) return;
+
+    const isLoop = taskExecutionMode === 'autoLoop';
+    if (isLoop) {
+      useAutoLoopStore.getState().startLoop(9, 'random');
+    }
+
+    setIsRandomizing(true);
+    try {
+      type RandomItem = {
+        category: 'preference' | 'tweak' | 'explore';
+        prompt: string;
+        ratio?: string;
+        width?: number;
+        height?: number;
+        cardName?: string;
+      };
+
+      let outerIter = 0;
+      while (isLoop ? useAutoLoopStore.getState().active : outerIter === 0) {
+        const total = isLoop ? 1 : Math.min(32, Math.max(1, batchCount));
+        const { preferenceCount, tweakCount, exploreCount } = computeMix(total, diceMixPreset);
+
+        let items: RandomItem[];
+        try {
+          const resp = await fetch('/api/agent/random-batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tabId: 9, preferenceCount, tweakCount, exploreCount, mixPreset: diceMixPreset, ratioMode: diceRatioMode, contentPolicy: diceContentPolicy, userIntent: trimmedIntent || undefined, temperature: diceTemperature }),
+          });
+          if (!resp.ok) {
+            const errText = await resp.text();
+            showToast(`随机生成失败：${errText || `HTTP ${resp.status}`}`);
+            if (isLoop) break;
+            return;
+          }
+          const data = await resp.json() as { items: RandomItem[] };
+          items = Array.isArray(data.items) ? data.items : [];
+        } catch (err) {
+          showToast(`随机生成请求失败：${err instanceof Error ? err.message : String(err)}`);
+          if (isLoop) break;
+          return;
+        }
+
+        if (items.length < total) {
+          showToast(`随机生成返回条数不足（${items.length}/${total}），已${isLoop ? '终止循环' : '中止'}`);
+          if (isLoop) break;
+          return;
+        }
+
+        // 基础配置：复用 sidebar 当前其他字段（unetModel/loras/shift/...）；ZIT 不需要 model 推荐与参考图
+        const baseConfig: Omit<ZitConfig, 'prompt'> = {
+          unetModel: unetModel || (unetModels[0] ?? ''),
+          loras,
+          shiftEnabled,
+          shift,
+          width:     selectedPreset ? selectedPreset.width : customWidth,
+          height:    selectedPreset ? selectedPreset.height : customHeight,
+          steps,
+          cfg,
+          sampler,
+          scheduler,
+        };
+
+        const CATEGORY_LABEL: Record<'preference' | 'tweak' | 'explore', string> = {
+          preference: '偏好',
+          tweak:      '微改',
+          explore:    '探索',
+        };
+        const categoryTotals = { preference: preferenceCount, tweak: tweakCount, explore: exploreCount };
+        const categoryCursor = { preference: 0, tweak: 0, explore: 0 };
+        const usedNames = new Set<string>();
+
+        let firstImageId: string | null = null;
+        let lastPromptId: string | null = null;
+        for (let i = 0; i < items.length; i++) {
+          if (isLoop && !useAutoLoopStore.getState().active) break;
+          const item = items[i];
+
+          // 比例模式 auto 且 LLM 返回了有效的 ratio（有3:4/9:16/...）时，复用与快出 Tab 一致的 DICE_RATIO_TO_SIZE 映射
+          let dynW: number | undefined;
+          let dynH: number | undefined;
+          if (diceRatioMode === 'auto') {
+            if (item.width && item.height) {
+              dynW = item.width;
+              dynH = item.height;
+            } else if (item.ratio && DICE_RATIO_TO_SIZE[item.ratio]) {
+              dynW = DICE_RATIO_TO_SIZE[item.ratio].width;
+              dynH = DICE_RATIO_TO_SIZE[item.ratio].height;
+            }
+          }
+
+          const cfg: ZitConfig = {
+            ...baseConfig,
+            prompt: item.prompt,
+            ...(dynW && dynH ? { width: dynW, height: dynH } : {}),
+          };
+
+          categoryCursor[item.category] += 1;
+          const seq = categoryCursor[item.category];
+          const fallbackName = `随机·${CATEGORY_LABEL[item.category]} ${seq}-${categoryTotals[item.category]}`;
+          const baseName = (item.cardName && item.cardName.trim().length > 0 ? item.cardName.trim() : fallbackName)
+            .replace(/[/\\]/g, '-');
+          let displayName = baseName;
+          if (usedNames.has(displayName)) {
+            let n = 2;
+            while (usedNames.has(`${baseName}_${n}`)) n++;
+            displayName = `${baseName}_${n}`;
+          }
+          usedNames.add(displayName);
+
+          const imageId = addZitCard(cfg, displayName);
+          // 标记为骰子生成，避免未收藏时污染用户偏好画像
+          setImageSource(imageId, 'dice');
+          if (firstImageId === null) {
+            firstImageId = imageId;
+            setFlashingImage(imageId);
+          }
+          startTask(imageId, '');
+          try {
+            const res = await fetch('/api/workflow/9/execute', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ clientId, ...cfg, name: displayName }),
+            });
+            if (!res.ok) {
+              console.error('[ZIT] Random execute failed:', await res.text());
+              continue;
+            }
+            const data = await res.json() as { promptId: string };
+            lastPromptId = data.promptId;
+            startTask(imageId, data.promptId);
+            sendMessage({ type: 'register', promptId: data.promptId, workflowId: 9, sessionId, tabId: 9 });
+          } catch (err) {
+            console.error('[ZIT] Random execute error:', err);
+          }
+        }
+
+        if (isLoop && lastPromptId) {
+          await waitPromptComplete(lastPromptId);
+        }
+        outerIter++;
+      }
+    } finally {
+      setIsRandomizing(false);
+      if (isLoop && useAutoLoopStore.getState().active) {
+        useAutoLoopStore.getState().stopLoop();
+      }
+    }
+  }, [clientId, isGenerating, isRandomizing, batchCount, diceMixPreset, diceRatioMode, diceContentPolicy, diceTemperature, taskExecutionMode, unetModel, unetModels, loras, shiftEnabled, shift, selectedPreset, customWidth, customHeight, steps, cfg, sampler, scheduler, addZitCard, startTask, setFlashingImage, setImageSource, sendMessage, sessionId]);
 
   const handleQuickAction = useCallback(async (mode: 'naturalToTags' | 'tagsToNatural' | 'detailer') => {
     if (!prompt.trim()) return;
@@ -1066,7 +1389,7 @@ export function ZITSidebar({ width }: { width?: number }) {
             boxSizing: 'border-box',
           }}
         />
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, position: 'relative' }}>
           {isMyLoop ? (
             <button
               onClick={() => useAutoLoopStore.getState().stopLoop()}
@@ -1116,6 +1439,100 @@ export function ZITSidebar({ width }: { width?: number }) {
                 {isGenerating && <Loader size={14} style={{ animation: 'pulse 1s ease-in-out infinite' }} />}
                 {taskExecutionMode === 'autoLoop' ? '开始循环' : '生成'}
               </button>
+              {/* 随机生成组合控件：骰子 + 分隔线 + ChevronUp 意向面板触发，共用一个 border */}
+              {(() => {
+                const diceDisabled = !clientId || isGenerating || isRandomizing || unetModels.length === 0;
+                return (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'stretch',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: 8,
+                      backgroundColor: 'var(--color-bg)',
+                      overflow: 'hidden',
+                      flexShrink: 0,
+                      opacity: diceDisabled ? 0.5 : 1,
+                      transition: 'opacity 0.15s',
+                    }}
+                  >
+                    <button
+                      onClick={() => handleRandomGenerate(intentText.trim() || undefined)}
+                      disabled={diceDisabled}
+                      title={`${intentText.trim() ? `围绕意向「${intentText.trim()}」` : '完全随机'}${taskExecutionMode === 'autoLoop' ? '开始自动循环' : '生成'}（档位：${DICE_MIX_LABEL[diceMixPreset]} / 比例：${diceRatioMode === 'auto' ? '自动' : '手动'}，可在设置-随机生成中调整）`}
+                      style={{
+                        padding: '10px',
+                        width: 40,
+                        backgroundColor: 'transparent',
+                        color: 'var(--color-text)',
+                        border: 'none',
+                        borderRadius: 0,
+                        fontSize: '14px',
+                        fontWeight: 600,
+                        cursor: diceDisabled ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'background-color 0.15s',
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!e.currentTarget.disabled) e.currentTarget.style.backgroundColor = 'var(--color-surface-hover, rgba(255,255,255,0.06))';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }}
+                    >
+                      {isRandomizing
+                        ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                        : <Dices size={16} />}
+                    </button>
+                    {/* 竖向分隔细线：上下撑满容器 */}
+                    <div style={{ width: 1, backgroundColor: 'var(--color-border)', alignSelf: 'stretch', flexShrink: 0 }} />
+                    {/* 意向面板触发按钮（ChevronUp）：点击展开浮动输入面板 */}
+                    <button
+                      ref={intentToggleRef}
+                      onClick={() => setIntentPanelOpen((v) => !v)}
+                      disabled={diceDisabled}
+                      title={intentText.trim() ? `当前意向：${intentText.trim()}（点击编辑）` : '写下你的生成意向（可选，作为最高优先级影响随机生成）'}
+                      style={{
+                        padding: 0,
+                        width: 24,
+                        backgroundColor: intentPanelOpen ? 'var(--color-surface-hover, rgba(255,255,255,0.08))' : 'transparent',
+                        color: intentText.trim() ? 'var(--color-primary)' : 'var(--color-text)',
+                        border: 'none',
+                        borderRadius: 0,
+                        cursor: diceDisabled ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'background-color 0.15s, transform 0.15s',
+                        position: 'relative',
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!e.currentTarget.disabled) e.currentTarget.style.backgroundColor = 'var(--color-surface-hover, rgba(255,255,255,0.06))';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = intentPanelOpen ? 'var(--color-surface-hover, rgba(255,255,255,0.08))' : 'transparent';
+                      }}
+                    >
+                      <ChevronUp size={14} style={{ transform: intentPanelOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }} />
+                      {intentText.trim() && !intentPanelOpen && (
+                        <span
+                          style={{
+                            position: 'absolute',
+                            top: 3,
+                            right: 3,
+                            width: 6,
+                            height: 6,
+                            borderRadius: '50%',
+                            backgroundColor: 'var(--color-primary)',
+                          }}
+                        />
+                      )}
+                    </button>
+                  </div>
+                );
+              })()}
               {taskExecutionMode === 'manual' && (
                 <input
                   type="number"
@@ -1140,6 +1557,181 @@ export function ZITSidebar({ width }: { width?: number }) {
                     flexShrink: 0,
                   }}
                 />
+              )}
+              {/* 意向浮动面板：向上弹出，包含 textarea（1 行起步，随内容向上撑高） + toolbar（偏好档位 + 温度图标） */}
+              {intentPanelOpen && (
+                <div
+                  ref={intentPanelRef}
+                  style={{
+                    position: 'absolute',
+                    bottom: 'calc(100% + 8px)',
+                    right: 0,
+                    width: 300,
+                    padding: 10,
+                    backgroundColor: 'var(--color-surface, var(--color-bg))',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 10,
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.24)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 8,
+                    zIndex: 20,
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <textarea
+                    ref={intentTextareaRef}
+                    value={intentText}
+                    onChange={(e) => setIntentText(e.target.value.slice(0, 500))}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                        e.preventDefault();
+                        const txt = intentText.trim();
+                        setIntentPanelOpen(false);
+                        handleRandomGenerate(txt || undefined);
+                      }
+                    }}
+                    placeholder="请输入生成的主题 / 意向"
+                    rows={1}
+                    style={{
+                      width: '100%',
+                      padding: '8px 10px',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: 6,
+                      backgroundColor: 'var(--color-bg)',
+                      color: 'var(--color-text)',
+                      fontSize: 12,
+                      lineHeight: 1.5,
+                      outline: 'none',
+                      resize: 'none',
+                      fontFamily: 'inherit',
+                      boxSizing: 'border-box',
+                      overflowY: 'auto',
+                      minHeight: 36,
+                      display: 'block',
+                      verticalAlign: 'top',
+                    }}
+                  />
+                  {(() => {
+                    const tempNext = diceTemperature === 'low' ? 'medium' : diceTemperature === 'medium' ? 'high' : 'low';
+                    const tempIcon = diceTemperature === 'low'
+                      ? <Snowflake size={16} />
+                      : diceTemperature === 'high'
+                        ? <Flame size={16} />
+                        : <Thermometer size={16} />;
+                    const tempColor = diceTemperature === 'low'
+                      ? '#4ea8ff'
+                      : diceTemperature === 'high'
+                        ? '#ff6b4a'
+                        : '#f0a500';
+                    const tempLabel = diceTemperature === 'low' ? '低' : diceTemperature === 'high' ? '高' : '中';
+                    const tempDesc = diceTemperature === 'low'
+                      ? '严格紧贴意向字面，尽量少变奏'
+                      : diceTemperature === 'high'
+                        ? '在保持意向主体前提下大胆发散'
+                        : '在保持意向主体前提下自然变奏';
+                    const tempTitle = `发散温度：${tempLabel}（${tempDesc}）。点击切换至「${tempNext === 'low' ? '低' : tempNext === 'high' ? '高' : '中'}」。`;
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <div ref={mixMenuRef} style={{ position: 'relative' }}>
+                          <button
+                            onClick={() => setMixMenuOpen((v) => !v)}
+                            title={`当前档位：${DICE_MIX_SHORT_LABEL[diceMixPreset]}（${DICE_MIX_PRESET_TITLE[diceMixPreset]}）。点击切换；与设置面板"随机生成偏好"同步。`}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              height: 26,
+                              padding: '0 8px',
+                              backgroundColor: 'transparent',
+                              color: 'var(--color-text-secondary)',
+                              border: '1px solid var(--color-border)',
+                              borderRadius: 6,
+                              fontSize: 12,
+                              cursor: 'pointer',
+                              lineHeight: 1,
+                              flexShrink: 0,
+                            }}
+                          >
+                            {DICE_MIX_SHORT_LABEL[diceMixPreset]}
+                            <ChevronUp size={12} style={{ transform: mixMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }} />
+                          </button>
+                          {mixMenuOpen && (
+                            <div
+                              style={{
+                                position: 'absolute',
+                                bottom: 'calc(100% + 4px)',
+                                left: 0,
+                                minWidth: 120,
+                                padding: 4,
+                                backgroundColor: 'var(--color-surface, var(--color-bg))',
+                                border: '1px solid var(--color-border)',
+                                borderRadius: 8,
+                                boxShadow: '0 6px 18px rgba(0,0,0,0.24)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: 2,
+                                zIndex: 30,
+                              }}
+                            >
+                              {(['preference', 'balanced', 'exploration'] as DiceMixPreset[]).map((v) => {
+                                const active = v === diceMixPreset;
+                                return (
+                                  <button
+                                    key={v}
+                                    onClick={() => { setDiceMixPreset(v); setMixMenuOpen(false); }}
+                                    title={DICE_MIX_PRESET_TITLE[v]}
+                                    style={{
+                                      padding: '6px 10px',
+                                      textAlign: 'left',
+                                      fontSize: 12,
+                                      backgroundColor: active ? 'var(--color-primary)' : 'transparent',
+                                      color: active ? '#fff' : 'var(--color-text)',
+                                      border: 'none',
+                                      borderRadius: 4,
+                                      cursor: 'pointer',
+                                      fontWeight: active ? 600 : 400,
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      if (!active) e.currentTarget.style.backgroundColor = 'var(--color-surface-hover, rgba(255,255,255,0.08))';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      if (!active) e.currentTarget.style.backgroundColor = 'transparent';
+                                    }}
+                                  >
+                                    {DICE_MIX_SHORT_LABEL[v]}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                          <button
+                            onClick={() => setDiceTemperature(tempNext)}
+                            title={tempTitle}
+                            style={{
+                              width: 26,
+                              height: 26,
+                              padding: 0,
+                              backgroundColor: 'transparent',
+                              color: tempColor,
+                              border: 'none',
+                              borderRadius: 4,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0,
+                            }}
+                          >
+                            {tempIcon}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
               )}
             </>
           )}

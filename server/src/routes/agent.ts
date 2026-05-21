@@ -6,7 +6,7 @@ import { readGenerationLog, appendGenerationLog, readFavorites, writeFavorite, u
 import { buildUserProfile, type ProfileScope } from '../services/profileService.js';
 import { callLLM, buildSystemPrompt, getAgentTools, buildConfigAssistantPrompt, getConfigAssistantTools, buildSmartQAPrompt, buildSmartLoraPrompt } from '../services/llmService.js';
 import { renderPrompt } from '../services/promptStore.js';
-import { parseToolCall } from '../services/intentParser.js';
+import { parseToolCall, type IntentScope } from '../services/intentParser.js';
 import { queuePrompt, uploadImage } from '../services/comfyui.js';
 import { getAdapter } from '../adapters/index.js';
 import type { ParsedIntent, ParsedVariant } from '../services/intentParser.js';
@@ -1105,11 +1105,12 @@ const DICE_TEMPERATURE_TO_API: Record<DiceTemperature, number> = {
 };
 
 /** 骰子模式追加到 system prompt 末尾的专属指令 */
-function buildDiceDirective(ratioAuto: boolean, contentPolicy: DiceContentPolicy = 'mixed', userIntent?: string, temperature: DiceTemperature = 'medium'): string {
+function buildDiceDirective(ratioAuto: boolean, contentPolicy: DiceContentPolicy = 'mixed', userIntent?: string, temperature: DiceTemperature = 'medium', scope: IntentScope = 'tab7'): string {
+  const sourceLabel = scope === 'tab9' ? '「ZIT 快出」' : '「快速出图」';
   const lines = [
     '',
     '## 🎲 批量随机模式专属要求（必读）',
-    '本次调用来自「快速出图」骰子批量生成，除了常规的 generate_image 字段外，以下字段为**必填**：',
+    `本次调用来自${sourceLabel}骰子批量生成，除了常规的 generate_image 字段外，以下字段为**必填**：`,
     '- `cardName`：为这张图起一个简短自然的中文短名（4-12 字），平实概括画面主体即可，不必追求文学性或意境。\n  ⛔ 不要机械罗列 character+pose+style（例：❌「水彩风菲谢尔壁尻」这种把风格+角色+姿势硬拼的写法）。\n  ✅ 自然描述主体即可：「泳池边的少女」「森林里的精灵」「雪地独行」「咖啡馆午后」「深夜街角」。\n  📌 角色名规则（条件性）：仅当你本次填写了 character 字段时，cardName 才需要自然包含该角色中文名（例：「泳池边的安琪拉」）；若本次不涉及特定角色（character 为空），请不要硬塞任何人名。\n  禁止标点和英文，禁止直接搬 LoRA 名字。',
   ];
   if (ratioAuto) {
@@ -1194,8 +1195,9 @@ async function runGenerateImageForSeed(
   contentPolicy: DiceContentPolicy = 'mixed',
   userIntent?: string,
   temperature: DiceTemperature = 'medium',
+  scope: IntentScope = 'tab7',
 ): Promise<RunGenerateResult | null> {
-  const systemPrompt = buildSystemPrompt(profile, metadata) + buildDiceDirective(ratioAuto, contentPolicy, userIntent, temperature);
+  const systemPrompt = buildSystemPrompt(profile, metadata, scope) + buildDiceDirective(ratioAuto, contentPolicy, userIntent, temperature, scope);
   // user message 末尾再强调一次——Grok 对 user 最后一句注意力最高
   const intentReinforce = (userIntent && userIntent.trim().length > 0)
     ? `\n\n🎯 用户意向（最高优先级，必须严格围绕）："${userIntent.trim()}"`
@@ -1214,7 +1216,7 @@ async function runGenerateImageForSeed(
   if (!llmResponse.toolCalls || llmResponse.toolCalls.length === 0) return null;
   const tc = llmResponse.toolCalls[0];
   if (tc.function?.name !== 'generate_image') return null;
-  const intent = parseToolCall(tc, metadata, profile);
+  const intent = parseToolCall(tc, metadata, profile, scope);
   // 直接从 tool call arguments 里抠 ratio / cardName（parseToolCall 不认识这两个字段）
   let ratio: DiceRatio | undefined;
   let cardName: string | undefined;
@@ -1248,6 +1250,7 @@ router.post('/random-batch', express.json(), async (req, res) => {
       contentPolicy: rawContentPolicy = 'mixed',
       userIntent: rawUserIntent = '',
       temperature: rawTemperature = 'medium',
+      tabId: rawTabId,
     } = (req.body || {}) as {
       preferenceCount?: number;
       tweakCount?: number;
@@ -1257,7 +1260,10 @@ router.post('/random-batch', express.json(), async (req, res) => {
       contentPolicy?: 'sfw' | 'mixed' | 'nsfw';
       userIntent?: string;
       temperature?: 'low' | 'medium' | 'high';
+      tabId?: number | string;
     };
+    // 默认 tab7（快速出图）；tab9 走 ZIT 快出专属分支
+    const scope: IntentScope = parseProfileScope(rawTabId) === 'tab9' ? 'tab9' : 'tab7';
     const ratioAuto = ratioMode === 'auto';
     const contentPolicy: DiceContentPolicy = (rawContentPolicy === 'sfw' || rawContentPolicy === 'nsfw') ? rawContentPolicy : 'mixed';
     // 用户通过浮动意向面板显式输入的本次生成意向（最高优先级）；裁剪长度防滥用
@@ -1276,7 +1282,7 @@ router.post('/random-batch', express.json(), async (req, res) => {
       return;
     }
 
-    const profile = buildUserProfile('tab7');
+    const profile = buildUserProfile(scope);
     const metadata = getMetadata();
     const maturity = getProfileMaturity(profile, metadata);
 
@@ -1302,7 +1308,7 @@ router.post('/random-batch', express.json(), async (req, res) => {
           arguments: JSON.stringify({ prompt: rawPrompt }),
         },
       };
-      const intent = parseToolCall(fakeToolCall, metadata, profile);
+      const intent = parseToolCall(fakeToolCall, metadata, profile, scope);
       return {
         category,
         prompt: intent.prompt || rawPrompt,
@@ -1329,7 +1335,7 @@ router.post('/random-batch', express.json(), async (req, res) => {
 
     const settled = await Promise.all(seeds.map(async (s): Promise<RandomItem | null> => {
       try {
-        const result = await runGenerateImageForSeed(s.seed, profile, metadata, ratioAuto, contentPolicy, userIntent, temperature);
+        const result = await runGenerateImageForSeed(s.seed, profile, metadata, ratioAuto, contentPolicy, userIntent, temperature, scope);
         if (!result || !result.intent || !result.intent.prompt) return null;
         const intent = result.intent;
         const size = result.ratio ? DICE_RATIO_TO_SIZE[result.ratio] : undefined;
@@ -1882,8 +1888,8 @@ router.post('/chat', async (req, res) => {
 
     // ── 默认智能体模式 ──
 
-    // 3. 构建系统提示词
-    const systemPrompt = buildSystemPrompt(profile, metadata);
+    // 3. 构建系统提示词（按 scope 切换 SD/ZIT 主对话模板）
+    const systemPrompt = buildSystemPrompt(profile, metadata, scope === 'tab9' ? 'tab9' : 'tab7');
 
     // 4. 构建消息列表
     const messages: LLMMessage[] = [
