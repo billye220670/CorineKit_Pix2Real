@@ -6,6 +6,7 @@ import { readGenerationLog, appendGenerationLog, readFavorites, writeFavorite, u
 import { buildUserProfile, type ProfileScope } from '../services/profileService.js';
 import { callLLM, buildSystemPrompt, getAgentTools, buildConfigAssistantPrompt, getConfigAssistantTools, buildSmartQAPrompt, buildSmartLoraPrompt } from '../services/llmService.js';
 import { renderPrompt } from '../services/promptStore.js';
+import { tryRefreshZitSummary, forceRefreshZitSummary, getZitNarrativeStatus } from '../services/zitProfileSummarizer.js';
 import { parseToolCall, type IntentScope } from '../services/intentParser.js';
 import { queuePrompt, uploadImage } from '../services/comfyui.js';
 import { getAdapter } from '../adapters/index.js';
@@ -1397,6 +1398,10 @@ router.post('/log-generation', (req, res) => {
         console.error('[Agent] Failed to write generation log:', err);
       }
     });
+    // tab9（ZIT）：fire-and-forget 触发画像凝练检查（内部有节流与触发条件判断）
+    if (record.tabId === 9) {
+      void tryRefreshZitSummary();
+    }
     res.json({ ok: true });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Internal server error';
@@ -1542,6 +1547,38 @@ router.get('/user-profile-view', (req, res) => {
     const message = err instanceof Error ? err.message : 'Internal server error';
     console.error('[Agent] user-profile-view error:', err);
     res.status(500).json({ error: message });
+  }
+});
+
+// GET /api/agent/zit-narrative - 获取 ZIT 用户画像凝练状态
+// 供设置面板「我的偏好」-> ZIT 快出 Tab 下的「LLM 凝练画像」卡片展示
+// 返回：summary / summaryUpdatedAt / pendingSampleCount / isRefreshing
+router.get('/zit-narrative', (_req, res) => {
+  try {
+    res.json(getZitNarrativeStatus());
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Internal server error';
+    console.error('[Agent] zit-narrative status error:', err);
+    res.status(500).json({ error: message });
+  }
+});
+
+// POST /api/agent/zit-narrative/refresh - 手动触发 ZIT 画像凝练（绕过冷却与触发阈值）
+// 仅保留并发互斥；成功后返回新 summary
+router.post('/zit-narrative/refresh', async (_req, res) => {
+  try {
+    const result = await forceRefreshZitSummary();
+    if (result.ok) {
+      res.json({ ...result, status: getZitNarrativeStatus() });
+    } else {
+      // busy / no_samples 属于预期内的拒绝，返回 200 供前端提示；其它错误返回 500
+      const status = result.reason === 'busy' || result.reason === 'no_samples' ? 200 : 500;
+      res.status(status).json({ ...result, status: getZitNarrativeStatus() });
+    }
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Internal server error';
+    console.error('[Agent] zit-narrative refresh error:', err);
+    res.status(500).json({ ok: false, reason: 'error', message });
   }
 });
 

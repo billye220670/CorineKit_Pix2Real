@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import type { UserPreferenceProfile } from './profileService.js';
 import { renderPrompt, initPromptStore } from './promptStore.js';
+import { buildZitProfileSection } from './zitProfileSummarizer.js';
 
 // 确保 promptStore 已初始化
 initPromptStore();
@@ -496,15 +497,18 @@ export function buildSystemPrompt(profile: UserPreferenceProfile, metadata: any,
 ${comboSection}${loraPrefSection}`.trim();
 
   // ── ZIT (tab9) 专属模板：不包含 checkpointList / loraList，变量名为 {{profile}} ──
+  // 用 LLM 凝练的双段结构（长期摘要 + 近期原文）替代词频统计；
+  // buildZitProfileSection 内部会 fire-and-forget 触发后台刷新检查。
   if (scope === 'tab9') {
-    const renderedZit = renderPrompt('agent-chat-tab9', { profile: profileSection });
+    const zitProfile = buildZitProfileSection();
+    const renderedZit = renderPrompt('agent-chat-tab9', { profile: zitProfile });
     if (renderedZit) return renderedZit.system;
     // 兑底：模板丢失时返回一个最小 ZIT 提示词，避免错误地走 SD 那一套
     return `你是 CorineKit Pix2Real 的 AI 图像生成助手（ZIT 快出 Tab，ZImage 模型）。
 prompt 用中文自然语言描述，不堆叠 SD/Danbooru 标签。
 默认参数 720x1280 / 9 步 / CFG 1 / euler / simple。
 
-用户偏好画像：\n${profileSection}`;
+用户偏好画像：\n${zitProfile}`;
   }
 
   const checkpointList = buildCheckpointList(metadata);

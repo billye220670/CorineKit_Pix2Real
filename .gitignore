@@ -39,3 +39,6 @@ npm-debug.log*
 
 # Runtime config (sessionsBase override etc.)
 /config.json
+
+# ZIT 用户画像凝练运行时数据（本地 LLM 生成的偏好摘要，不入版本）
+/zit-narrative.json

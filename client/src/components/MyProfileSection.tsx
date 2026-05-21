@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { RefreshCw, Heart, Sparkles, Image as ImageIcon, Clock, Zap, Package } from 'lucide-react';
+import { RefreshCw, Heart, Sparkles, Image as ImageIcon, Clock, Zap, Package, Wand2 } from 'lucide-react';
 
 // ── 类型 ──────────────────────────────────────────────────────────────────────
 
@@ -200,6 +200,171 @@ function LoraChip({ lp }: { lp: LoraPref }) {
   );
 }
 
+// ── 子组件：ZIT 凝练画像卡片（仅 scope=9 显示）────────────────────────
+
+interface ZitNarrativeStatus {
+  summary: string;
+  summaryUpdatedAt: number;
+  summaryBasedOnTimestamp: number;
+  sampleCountAtSummary: number;
+  pendingSampleCount: number;
+  isRefreshing: boolean;
+}
+
+interface ForceRefreshResp {
+  ok: boolean;
+  reason?: 'busy' | 'no_samples' | 'llm_empty' | 'template_missing' | 'error';
+  message?: string;
+  summary?: string;
+  sampleCount?: number;
+  status?: ZitNarrativeStatus;
+}
+
+function ZitNarrativeCard() {
+  const [status, setStatus] = useState<ZitNarrativeStatus | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [forcing, setForcing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ kind: 'ok' | 'warn' | 'err'; text: string } | null>(null);
+
+  const fetchStatus = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/agent/zit-narrative');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      setStatus(json);
+    } catch (e: any) {
+      setError(e?.message || '加载失败');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchStatus(); }, [fetchStatus]);
+
+  const handleForce = useCallback(async () => {
+    if (forcing) return;
+    setForcing(true);
+    setToast(null);
+    try {
+      const res = await fetch('/api/agent/zit-narrative/refresh', { method: 'POST' });
+      const json: ForceRefreshResp = await res.json();
+      if (json.status) setStatus(json.status);
+      if (json.ok) {
+        setToast({ kind: 'ok', text: `凝练完成，本次纳入 ${json.sampleCount ?? 0} 条新样本` });
+      } else if (json.reason === 'no_samples') {
+        setToast({ kind: 'warn', text: json.message || '暂无可凝练的新样本' });
+      } else if (json.reason === 'busy') {
+        setToast({ kind: 'warn', text: json.message || '正在凝练中，请稍候再试' });
+      } else {
+        setToast({ kind: 'err', text: json.message || '凝练失败' });
+      }
+    } catch (e: any) {
+      setToast({ kind: 'err', text: e?.message || '请求失败' });
+    } finally {
+      setForcing(false);
+    }
+  }, [forcing]);
+
+  const hasSummary = !!status?.summary?.trim();
+
+  return (
+    <>
+      <div style={blockTitleStyle}>LLM 凝练画像（ZIT 专属）</div>
+      <div style={{ ...cardStyle, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {/* 顶部信息行 */}
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10, fontSize: 11, color: 'var(--color-text-secondary)' }}>
+          <span>
+            上次凝练：<span style={{ color: 'var(--color-text)' }}>{status?.summaryUpdatedAt ? formatLastActive(status.summaryUpdatedAt) : '尚未生成'}</span>
+          </span>
+          <span style={{ opacity: 0.5 }}>·</span>
+          <span>
+            待凝练新样本：<span style={{ color: 'var(--color-text)' }}>{status?.pendingSampleCount ?? '-'}</span> 条
+          </span>
+          {status?.isRefreshing && (
+            <>
+              <span style={{ opacity: 0.5 }}>·</span>
+              <span style={{ color: 'var(--color-primary)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <RefreshCw size={11} style={{ animation: 'spin 1s linear infinite' }} />后台凝练中
+              </span>
+            </>
+          )}
+          <span style={{ flex: 1 }} />
+          <button
+            onClick={fetchStatus}
+            disabled={loading || forcing}
+            title="重新加载状态"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 8px', fontSize: 11,
+              border: '1px solid var(--color-border)', borderRadius: 6,
+              background: 'var(--color-bg)', color: 'var(--color-text-secondary)',
+              cursor: (loading || forcing) ? 'wait' : 'pointer', opacity: (loading || forcing) ? 0.6 : 1,
+            }}
+          >
+            <RefreshCw size={11} style={{ animation: loading ? 'spin 1s linear infinite' : undefined }} />
+            重读
+          </button>
+          <button
+            onClick={handleForce}
+            disabled={forcing || loading}
+            title="立即调用 LLM 重新生成画像摘要。绕过冷却与阈值；需至少 1 条新样本。"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', fontSize: 11,
+              border: '1px solid var(--color-primary)', borderRadius: 6,
+              background: forcing ? 'var(--color-bg)' : 'var(--color-primary)',
+              color: forcing ? 'var(--color-text-secondary)' : '#fff',
+              cursor: (forcing || loading) ? 'wait' : 'pointer', opacity: (forcing || loading) ? 0.7 : 1,
+              fontWeight: 500,
+            }}
+          >
+            {forcing ? (
+              <RefreshCw size={11} style={{ animation: 'spin 1s linear infinite' }} />
+            ) : (
+              <Wand2 size={11} />
+            )}
+            {forcing ? '凝练中…' : '立即凝练'}
+          </button>
+        </div>
+
+        {/* 提示条 */}
+        {toast && (
+          <div style={{
+            fontSize: 11, padding: '6px 10px', borderRadius: 6,
+            background: toast.kind === 'ok' ? 'rgba(34,197,94,0.10)' : toast.kind === 'warn' ? 'rgba(234,179,8,0.10)' : 'rgba(239,68,68,0.10)',
+            color: toast.kind === 'ok' ? '#16a34a' : toast.kind === 'warn' ? '#ca8a04' : '#ef4444',
+            border: `1px solid ${toast.kind === 'ok' ? 'rgba(34,197,94,0.35)' : toast.kind === 'warn' ? 'rgba(234,179,8,0.35)' : 'rgba(239,68,68,0.35)'}`,
+          }}>
+            {toast.text}
+          </div>
+        )}
+        {error && (
+          <div style={{ fontSize: 11, color: '#ef4444' }}>加载状态失败：{error}</div>
+        )}
+
+        {/* 摘要正文 */}
+        <div style={{
+          fontSize: 13, lineHeight: 1.7, color: hasSummary ? 'var(--color-text)' : 'var(--color-text-secondary)',
+          whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+          padding: '10px 12px', borderRadius: 6,
+          background: 'var(--color-border)', opacity: 0.95,
+          minHeight: 60,
+        }}>
+          {hasSummary
+            ? status!.summary
+            : '暂未生成画像摘要。在 ZIT 快出 Tab 产生至少 5 条生成记录后会自动凝练，也可点击右上「立即凝练」手动触发。'
+          }
+        </div>
+
+        <div style={{ fontSize: 11, color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
+          该摘要会作为 ZIT 主对话 / 骰子随机的 system prompt 画像段。默认触发条件：距上次凝练 &gt; 7 天 或 新样本 ≥ 20 条。骰子未收藏的样本不会计入，避免自我循环。
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ── 主组件 ───────────────────────────────────────────────────────────────────
 
 type ProfileScopeId = 7 | 9;
@@ -341,6 +506,9 @@ export function MyProfileSection() {
             <StatCard icon={<Clock size={12} />} label="最后活跃" value={formatLastActive(data.usageStats.lastActiveTime)} />
           </div>
 
+          {/* ZIT 专属：LLM 凝练画像卡片 */}
+          {scope === 9 && <ZitNarrativeCard />}
+
           {/* Top 模型 */}
           {topModels.length > 0 && (
             <>
@@ -398,8 +566,8 @@ export function MyProfileSection() {
             </>
           )}
 
-          {/* 风格标签云 */}
-          {data.styleFeatures.length > 0 && (
+          {/* 风格标签云（ZIT 模式下隐藏：中文自然语言 prompt 被逗号分词后无意义，已被 LLM 凝练画像取代）*/}
+          {data.styleFeatures.length > 0 && scope !== 9 && (
             <>
               <div style={blockTitleStyle}>提示词高频标签 Top {Math.min(data.styleFeatures.length, 30)}</div>
               <div style={{ ...cardStyle, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
