@@ -12,6 +12,7 @@ import { workflow10Adapter } from '../adapters/Workflow10Adapter.js';
 import { uploadImage, uploadVideo, queuePrompt, deleteQueueItem, getSystemStats, getQueue, prioritizeQueueItem, getHistory, getImageBuffer, getCheckpointModels, getUnetModels, getLoraModels } from '../services/comfyui.js';
 import { getSessionsBase } from '../services/sessionManager.js';
 import { callLLM, buildSmartLoraPrompt, buildTriggerInsertPrompt } from '../services/llmService.js';
+import { renderPrompt } from '../services/promptStore.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const releaseMemoryTemplatePath = path.resolve(__dirname, '../../../ComfyUI_API/Pix2Real-释放内存.json');
@@ -1045,7 +1046,7 @@ router.post('/reverse-prompt', upload.single('image'), async (req, res) => {
             messages: [
               {
                 role: 'system',
-                content: '根据图片反推提示词。规则：\n1. 二次元/卡通图片 → 输出英文 tag 风格标签，逗号分隔\n2. 真实照片 → 输出中文自然语言描述\n3. 混合风格（半写实半二次元）→ 按主要风格判断，标注"混合风格"\n4. 无法识别图片内容时 → 输出"无法识别图片内容，请上传更清晰的图片"\n5. 输出不超过 200 字，仅输出提示词本身，不包含任何解释性文字\n6. 标签数量控制在 15-40 个之间',
+                content: renderPrompt('grok-reverse')?.system || '根据图片反推提示词。规则：\n1. 二次元/卡通图片 → 输出英文 tag 风格标签，逗号分隔\n2. 真实照片 → 输出中文自然语言描述\n3. 混合风格（半写实半二次元）→ 按主要风格判断，标注"混合风格"\n4. 无法识别图片内容时 → 输出"无法识别图片内容，请上传更清晰的图片"\n5. 输出不超过 200 字，仅输出提示词本身，不包含任何解释性文字\n6. 标签数量控制在 15-40 个之间',
               },
               {
                 role: 'user',

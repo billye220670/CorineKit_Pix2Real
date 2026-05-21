@@ -5,6 +5,7 @@ import { useAutoLoopStore } from '../hooks/useAutoLoopStore.js';
 import { SegmentedControl } from './SegmentedControl.js';
 import { ensureNotificationPermission } from '../services/desktopNotify.js';
 import { MyProfileSection } from './MyProfileSection.js';
+import { DevPromptEditor } from './DevPromptEditor.js';
 
 const REVERSE_PROMPT_MODELS: { value: ReversePromptModel; label: string }[] = [
   { value: 'Qwen3VL', label: 'Qwen3VL' },
@@ -63,6 +64,7 @@ const CATEGORIES = [
   { id: 'notification', label: '通知' },
   { id: 'prompt', label: '提示词管理' },
   { id: 'profile', label: '我的偏好' },
+  { id: 'developer', label: '开发者选项' },
 ];
 
 const TOGGLE_OPTIONS: { value: 'on' | 'off'; label: string }[] = [
@@ -676,6 +678,11 @@ export function SettingsModal() {
             {/* ── 我的偏好分类 ── */}
             {activeSection === 'profile' && (
               <MyProfileSection />
+            )}
+
+            {/* ── 开发者选项分类 ── */}
+            {activeSection === 'developer' && (
+              <DevPromptEditor />
             )}
 
           </div>

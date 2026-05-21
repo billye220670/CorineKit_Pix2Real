@@ -12,32 +12,7 @@ import { ModelSelect, useModelFavorites } from './ModelSelect.js';
 import { useModelMetadata } from '../hooks/useModelMetadata.js';
 import { showToast } from '../hooks/useToast.js';
 import { callPromptAssistant } from '../services/api.js';
-import {
-  ZIT_WARMUP_DEFAULT_SYSTEM,
-  ZIT_WARMUP_DEFAULT_USER,
-  ZIT_WARMUP_SYSTEM_KEY,
-  ZIT_WARMUP_USER_KEY,
-  ZIT_CHAT_DEFAULT_SYSTEM,
-  ZIT_CHAT_DEFAULT_USER,
-  ZIT_CHAT_SYSTEM_KEY,
-  ZIT_CHAT_USER_KEY,
-  ZIT_WARMUP_HOT_DEFAULT_SYSTEM,
-  ZIT_WARMUP_HOT_DEFAULT_USER,
-  ZIT_WARMUP_HOT_SYSTEM_KEY,
-  ZIT_WARMUP_HOT_USER_KEY,
-  ZIT_CONFIG_DEFAULT_SYSTEM,
-  ZIT_CONFIG_SYSTEM_KEY,
-  ZIT_SMARTQA_DEFAULT_SYSTEM,
-  ZIT_SMARTQA_SYSTEM_KEY,
-  ZIT_FOLLOWUP_AGENT_DEFAULT_SYSTEM,
-  ZIT_FOLLOWUP_AGENT_DEFAULT_USER,
-  ZIT_FOLLOWUP_AGENT_SYSTEM_KEY,
-  ZIT_FOLLOWUP_AGENT_USER_KEY,
-  ZIT_FOLLOWUP_CONFIG_DEFAULT_SYSTEM,
-  ZIT_FOLLOWUP_CONFIG_DEFAULT_USER,
-  ZIT_FOLLOWUP_CONFIG_SYSTEM_KEY,
-  ZIT_FOLLOWUP_CONFIG_USER_KEY,
-} from '../data/zitWarmupPrompts.js';
+
 
 const RATIO_PRESETS = [
   { label: '1:1',  width: 1024, height: 1024 },
@@ -175,127 +150,7 @@ export function ZITSidebar({ width }: { width?: number }) {
   const [batchCount,  setBatchCount]  = useState(1);
   const [isGenerating, setIsGenerating] = useState(false);
 
-  // ── 暖场建议 prompt 调试（仅 ZIT cold-start 使用） ───────────────────────
-  const [warmupDebugOpen, setWarmupDebugOpen] = useState(true);
-  const [warmupSystem, setWarmupSystem] = useState<string>(() => {
-    try { return localStorage.getItem(ZIT_WARMUP_SYSTEM_KEY) ?? ZIT_WARMUP_DEFAULT_SYSTEM; }
-    catch { return ZIT_WARMUP_DEFAULT_SYSTEM; }
-  });
-  const [warmupUser, setWarmupUser] = useState<string>(() => {
-    try { return localStorage.getItem(ZIT_WARMUP_USER_KEY) ?? ZIT_WARMUP_DEFAULT_USER; }
-    catch { return ZIT_WARMUP_DEFAULT_USER; }
-  });
-  useEffect(() => {
-    try { localStorage.setItem(ZIT_WARMUP_SYSTEM_KEY, warmupSystem); } catch {}
-  }, [warmupSystem]);
-  useEffect(() => {
-    try { localStorage.setItem(ZIT_WARMUP_USER_KEY, warmupUser); } catch {}
-  }, [warmupUser]);
-  const resetWarmupPrompts = () => {
-    if (!window.confirm('恢复 System / User Prompt 为默认值？当前内容会被覆盖。')) return;
-    setWarmupSystem(ZIT_WARMUP_DEFAULT_SYSTEM);
-    setWarmupUser(ZIT_WARMUP_DEFAULT_USER);
-  };
 
-  // ── AI 对话主流程 prompt 调试（点击暖场建议 / 用户消息发送时使用） ───────────
-  const [chatDebugOpen, setChatDebugOpen] = useState(false);
-  const [chatSystem, setChatSystem] = useState<string>(() => {
-    try { return localStorage.getItem(ZIT_CHAT_SYSTEM_KEY) ?? ZIT_CHAT_DEFAULT_SYSTEM; }
-    catch { return ZIT_CHAT_DEFAULT_SYSTEM; }
-  });
-  const [chatUser, setChatUser] = useState<string>(() => {
-    try { return localStorage.getItem(ZIT_CHAT_USER_KEY) ?? ZIT_CHAT_DEFAULT_USER; }
-    catch { return ZIT_CHAT_DEFAULT_USER; }
-  });
-  useEffect(() => {
-    try { localStorage.setItem(ZIT_CHAT_SYSTEM_KEY, chatSystem); } catch {}
-  }, [chatSystem]);
-  useEffect(() => {
-    try { localStorage.setItem(ZIT_CHAT_USER_KEY, chatUser); } catch {}
-  }, [chatUser]);
-  const resetChatPrompts = () => {
-    if (!window.confirm('恢复 AI 对话 System / User Prompt 为默认值？当前内容会被覆盖。')) return;
-    setChatSystem(ZIT_CHAT_DEFAULT_SYSTEM);
-    setChatUser(ZIT_CHAT_DEFAULT_USER);
-  };
-
-  // ── 暖场建议 warm/hot 阶段 prompt 调试（画像数据足够时使用） ──────────────
-  const [warmupHotDebugOpen, setWarmupHotDebugOpen] = useState(false);
-  const [warmupHotSystem, setWarmupHotSystem] = useState<string>(() => {
-    try { return localStorage.getItem(ZIT_WARMUP_HOT_SYSTEM_KEY) ?? ZIT_WARMUP_HOT_DEFAULT_SYSTEM; }
-    catch { return ZIT_WARMUP_HOT_DEFAULT_SYSTEM; }
-  });
-  const [warmupHotUser, setWarmupHotUser] = useState<string>(() => {
-    try { return localStorage.getItem(ZIT_WARMUP_HOT_USER_KEY) ?? ZIT_WARMUP_HOT_DEFAULT_USER; }
-    catch { return ZIT_WARMUP_HOT_DEFAULT_USER; }
-  });
-  useEffect(() => { try { localStorage.setItem(ZIT_WARMUP_HOT_SYSTEM_KEY, warmupHotSystem); } catch {} }, [warmupHotSystem]);
-  useEffect(() => { try { localStorage.setItem(ZIT_WARMUP_HOT_USER_KEY, warmupHotUser); } catch {} }, [warmupHotUser]);
-  const resetWarmupHotPrompts = () => {
-    if (!window.confirm('恢复 warm/hot 暖场 Prompt 为默认值？')) return;
-    setWarmupHotSystem(ZIT_WARMUP_HOT_DEFAULT_SYSTEM);
-    setWarmupHotUser(ZIT_WARMUP_HOT_DEFAULT_USER);
-  };
-
-  // ── 配置助理 system prompt 调试 ─────────────────────────────────────────
-  const [configDebugOpen, setConfigDebugOpen] = useState(false);
-  const [configSystem, setConfigSystem] = useState<string>(() => {
-    try { return localStorage.getItem(ZIT_CONFIG_SYSTEM_KEY) ?? ZIT_CONFIG_DEFAULT_SYSTEM; }
-    catch { return ZIT_CONFIG_DEFAULT_SYSTEM; }
-  });
-  useEffect(() => { try { localStorage.setItem(ZIT_CONFIG_SYSTEM_KEY, configSystem); } catch {} }, [configSystem]);
-  const resetConfigPrompt = () => {
-    if (!window.confirm('恢复配置助理 System Prompt 为默认值？')) return;
-    setConfigSystem(ZIT_CONFIG_DEFAULT_SYSTEM);
-  };
-
-  // ── 智能问答 system prompt 调试 ─────────────────────────────────────────
-  const [smartQADebugOpen, setSmartQADebugOpen] = useState(false);
-  const [smartQASystem, setSmartQASystem] = useState<string>(() => {
-    try { return localStorage.getItem(ZIT_SMARTQA_SYSTEM_KEY) ?? ZIT_SMARTQA_DEFAULT_SYSTEM; }
-    catch { return ZIT_SMARTQA_DEFAULT_SYSTEM; }
-  });
-  useEffect(() => { try { localStorage.setItem(ZIT_SMARTQA_SYSTEM_KEY, smartQASystem); } catch {} }, [smartQASystem]);
-  const resetSmartQAPrompt = () => {
-    if (!window.confirm('恢复智能问答 System Prompt 为默认值？')) return;
-    setSmartQASystem(ZIT_SMARTQA_DEFAULT_SYSTEM);
-  };
-
-  // ── 智能体跟进建议 prompt 调试 ──────────────────────────────────────────
-  const [followupAgentDebugOpen, setFollowupAgentDebugOpen] = useState(false);
-  const [followupAgentSystem, setFollowupAgentSystem] = useState<string>(() => {
-    try { return localStorage.getItem(ZIT_FOLLOWUP_AGENT_SYSTEM_KEY) ?? ZIT_FOLLOWUP_AGENT_DEFAULT_SYSTEM; }
-    catch { return ZIT_FOLLOWUP_AGENT_DEFAULT_SYSTEM; }
-  });
-  const [followupAgentUser, setFollowupAgentUser] = useState<string>(() => {
-    try { return localStorage.getItem(ZIT_FOLLOWUP_AGENT_USER_KEY) ?? ZIT_FOLLOWUP_AGENT_DEFAULT_USER; }
-    catch { return ZIT_FOLLOWUP_AGENT_DEFAULT_USER; }
-  });
-  useEffect(() => { try { localStorage.setItem(ZIT_FOLLOWUP_AGENT_SYSTEM_KEY, followupAgentSystem); } catch {} }, [followupAgentSystem]);
-  useEffect(() => { try { localStorage.setItem(ZIT_FOLLOWUP_AGENT_USER_KEY, followupAgentUser); } catch {} }, [followupAgentUser]);
-  const resetFollowupAgentPrompts = () => {
-    if (!window.confirm('恢复智能体跟进建议 Prompt 为默认值？')) return;
-    setFollowupAgentSystem(ZIT_FOLLOWUP_AGENT_DEFAULT_SYSTEM);
-    setFollowupAgentUser(ZIT_FOLLOWUP_AGENT_DEFAULT_USER);
-  };
-
-  // ── 配置助理跟进建议 prompt 调试 ────────────────────────────────────────
-  const [followupConfigDebugOpen, setFollowupConfigDebugOpen] = useState(false);
-  const [followupConfigSystem, setFollowupConfigSystem] = useState<string>(() => {
-    try { return localStorage.getItem(ZIT_FOLLOWUP_CONFIG_SYSTEM_KEY) ?? ZIT_FOLLOWUP_CONFIG_DEFAULT_SYSTEM; }
-    catch { return ZIT_FOLLOWUP_CONFIG_DEFAULT_SYSTEM; }
-  });
-  const [followupConfigUser, setFollowupConfigUser] = useState<string>(() => {
-    try { return localStorage.getItem(ZIT_FOLLOWUP_CONFIG_USER_KEY) ?? ZIT_FOLLOWUP_CONFIG_DEFAULT_USER; }
-    catch { return ZIT_FOLLOWUP_CONFIG_DEFAULT_USER; }
-  });
-  useEffect(() => { try { localStorage.setItem(ZIT_FOLLOWUP_CONFIG_SYSTEM_KEY, followupConfigSystem); } catch {} }, [followupConfigSystem]);
-  useEffect(() => { try { localStorage.setItem(ZIT_FOLLOWUP_CONFIG_USER_KEY, followupConfigUser); } catch {} }, [followupConfigUser]);
-  const resetFollowupConfigPrompts = () => {
-    if (!window.confirm('恢复配置助理跟进建议 Prompt 为默认值？')) return;
-    setFollowupConfigSystem(ZIT_FOLLOWUP_CONFIG_DEFAULT_SYSTEM);
-    setFollowupConfigUser(ZIT_FOLLOWUP_CONFIG_DEFAULT_USER);
-  };
 
   const [promptFocused, setPromptFocused] = useState(false);
   const [promptBtnHovered, setPromptBtnHovered] = useState(false);
@@ -636,45 +491,7 @@ export function ZITSidebar({ width }: { width?: number }) {
     </div>
   );
 
-  // 通用 debug 卡片渲染器（折叠 + system 必填 + user 可选 + 恢复默认）
-  const renderDebugCard = (opts: {
-    emoji: string; title: string; subtitle: string; bg: string;
-    open: boolean; onToggle: () => void;
-    onReset: () => void;
-    systemValue: string; onSystemChange: (v: string) => void; systemMinHeight?: number;
-    userValue?: string; onUserChange?: (v: string) => void; userLabel?: string; userMinHeight?: number;
-    hint?: React.ReactNode;
-  }) => (
-    <div style={{ ...cardStyle, paddingTop: 0, paddingBottom: 16, marginBottom: 12, border: '1px dashed var(--color-border)', borderRadius: 6, padding: 10, background: opts.bg }}>
-      <div onClick={opts.onToggle} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', userSelect: 'none', marginBottom: opts.open ? 8 : 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)' }}>
-          {opts.open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-          <span>{opts.emoji} {opts.title}</span>
-          <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--color-text-tertiary)', marginLeft: 4 }}>{opts.subtitle}</span>
-        </div>
-        {opts.open && (
-          <button type="button" onClick={(e) => { e.stopPropagation(); opts.onReset(); }} style={{ fontSize: 11, padding: '2px 8px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 4, color: 'var(--color-text-secondary)', cursor: 'pointer' }}>
-            恢复默认
-          </button>
-        )}
-      </div>
-      {opts.open && (
-        <>
-          {opts.hint && <div style={{ fontSize: 10, color: 'var(--color-text-tertiary)', marginBottom: 8, lineHeight: 1.5 }}>{opts.hint}</div>}
-          <div style={{ marginBottom: opts.userValue !== undefined ? 8 : 0 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: 4 }}>System Prompt</div>
-            <textarea value={opts.systemValue} onChange={(e) => opts.onSystemChange(e.target.value)} spellCheck={false} style={{ width: '100%', minHeight: opts.systemMinHeight ?? 120, resize: 'vertical', fontSize: 11, fontFamily: 'Menlo, Consolas, monospace', padding: 6, border: '1px solid var(--color-border)', borderRadius: 4, background: 'var(--color-bg)', color: 'var(--color-text)', lineHeight: 1.5, boxSizing: 'border-box' }} />
-          </div>
-          {opts.userValue !== undefined && opts.onUserChange && (
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: 4 }}>{opts.userLabel ?? 'User Template'}</div>
-              <textarea value={opts.userValue} onChange={(e) => opts.onUserChange!(e.target.value)} spellCheck={false} style={{ width: '100%', minHeight: opts.userMinHeight ?? 120, resize: 'vertical', fontSize: 11, fontFamily: 'Menlo, Consolas, monospace', padding: 6, border: '1px solid var(--color-border)', borderRadius: 4, background: 'var(--color-bg)', color: 'var(--color-text)', lineHeight: 1.5, boxSizing: 'border-box' }} />
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  );
+
 
   return (
     <div
@@ -719,294 +536,30 @@ export function ZITSidebar({ width }: { width?: number }) {
       )}
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 0 }}>
 
-        {/* ── 🛠 暖场建议 Prompt 调试区（仅 ZIT cold-start 生效） ────────────── */}
-        <div style={{
-          ...cardStyle,
-          paddingTop: 0,
-          paddingBottom: 16,
-          marginBottom: 12,
-          border: '1px dashed var(--color-border)',
-          borderRadius: 6,
-          padding: 10,
-          background: 'rgba(255, 200, 0, 0.04)',
-        }}>
-          <div
-            onClick={() => setWarmupDebugOpen(o => !o)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              cursor: 'pointer',
-              userSelect: 'none',
-              marginBottom: warmupDebugOpen ? 8 : 0,
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)' }}>
-              {warmupDebugOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-              <span>🛠 暖场建议 Prompt 调试</span>
-              <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--color-text-tertiary)', marginLeft: 4 }}>
-                ZIT cold-start
-              </span>
-            </div>
-            {warmupDebugOpen && (
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); resetWarmupPrompts(); }}
-                style={{
-                  fontSize: 11,
-                  padding: '2px 8px',
-                  background: 'transparent',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 4,
-                  color: 'var(--color-text-secondary)',
-                  cursor: 'pointer',
-                }}
-              >
-                恢复默认
-              </button>
-            )}
-          </div>
-          {warmupDebugOpen && (
-            <>
-              <div style={{ fontSize: 10, color: 'var(--color-text-tertiary)', marginBottom: 8, lineHeight: 1.5 }}>
-                编辑后立即持久化到本地存储。仅当 AI Chat 处于 ZIT 模式且画像数据不足（cold）时，作为暖场建议的 LLM 提示词使用。
-              </div>
-              <div style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: 4 }}>System Prompt</div>
-                <textarea
-                  value={warmupSystem}
-                  onChange={(e) => setWarmupSystem(e.target.value)}
-                  spellCheck={false}
-                  style={{
-                    width: '100%',
-                    minHeight: 80,
-                    resize: 'vertical',
-                    fontSize: 11,
-                    fontFamily: 'Menlo, Consolas, monospace',
-                    padding: 6,
-                    border: '1px solid var(--color-border)',
-                    borderRadius: 4,
-                    background: 'var(--color-bg)',
-                    color: 'var(--color-text)',
-                    lineHeight: 1.5,
-                    boxSizing: 'border-box',
-                  }}
-                />
-              </div>
-              <div>
-                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: 4 }}>User Prompt</div>
-                <textarea
-                  value={warmupUser}
-                  onChange={(e) => setWarmupUser(e.target.value)}
-                  spellCheck={false}
-                  style={{
-                    width: '100%',
-                    minHeight: 200,
-                    resize: 'vertical',
-                    fontSize: 11,
-                    fontFamily: 'Menlo, Consolas, monospace',
-                    padding: 6,
-                    border: '1px solid var(--color-border)',
-                    borderRadius: 4,
-                    background: 'var(--color-bg)',
-                    color: 'var(--color-text)',
-                    lineHeight: 1.5,
-                    boxSizing: 'border-box',
-                  }}
-                />
-              </div>
-            </>
-          )}
-        </div>
+
+
+
+
 
         {/* ── 💬 AI 对话主流程 Prompt 调试区（ZIT mode='agent' 生效） ────────── */}
-        <div style={{
-          ...cardStyle,
-          paddingTop: 0,
-          paddingBottom: 16,
-          marginBottom: 12,
-          border: '1px dashed var(--color-border)',
-          borderRadius: 6,
-          padding: 10,
-          background: 'rgba(80, 160, 255, 0.05)',
-        }}>
-          <div
-            onClick={() => setChatDebugOpen(o => !o)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              cursor: 'pointer',
-              userSelect: 'none',
-              marginBottom: chatDebugOpen ? 8 : 0,
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)' }}>
-              {chatDebugOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-              <span>💬 AI 对话 Prompt 调试</span>
-              <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--color-text-tertiary)', marginLeft: 4 }}>
-                ZIT chat
-              </span>
-            </div>
-            {chatDebugOpen && (
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); resetChatPrompts(); }}
-                style={{
-                  fontSize: 11,
-                  padding: '2px 8px',
-                  background: 'transparent',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 4,
-                  color: 'var(--color-text-secondary)',
-                  cursor: 'pointer',
-                }}
-              >
-                恢复默认
-              </button>
-            )}
-          </div>
-          {chatDebugOpen && (
-            <>
-              <div style={{ fontSize: 10, color: 'var(--color-text-tertiary)', marginBottom: 8, lineHeight: 1.5 }}>
-                编辑后立即持久化。点击暖场建议或在 ZIT 模式下发送消息时，此处的 prompt 会替代后端默认 buildSystemPrompt。
-                <br />User 模板支持 <code style={{ background: 'var(--color-bg-secondary, rgba(0,0,0,0.06))', padding: '0 3px', borderRadius: 2 }}>{'{{message}}'}</code> 占位符（用户实际消息）和 <code style={{ background: 'var(--color-bg-secondary, rgba(0,0,0,0.06))', padding: '0 3px', borderRadius: 2 }}>{'{{profile}}'}</code> 占位符（用户画像摘要，仅 system 用）。
-              </div>
-              <div style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: 4 }}>System Prompt</div>
-                <textarea
-                  value={chatSystem}
-                  onChange={(e) => setChatSystem(e.target.value)}
-                  spellCheck={false}
-                  style={{
-                    width: '100%',
-                    minHeight: 220,
-                    resize: 'vertical',
-                    fontSize: 11,
-                    fontFamily: 'Menlo, Consolas, monospace',
-                    padding: 6,
-                    border: '1px solid var(--color-border)',
-                    borderRadius: 4,
-                    background: 'var(--color-bg)',
-                    color: 'var(--color-text)',
-                    lineHeight: 1.5,
-                    boxSizing: 'border-box',
-                  }}
-                />
-              </div>
-              <div>
-                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: 4 }}>User Template</div>
-                <textarea
-                  value={chatUser}
-                  onChange={(e) => setChatUser(e.target.value)}
-                  spellCheck={false}
-                  style={{
-                    width: '100%',
-                    minHeight: 60,
-                    resize: 'vertical',
-                    fontSize: 11,
-                    fontFamily: 'Menlo, Consolas, monospace',
-                    padding: 6,
-                    border: '1px solid var(--color-border)',
-                    borderRadius: 4,
-                    background: 'var(--color-bg)',
-                    color: 'var(--color-text)',
-                    lineHeight: 1.5,
-                    boxSizing: 'border-box',
-                  }}
-                />
-              </div>
-            </>
-          )}
-        </div>
+
+
+
+
 
         {/* ── 🔥 暖场建议 warm/hot Prompt 调试 ──────────────────────────────── */}
-        {renderDebugCard({
-          emoji: '🔥',
-          title: '暖场建议 warm/hot Prompt 调试',
-          subtitle: 'ZIT warm/hot',
-          bg: 'rgba(255, 120, 80, 0.05)',
-          open: warmupHotDebugOpen,
-          onToggle: () => setWarmupHotDebugOpen(o => !o),
-          onReset: resetWarmupHotPrompts,
-          systemValue: warmupHotSystem,
-          onSystemChange: setWarmupHotSystem,
-          systemMinHeight: 60,
-          userValue: warmupHotUser,
-          onUserChange: setWarmupHotUser,
-          userLabel: 'User Template',
-          userMinHeight: 200,
-          hint: <>当 ZIT 用户画像处于 <b>warm/hot</b>（已有足够生图历史）时，作为暖场建议的 LLM 提示词。User 模板支持 <code>{'{{profile}}'}</code> 占位符。</>,
-        })}
+
 
         {/* ── ⚙ 配置助理 System Prompt 调试 ────────────────────────────── */}
-        {renderDebugCard({
-          emoji: '⚙',
-          title: '配置助理 Prompt 调试',
-          subtitle: 'ZIT config_assistant',
-          bg: 'rgba(120, 200, 120, 0.05)',
-          open: configDebugOpen,
-          onToggle: () => setConfigDebugOpen(o => !o),
-          onReset: resetConfigPrompt,
-          systemValue: configSystem,
-          onSystemChange: setConfigSystem,
-          systemMinHeight: 240,
-          hint: <>ZIT 配置助理模式下使用。System 内支持 <code>{'{{profile}}'}</code> 与 <code>{'{{currentConfig}}'}</code> 占位符（在后端运行时替换为画像摘要 / 当前 sidebar 配置 JSON）。</>,
-        })}
+
 
         {/* ── ❓ 智能问答 System Prompt 调试 ────────────────────────────── */}
-        {renderDebugCard({
-          emoji: '❓',
-          title: '智能问答 Prompt 调试',
-          subtitle: 'ZIT smart_qa',
-          bg: 'rgba(150, 150, 220, 0.05)',
-          open: smartQADebugOpen,
-          onToggle: () => setSmartQADebugOpen(o => !o),
-          onReset: resetSmartQAPrompt,
-          systemValue: smartQASystem,
-          onSystemChange: setSmartQASystem,
-          systemMinHeight: 200,
-          hint: <>ZIT 智能问答模式下使用，仅 system 一段，不需要 user 模板（用户消息直接作为 user message 传入）。</>,
-        })}
+
 
         {/* ── 🤖 智能体跟进建议 Prompt 调试 ─────────────────────────────── */}
-        {renderDebugCard({
-          emoji: '🤖',
-          title: '智能体跟进建议 Prompt 调试',
-          subtitle: 'ZIT follow-up agent',
-          bg: 'rgba(80, 180, 200, 0.05)',
-          open: followupAgentDebugOpen,
-          onToggle: () => setFollowupAgentDebugOpen(o => !o),
-          onReset: resetFollowupAgentPrompts,
-          systemValue: followupAgentSystem,
-          onSystemChange: setFollowupAgentSystem,
-          systemMinHeight: 60,
-          userValue: followupAgentUser,
-          onUserChange: setFollowupAgentUser,
-          userLabel: 'User Template',
-          userMinHeight: 220,
-          hint: <>ZIT 智能体生图后，调用 LLM 推荐 4 条"下一步"建议时使用。User 模板支持 <code>{'{{profile}}'}</code>、<code>{'{{currentPrompt}}'}</code> 占位符。</>,
-        })}
+        
 
         {/* ── 🛠 配置助理跟进建议 Prompt 调试 ──────────────────────────── */}
-        {renderDebugCard({
-          emoji: '🛠',
-          title: '配置助理跟进建议 Prompt 调试',
-          subtitle: 'ZIT follow-up config',
-          bg: 'rgba(200, 160, 100, 0.05)',
-          open: followupConfigDebugOpen,
-          onToggle: () => setFollowupConfigDebugOpen(o => !o),
-          onReset: resetFollowupConfigPrompts,
-          systemValue: followupConfigSystem,
-          onSystemChange: setFollowupConfigSystem,
-          systemMinHeight: 60,
-          userValue: followupConfigUser,
-          onUserChange: setFollowupConfigUser,
-          userLabel: 'User Template',
-          userMinHeight: 220,
-          hint: <>ZIT 配置助理调整参数后，调用 LLM 推荐后续创意方向时使用。User 模板支持 <code>{'{{profile}}'}</code>、<code>{'{{currentPrompt}}'}</code> 占位符。</>,
-        })}
-
         {/* UNet Model */}
         <div style={{ ...cardStyle, paddingTop: 0, paddingBottom: 16 }}>
           <div style={sectionLabelStyle}>UNet 模型</div>

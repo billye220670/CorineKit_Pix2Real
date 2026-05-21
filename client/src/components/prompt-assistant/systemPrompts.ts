@@ -1,7 +1,53 @@
 // System prompts for prompt assistant modes
-// Extracted from docs/SystemPrompt.txt
+// Loaded from backend /api/prompts API with hardcoded fallbacks
 
-export const SYSTEM_PROMPTS = {
+// Mapping from mode key to prompt ID in promptStore
+const PROMPT_ID_MAP: Record<string, string> = {
+  naturalToTags: 'pa-natural-to-tags',
+  tagsToNatural: 'pa-tags-to-natural',
+  variations: 'pa-variations',
+  detailer: 'pa-detailer',
+  nextScene: 'pa-next-scene',
+  storyboarder: 'pa-storyboarder',
+};
+
+// Loaded prompts cache (populated by fetchSystemPrompts)
+const loadedPrompts: Record<string, string> = {};
+
+/** Fetch all prompt-assistant prompts from backend and cache them */
+export async function fetchSystemPrompts(): Promise<void> {
+  try {
+    const ids = Object.values(PROMPT_ID_MAP);
+    const results = await Promise.allSettled(
+      ids.map(id => fetch(`/api/prompts/${id}`).then(r => r.ok ? r.json() : null))
+    );
+    for (let i = 0; i < ids.length; i++) {
+      const result = results[i];
+      if (result.status === 'fulfilled' && result.value?.systemPrompt) {
+        const key = Object.keys(PROMPT_ID_MAP).find(k => PROMPT_ID_MAP[k] === ids[i]);
+        if (key) loadedPrompts[key] = result.value.systemPrompt;
+      }
+    }
+    console.log(`[PromptAssistant] Loaded ${Object.keys(loadedPrompts).length} prompts from server`);
+  } catch (err) {
+    console.warn('[PromptAssistant] Failed to fetch prompts from server, using fallbacks');
+  }
+}
+
+/** Get a system prompt by mode key. Returns loaded version or fallback. */
+export function getSystemPrompt(mode: keyof typeof FALLBACK_PROMPTS): string {
+  return loadedPrompts[mode] || FALLBACK_PROMPTS[mode];
+}
+
+// Legacy export for backward compatibility (returns fallback values, prefer getSystemPrompt)
+export const SYSTEM_PROMPTS = new Proxy({} as Record<string, string>, {
+  get(_target, prop: string) {
+    return loadedPrompts[prop] || FALLBACK_PROMPTS[prop as keyof typeof FALLBACK_PROMPTS] || '';
+  }
+});
+
+// Hardcoded fallbacks (used when API is unavailable)
+const FALLBACK_PROMPTS = {
   // 1. 自然语言 → 标签
   naturalToTags: `You are in tag generation mode. Abstract concepts should be converted to concrete visual tags.
 
