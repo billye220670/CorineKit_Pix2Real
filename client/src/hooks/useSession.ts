@@ -135,6 +135,10 @@ export function useSession(): UseSessionReturn {
   const savedMasks = useRef<Set<string>>(new Set());
   // Flag to avoid saving during restore
   const isRestoring = useRef(true);
+  // Track whether there are actual unsaved changes (prevents ghost session on beforeunload)
+  const hasPendingChanges = useRef(false);
+  // Baseline serialized state to detect real vs cosmetic changes
+  const lastSerializedRef = useRef<string>('');
 
   // ── Serialize store state (strips File objects) ──────────────────────────
   const serializeState = useCallback((): { activeTab: number; tabData: Record<number, SerializedTabData> } => {
@@ -169,10 +173,13 @@ export function useSession(): UseSessionReturn {
     if (isRestoring.current) return;
     if (isSessionEmpty()) return; // Never persist empty sessions
     try {
-      await putSessionState(sessionIdRef.current, serializeState());
+      const state = serializeState();
+      await putSessionState(sessionIdRef.current, state);
+      lastSerializedRef.current = JSON.stringify(state);
       const now = new Date();
       setLastSavedAt(now);
       lastSavedAtRef.current = now;
+      hasPendingChanges.current = false;
     } catch (err) {
       console.warn('[Session] Failed to save state:', err);
     }
@@ -180,6 +187,7 @@ export function useSession(): UseSessionReturn {
 
   const scheduleSaveState = useCallback(() => {
     if (isRestoring.current) return;
+    hasPendingChanges.current = true;
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
     debounceTimer.current = setTimeout(() => { void doSaveState(); }, 500);
   }, [doSaveState]);
@@ -229,12 +237,17 @@ export function useSession(): UseSessionReturn {
       }
 
       // Detect meaningful state changes and schedule a save
+      // Only schedule if the serializable state actually changed
+      // (skip cosmetic changes like thumbnailUrl/sessionUrl that aren't serialized)
       if (state.tabData !== prevState.tabData) {
-        scheduleSaveState();
+        const curr = JSON.stringify(serializeState());
+        if (curr !== lastSerializedRef.current) {
+          scheduleSaveState();
+        }
       }
     });
     return unsub;
-  }, [scheduleSaveState]);
+  }, [scheduleSaveState, serializeState]);
 
   // ── Subscribe to mask store changes ─────────────────────────────────────
   useEffect(() => {
@@ -289,7 +302,9 @@ export function useSession(): UseSessionReturn {
     // Reset store to empty state
     useWorkflowStore.getState().restoreSession(DEFAULT_TAB, {}, {});
     useMaskStore.getState().restoreAllMasks({});
-  }, []);
+    hasPendingChanges.current = false;
+    lastSerializedRef.current = JSON.stringify(serializeState());
+  }, [serializeState]);
 
   // ── Load & restore on mount ──────────────────────────────────────────────
   useEffect(() => {
@@ -312,6 +327,7 @@ export function useSession(): UseSessionReturn {
 
         if (!session) {
           isRestoring.current = false;
+          lastSerializedRef.current = JSON.stringify(serializeState());
           if (behavior === 'welcome') setShowWelcome(true);
           return;
         }
@@ -371,6 +387,8 @@ export function useSession(): UseSessionReturn {
           useMaskStore.getState().restoreAllMasks(restoredMasks);
           setLastSavedAt(new Date(session.updatedAt));
           isRestoring.current = false;
+          // Initialize serialized state baseline so cosmetic changes don't trigger saves
+          lastSerializedRef.current = JSON.stringify(serializeState());
         };
 
         // ── Branch on startup behavior ───────────────────────────────────
@@ -379,15 +397,18 @@ export function useSession(): UseSessionReturn {
           await doRestore();
         } else if (behavior === 'new') {
           isRestoring.current = false;
+          lastSerializedRef.current = JSON.stringify(serializeState());
           newSession();
         } else {
           // 'welcome' — show welcome page; keep isRestoring=false, user selects session there
           isRestoring.current = false;
+          lastSerializedRef.current = JSON.stringify(serializeState());
           setShowWelcome(true);
         }
       } catch (err) {
         console.warn('[Session] Failed to restore session:', err);
         isRestoring.current = false;
+        lastSerializedRef.current = JSON.stringify(serializeState());
         // 即使请求失败，仍然尊重 startupBehavior 设置
         const fallbackBehavior = useSettingsStore.getState().startupBehavior;
         if (fallbackBehavior === 'welcome') {
@@ -422,6 +443,8 @@ export function useSession(): UseSessionReturn {
         }
         return;
       }
+      // Only save if there are actual unsaved changes
+      if (!hasPendingChanges.current) return;
       const state = serializeState();
       const blob = new Blob([JSON.stringify(state)], { type: 'application/json' });
       navigator.sendBeacon(`/api/session/${sessionIdRef.current}/state`, blob);
