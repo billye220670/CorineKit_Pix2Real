@@ -23,6 +23,8 @@ const projectRoot: string = envDataRoot
 
 interface DiskConfig {
   sessionsBase?: string;
+  deleteComfyOutputAfterDownload?: boolean;
+  comfyOutputDir?: string;
 }
 
 function getConfigFile(): string {
@@ -134,6 +136,35 @@ export function validateSessionsBase(candidate: string): string | null {
     return `目录不可写: ${err instanceof Error ? err.message : String(err)}`;
   }
   return null;
+}
+
+// ── ComfyUI 生成后删除原件 ────────────────────────────────────────────────
+
+export function getDeleteComfyOutputAfterDownload(): boolean {
+  return diskConfig.deleteComfyOutputAfterDownload === true;
+}
+
+export function setDeleteComfyOutputAfterDownload(value: boolean): void {
+  if (value) {
+    diskConfig.deleteComfyOutputAfterDownload = true;
+  } else {
+    delete diskConfig.deleteComfyOutputAfterDownload;
+  }
+  writeConfigToDisk();
+}
+
+export function getComfyOutputDir(): string | null {
+  const v = diskConfig.comfyOutputDir;
+  return typeof v === 'string' && v.trim() ? v.trim() : null;
+}
+
+export function setComfyOutputDir(value: string | null): void {
+  if (value === null || !value.trim()) {
+    delete diskConfig.comfyOutputDir;
+  } else {
+    diskConfig.comfyOutputDir = value.trim();
+  }
+  writeConfigToDisk();
 }
 
 // ── 其它数据目录（当前统一返回项目根子目录，预留 getter 便于后续扩展） ──

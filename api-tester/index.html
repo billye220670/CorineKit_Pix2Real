@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CorineKit 对外 API 测试工具</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <h1>CorineKit 对外 API 测试工具</h1>
+    <p class="subtitle">纯原生 JS · 零依赖 · 通过内置代理 <code>/proxy/*</code> 访问后端，无需处理跨域</p>
+  </header>
+
+  <main class="container">
+    <!-- 1. 配置区 -->
+    <section class="card">
+      <h2>① 配置</h2>
+      <div class="row">
+        <label for="apiKey">API Key（x-api-key）</label>
+        <input type="text" id="apiKey" placeholder="请输入你的 API Key" autocomplete="off" />
+      </div>
+      <p class="hint">
+        请求已通过本工具内置反向代理转发到后端（<code>/proxy/api/v1/*</code> → 后端 <code>/api/v1/*</code>），
+        因此<strong>无需处理跨域（CORS）</strong>。API Key 会保存在本地 localStorage。
+      </p>
+      <div class="row">
+        <button id="loadWorkflowsBtn" class="btn primary">加载工作流</button>
+        <span id="workflowsStatus" class="status-text"></span>
+      </div>
+    </section>
+
+    <!-- 2. 工作流选择 + 动态表单 -->
+    <section class="card">
+      <h2>② 选择工作流</h2>
+      <div class="row">
+        <label for="workflowSelect">工作流</label>
+        <select id="workflowSelect" disabled>
+          <option value="">（请先加载工作流）</option>
+        </select>
+      </div>
+
+      <div id="dynamicForm" class="dynamic-form">
+        <p class="hint">选择工作流后，这里会根据其 schema 动态生成表单。</p>
+      </div>
+
+      <div class="row">
+        <button id="submitBtn" class="btn primary" disabled>提交任务</button>
+        <button id="cancelBtn" class="btn danger" disabled>取消任务</button>
+      </div>
+    </section>
+
+    <!-- 3. 任务状态 -->
+    <section class="card">
+      <h2>③ 任务状态</h2>
+      <div id="taskInfo" class="task-info">
+        <p class="hint">尚未提交任务。</p>
+      </div>
+      <div class="progress-wrap" id="progressWrap" style="display:none;">
+        <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+        <span class="progress-label" id="progressLabel"></span>
+      </div>
+    </section>
+
+    <!-- 4. 结果展示 -->
+    <section class="card">
+      <h2>④ 结果</h2>
+      <div id="results" class="results">
+        <p class="hint">任务完成后，产物会在此内联展示。</p>
+      </div>
+    </section>
+
+    <!-- 5. 日志 -->
+    <section class="card">
+      <h2>⑤ 请求日志</h2>
+      <div class="row">
+        <button id="clearLogBtn" class="btn">清空日志</button>
+      </div>
+      <div id="log" class="log-panel"></div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

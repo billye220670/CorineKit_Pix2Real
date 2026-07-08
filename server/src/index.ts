@@ -13,10 +13,14 @@ import agentRouter from './routes/agent.js';
 import favoritesRouter, { favoritesBase } from './routes/favorites.js';
 import settingsRouter from './routes/settings.js';
 import promptsRouter from './routes/prompts.js';
+import externalRouter, { saveExternalOutput, buildExternalResultUrl } from './routes/external.js';
+import { getExternalCorsOrigins } from './config/externalApiConfig.js';
+import { getTaskByPromptId, updateProgress, complete as completeExternalTask, fail as failExternalTask } from './services/externalTaskManager.js';
 import { connectWebSocket, getHistory, getImageBuffer, getPromptNodeInfo, getPromptTotalNodes, getPromptTotalWeight, clearPromptNodeInfo, SAMPLER_STEP_WEIGHT } from './services/comfyui.js';
 import { saveOutputFile } from './services/sessionManager.js';
-import { loadConfigFromDisk, getSessionsBase } from './config/paths.js';
+import { loadConfigFromDisk, getSessionsBase, getDeleteComfyOutputAfterDownload, getComfyOutputDir } from './config/paths.js';
 import { ensureComfyUI, isComfyUIRunning } from './services/comfyuiLauncher.js';
+import type { HistoryEntry } from './types/index.js';
 
 // ── 节点 class_type → 中文阶段名映射 ───────────────────────────────
 // 未映射的节点将回退到用户在 ComfyUI 中的节点标题（_meta.title）
@@ -120,8 +124,9 @@ const app = express();
 const server = createServer(app);
 
 // CORS
+// 现有前端来源保持不变，追加对外 API（/api/v1）配置的允许来源（不替换）。
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
+  origin: ['http://localhost:5173', 'http://127.0.0.1:5173', ...getExternalCorsOrigins()],
   credentials: true,
 }));
 
@@ -144,6 +149,7 @@ app.use('/api/agent', agentRouter);
 app.use('/api/favorites', favoritesRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/prompts', promptsRouter);
+app.use('/api/v1', externalRouter);
 app.use('/favorites', express.static(favoritesBase));
 
 // ComfyUI 状态查询
@@ -167,44 +173,41 @@ function generateClientId(): string {
 // Track prompt -> workflow/session mapping for output downloading
 const promptWorkflowMap = new Map<string, { workflowId: number; sessionId: string; tabId: number }>();
 
-wss.on('connection', (clientWs) => {
-  const clientId = generateClientId();
-  console.log(`[WS] Client connected, assigned clientId: ${clientId}`);
+// ── 全局进度追踪状态 ──────────────────────────────────────────────────────
+// 全局进度 = (已完成权重 + 当前节点权重 × 当前节点内部进度) / 总权重
+// 阶段化 + 权重化：权重基于节点时间开销（采样节点权重 = steps，模型加载权重 15，编码/VAE 权重 2-3）
+interface PromptProgressState {
+  totalNodes: number;
+  totalWeight: number;
+  completedWeight: number;
+  stepIndex: number;
+  currentNode: string | null;
+  currentStage: string;
+  currentNodeWeight: number;
+  currentValue: number;
+  currentMax: number;
+  lastPercentage: number;
+  // Tick 计数：统计当前节点收到的 progress 消息总数，用于多轮场景（如 UltimateSDUpscale）
+  nodeTickCount: number;
+  nodeIsMultiRound: boolean;
+  nodeIsTiledSampler: boolean; // 预标记：该节点是否为 tiled sampler，始终用 tick 计数
+}
 
-  // Send the clientId to the client
-  clientWs.send(JSON.stringify({ type: 'connected', clientId }));
+// 进度快照：computeSnapshot 计算所得的对外可展示字段（含棘轮保护后的百分比）。
+interface ProgressSnapshot {
+  percentage: number;
+  stage: string;
+  value: number;
+  max: number;
+  stepIndex: number;
+  stepTotal: number;
+}
 
-  // Buffer recent execution_start/progress events per promptId so they can be
-  // replayed if the client registers AFTER ComfyUI has already started processing
-  // (common for the first card in a batch — no queue delay).
-  const eventBuffer = new Map<string, object[]>();
-  function bufferAndSend(promptId: string, event: object) {
-    if (!eventBuffer.has(promptId)) eventBuffer.set(promptId, []);
-    eventBuffer.get(promptId)!.push(event);
-    if (clientWs.readyState === WebSocket.OPEN) {
-      clientWs.send(JSON.stringify(event));
-    }
-  }
-
-  // ── 全局进度追踪状态 ──────────────────────────────────────────────────────
-  // 全局进度 = (已完成权重 + 当前节点权重 × 当前节点内部进度) / 总权重
-  // 阶段化 + 权重化：权重基于节点时间开销（采样节点权重 = steps，模型加载权重 15，编码/VAE 权重 2-3）
-  interface PromptProgressState {
-    totalNodes: number;
-    totalWeight: number;
-    completedWeight: number;
-    stepIndex: number;
-    currentNode: string | null;
-    currentStage: string;
-    currentNodeWeight: number;
-    currentValue: number;
-    currentMax: number;
-    lastPercentage: number;
-    // Tick 计数：统计当前节点收到的 progress 消息总数，用于多轮场景（如 UltimateSDUpscale）
-    nodeTickCount: number;
-    nodeIsMultiRound: boolean;
-    nodeIsTiledSampler: boolean; // 预标记：该节点是否为 tiled sampler，始终用 tick 计数
-  }
+// ── 进度追踪器工厂 ─────────────────────────────────────────────────────────
+// 将原先内联在 wss.on('connection') 闭包中的进度追踪逻辑抽取为可复用工厂：
+// 前端连接与对外 API 常驻桥接连接各自持有一个独立实例（独立 promptProgressMap），互不干扰。
+// 工厂只负责“计算进度快照”，不负责发送/落盘，由调用方决定如何消费快照。
+function createProgressTracker() {
   const promptProgressMap = new Map<string, PromptProgressState>();
 
   function getOrInitProgress(promptId: string): PromptProgressState {
@@ -239,14 +242,13 @@ wss.on('connection', (clientWs) => {
     return info.classType || '处理中';
   }
 
-  function emitProgress(promptId: string, p: PromptProgressState) {
+  function computeSnapshot(p: PromptProgressState): ProgressSnapshot {
     // 权重化全局百分比，封顶 99%，100% 留给 complete 确认
     let percentage: number;
     if (p.totalWeight > 0) {
       // 节点内部进度：多轮模式用 tick 计数，单轮用 value/max
       let nodeProgress: number;
       if (p.nodeIsTiledSampler || p.nodeIsMultiRound) {
-        // Tiled sampler 或多轮节点：用 tick 数 / 预期 tick 数，线性递增不受 max 重置影响
         const expectedTicks = p.currentNodeWeight / SAMPLER_STEP_WEIGHT;
         nodeProgress = Math.min(0.95, p.nodeTickCount / expectedTicks);
       } else {
@@ -260,25 +262,21 @@ wss.on('connection', (clientWs) => {
     // 棘轮保护：多轮间不让用户看到回退
     if (percentage < p.lastPercentage) percentage = p.lastPercentage;
     p.lastPercentage = percentage;
-    bufferAndSend(promptId, {
-      type: 'progress',
-      promptId,
-      value: p.currentValue,
-      max: p.currentMax,
+    return {
       percentage,
       stage: p.currentStage,
+      value: p.currentValue,
+      max: p.currentMax,
       stepIndex: p.stepIndex,
       stepTotal: p.totalNodes,
-    });
+    };
   }
-  // Connect to ComfyUI WebSocket with this clientId
-  const comfyWs = connectWebSocket(clientId, {
-    onExecutionStart(promptId) {
-      getOrInitProgress(promptId);
-      bufferAndSend(promptId, { type: 'execution_start', promptId });
-    },
 
-    onExecutionCached(promptId, cachedNodes) {
+  return {
+    start(promptId: string): void {
+      getOrInitProgress(promptId);
+    },
+    cached(promptId: string, cachedNodes: string[]): void {
       // 缓存命中的节点直接跳过，将其权重计入 completedWeight（进度条会顺势推进）
       const p = getOrInitProgress(promptId);
       for (const nodeId of cachedNodes) {
@@ -287,8 +285,7 @@ wss.on('connection', (clientWs) => {
       }
       p.stepIndex = Math.min(p.totalNodes || Number.MAX_SAFE_INTEGER, p.stepIndex + cachedNodes.length);
     },
-
-    onExecutingNode(promptId, nodeId) {
+    executingNode(promptId: string, nodeId: string): ProgressSnapshot {
       const p = getOrInitProgress(promptId);
       // 节点切换：将上一节点的完整权重计入 completedWeight，再切换到新节点
       if (p.currentNode !== nodeId) {
@@ -306,10 +303,9 @@ wss.on('connection', (clientWs) => {
         p.nodeTickCount = 0;
         p.nodeIsMultiRound = false;
       }
-      emitProgress(promptId, p);
+      return computeSnapshot(p);
     },
-
-    onProgress(promptId, progress) {
+    progress(promptId: string, progress: { value: number; max: number; node?: string }): ProgressSnapshot {
       const p = getOrInitProgress(promptId);
       // 若 progress 带了 node 字段且与当前不一致，同步刷新阶段与权重
       if (progress.node && progress.node !== p.currentNode) {
@@ -331,7 +327,158 @@ wss.on('connection', (clientWs) => {
       p.nodeTickCount++;
       p.currentValue = progress.value;
       p.currentMax = progress.max;
-      emitProgress(promptId, p);
+      return computeSnapshot(p);
+    },
+    clear(promptId: string): void {
+      promptProgressMap.delete(promptId);
+    },
+  };
+}
+
+// ── 对外 API 桥接（可复用） ────────────────────────────────────────────────
+// 以下函数封装“外部任务”与 ComfyUI WebSocket 事件之间的桥接与产物落盘逻辑，
+// 供前端连接与对外 API 常驻连接共用，避免逻辑分叉。所有函数内部均以 getTaskByPromptId
+// 命中为前提，命中不了则跳过，确保前端/外部互不干扰、无重复落盘。
+
+/** 重试拉取 ComfyUI history 直到 completed=true（或超时 10s），返回最终 history。 */
+async function fetchCompletedHistory(promptId: string): Promise<HistoryEntry | undefined> {
+  let history = await getHistory(promptId);
+  let historyRetries = 0;
+  const maxHistoryRetries = 50; // 50 * 200ms = 10s
+  while (
+    (!history || !history.status || history.status.completed !== true) &&
+    historyRetries < maxHistoryRetries
+  ) {
+    await new Promise((r) => setTimeout(r, 200));
+    history = await getHistory(promptId);
+    historyRetries++;
+  }
+  return history;
+}
+
+/** 外部任务进度桥接：命中则同步进度（updateProgress 内部会置为 processing）。 */
+function bridgeExternalProgress(promptId: string, percentage: number, stage?: string): void {
+  if (getTaskByPromptId(promptId)) {
+    updateProgress(promptId, percentage, stage);
+  }
+}
+
+/**
+ * 外部任务完成桥接：命中则下载 ComfyUI history 产物落盘到 output/_external/<taskId>/，
+ * 再 completeExternalTask。命中不了直接返回；下载/落盘异常则 failExternalTask。
+ */
+async function bridgeExternalComplete(promptId: string, history: HistoryEntry | undefined): Promise<void> {
+  const extTask = getTaskByPromptId(promptId);
+  if (!extTask) return;
+  try {
+    const extOutputs: Array<{ filename: string; url: string }> = [];
+    if (history && history.outputs) {
+      for (const nodeOutput of Object.values(history.outputs)) {
+        if (nodeOutput.images) {
+          for (const img of nodeOutput.images) {
+            if (img.type !== 'output') continue;
+            try {
+              const buffer = await getImageBuffer(img.filename, img.subfolder, img.type);
+              const index = extOutputs.length;
+              saveExternalOutput(extTask.taskId, index, img.filename, buffer);
+              extOutputs.push({ filename: img.filename, url: buildExternalResultUrl(extTask.taskId, index) });
+            } catch (err) {
+              console.error(`[External API] Failed to persist output ${img.filename}:`, err);
+            }
+          }
+        }
+        if (nodeOutput.gifs) {
+          for (const vid of nodeOutput.gifs) {
+            try {
+              const buffer = await getImageBuffer(vid.filename, vid.subfolder, vid.type);
+              const index = extOutputs.length;
+              saveExternalOutput(extTask.taskId, index, vid.filename, buffer);
+              extOutputs.push({ filename: vid.filename, url: buildExternalResultUrl(extTask.taskId, index) });
+            } catch (err) {
+              console.error(`[External API] Failed to persist video ${vid.filename}:`, err);
+            }
+          }
+        }
+      }
+    }
+    completeExternalTask(promptId, extOutputs);
+  } catch (err) {
+    console.error(`[External API] bridgeExternalComplete failed for ${promptId}:`, err);
+    failExternalTask(promptId, err instanceof Error ? err.message : String(err));
+  }
+}
+
+/** 外部任务失败桥接：命中则标记失败。 */
+function bridgeExternalError(promptId: string, message: string): void {
+  if (getTaskByPromptId(promptId)) {
+    failExternalTask(promptId, message);
+  }
+}
+
+wss.on('connection', (clientWs) => {
+  const clientId = generateClientId();
+  console.log(`[WS] Client connected, assigned clientId: ${clientId}`);
+
+  // Send the clientId to the client
+  clientWs.send(JSON.stringify({ type: 'connected', clientId }));
+
+  // Buffer recent execution_start/progress events per promptId so they can be
+  // replayed if the client registers AFTER ComfyUI has already started processing
+  // (common for the first card in a batch — no queue delay).
+  const eventBuffer = new Map<string, object[]>();
+  function bufferAndSend(promptId: string, event: object) {
+    if (!eventBuffer.has(promptId)) eventBuffer.set(promptId, []);
+    eventBuffer.get(promptId)!.push(event);
+    if (clientWs.readyState === WebSocket.OPEN) {
+      clientWs.send(JSON.stringify(event));
+    }
+  }
+
+  // ── 全局进度追踪状态 ──────────────────────────────────────────────────────
+  // 全局进度 = (已完成权重 + 当前节点权重 × 当前节点内部进度) / 总权重
+  // 阶段化 + 权重化：权重基于节点时间开销（采样节点权重 = steps，模型加载权重 15，编码/VAE 权重 2-3）
+  const tracker = createProgressTracker();
+  // Connect to ComfyUI WebSocket with this clientId
+  const comfyWs = connectWebSocket(clientId, {
+    onExecutionStart(promptId) {
+      tracker.start(promptId);
+      bufferAndSend(promptId, { type: 'execution_start', promptId });
+    },
+
+    onExecutionCached(promptId, cachedNodes) {
+      // 缓存命中的节点直接跳过，将其权重计入 completedWeight（进度条会顺势推进）
+      tracker.cached(promptId, cachedNodes);
+    },
+
+    onExecutingNode(promptId, nodeId) {
+      const snap = tracker.executingNode(promptId, nodeId);
+      bufferAndSend(promptId, {
+        type: 'progress',
+        promptId,
+        value: snap.value,
+        max: snap.max,
+        percentage: snap.percentage,
+        stage: snap.stage,
+        stepIndex: snap.stepIndex,
+        stepTotal: snap.stepTotal,
+      });
+    },
+
+    onProgress(promptId, progress) {
+      const snap = tracker.progress(promptId, progress);
+      bufferAndSend(promptId, {
+        type: 'progress',
+        promptId,
+        value: snap.value,
+        max: snap.max,
+        percentage: snap.percentage,
+        stage: snap.stage,
+        stepIndex: snap.stepIndex,
+        stepTotal: snap.stepTotal,
+      });
+
+      // ── 对外 API 桥接：命中外部任务则同步进度（复用 bridgeExternalProgress） ──
+      bridgeExternalProgress(promptId, snap.percentage, snap.stage || undefined);
     },
 
     async onComplete(promptId) {
@@ -396,6 +543,21 @@ wss.on('connection', (clientWs) => {
                   const buffer = await getImageBuffer(img.filename, img.subfolder, img.type);
                   const url = saveOutputFile(info!.sessionId, info!.tabId, img.filename, buffer);
                   outputs.push({ filename: img.filename, url });
+                  // Delete ComfyUI source if setting is enabled
+                  if (getDeleteComfyOutputAfterDownload()) {
+                    const comfyOutDir = getComfyOutputDir();
+                    if (comfyOutDir) {
+                      const srcPath = img.subfolder
+                        ? path.join(comfyOutDir, img.subfolder, img.filename)
+                        : path.join(comfyOutDir, img.filename);
+                      try {
+                        fs.unlinkSync(srcPath);
+                        console.log(`[WS] Deleted ComfyUI source: ${srcPath}`);
+                      } catch (delErr) {
+                        console.warn(`[WS] Failed to delete ComfyUI source ${srcPath}:`, delErr);
+                      }
+                    }
+                  }
                 } catch (err) {
                   console.error(`[WS] Failed to download output ${img.filename}:`, err);
                 }
@@ -409,6 +571,21 @@ wss.on('connection', (clientWs) => {
                   const buffer = await getImageBuffer(vid.filename, vid.subfolder, vid.type);
                   const url = saveOutputFile(info!.sessionId, info!.tabId, vid.filename, buffer);
                   outputs.push({ filename: vid.filename, url });
+                  // Delete ComfyUI source if setting is enabled
+                  if (getDeleteComfyOutputAfterDownload()) {
+                    const comfyOutDir = getComfyOutputDir();
+                    if (comfyOutDir) {
+                      const srcPath = vid.subfolder
+                        ? path.join(comfyOutDir, vid.subfolder, vid.filename)
+                        : path.join(comfyOutDir, vid.filename);
+                      try {
+                        fs.unlinkSync(srcPath);
+                        console.log(`[WS] Deleted ComfyUI source: ${srcPath}`);
+                      } catch (delErr) {
+                        console.warn(`[WS] Failed to delete ComfyUI source ${srcPath}:`, delErr);
+                      }
+                    }
+                  }
                 } catch (err) {
                   console.error(`[WS] Failed to download video ${vid.filename}:`, err);
                 }
@@ -430,10 +607,15 @@ wss.on('connection', (clientWs) => {
           }));
         }
 
+        // ── 对外 API 桥接：命中外部任务则落盘结果并标记完成（复用 bridgeExternalComplete） ──
+        // 外部任务无 register/session，不走上面的 session 保存路径；bridgeExternalComplete 独立
+        // 下载 ComfyUI 产物到 output/_external/<taskId>/ 并构造对外 url，命中不了则跳过。
+        await bridgeExternalComplete(promptId, history);
+
         // Cleanup
         promptWorkflowMap.delete(promptId);
         eventBuffer.delete(promptId);
-        promptProgressMap.delete(promptId);
+        tracker.clear(promptId);
         clearPromptNodeInfo(promptId);
       } catch (err) {
         console.error(`[WS] Error processing completion for ${promptId}:`, err);
@@ -444,7 +626,9 @@ wss.on('connection', (clientWs) => {
             outputs: [],
           }));
         }
-        promptProgressMap.delete(promptId);
+        // 对外 API 桥接：完成处理异常时，将外部任务标记为失败，避免其永久停留在处理中。
+        bridgeExternalError(promptId, err instanceof Error ? err.message : String(err));
+        tracker.clear(promptId);
         clearPromptNodeInfo(promptId);
       }
     },
@@ -459,8 +643,10 @@ wss.on('connection', (clientWs) => {
           message,
         }));
       }
+      // ── 对外 API 桥接：命中外部任务则标记失败（复用 bridgeExternalError） ──
+      bridgeExternalError(promptId, message);
       promptWorkflowMap.delete(promptId);
-      promptProgressMap.delete(promptId);
+      tracker.clear(promptId);
       clearPromptNodeInfo(promptId);
     },
   });
@@ -497,6 +683,95 @@ wss.on('connection', (clientWs) => {
 
 const PORT = process.env.PORT || 3000;
 
+// ── 对外 API 常驻 ComfyUI WebSocket 桥接连接 ──────────────────────────
+// 根因：对外 API 提交任务用固定 clientId，但此前只有前端浏览器连接 /ws 时才会建立到
+// ComfyUI 的监听；外部任务的 clientId 无对应连接 → ComfyUI 定向消息全部丢失 → 任务永远
+// queued。这里在服务器启动后建立一条常驻连接（固定 clientId），专门桥接外部任务的
+// 进度/完成/失败，复用与前端连接相同的进度追踪器与桥接函数。
+const EXTERNAL_BRIDGE_CLIENT_ID = 'pix2real_external_api';
+const EXTERNAL_BRIDGE_RECONNECT_MS = 3000;
+let externalBridgeWs: WebSocket | null = null;
+let externalBridgeReconnectTimer: NodeJS.Timeout | null = null;
+
+function scheduleExternalBridgeReconnect(): void {
+  if (externalBridgeReconnectTimer) return; // 已有待执行的重连，避免叠加
+  externalBridgeReconnectTimer = setTimeout(() => {
+    externalBridgeReconnectTimer = null;
+    connectExternalBridge();
+  }, EXTERNAL_BRIDGE_RECONNECT_MS);
+}
+
+function connectExternalBridge(): void {
+  // 防重复：已有存活/正在建立的连接则不再新建，避免叠加多条常驻连接。
+  if (
+    externalBridgeWs &&
+    (externalBridgeWs.readyState === WebSocket.OPEN || externalBridgeWs.readyState === WebSocket.CONNECTING)
+  ) {
+    return;
+  }
+
+  // 常驻连接专属的进度追踪器（独立实例，与前端连接互不干扰）
+  const tracker = createProgressTracker();
+  console.log(`[External Bridge] Connecting resident ComfyUI WS (clientId=${EXTERNAL_BRIDGE_CLIENT_ID})`);
+
+  const ws = connectWebSocket(EXTERNAL_BRIDGE_CLIENT_ID, {
+    onExecutionStart(promptId) {
+      tracker.start(promptId);
+    },
+    onExecutionCached(promptId, cachedNodes) {
+      tracker.cached(promptId, cachedNodes);
+    },
+    onExecutingNode(promptId, nodeId) {
+      const snap = tracker.executingNode(promptId, nodeId);
+      bridgeExternalProgress(promptId, snap.percentage, snap.stage || undefined);
+    },
+    onProgress(promptId, progress) {
+      const snap = tracker.progress(promptId, progress);
+      bridgeExternalProgress(promptId, snap.percentage, snap.stage || undefined);
+    },
+    async onComplete(promptId) {
+      // 仅处理命中外部任务的 promptId；前端任务走各自连接，这里不会命中。
+      if (!getTaskByPromptId(promptId)) {
+        tracker.clear(promptId);
+        return;
+      }
+      console.log(`[External Bridge] onComplete for external promptId ${promptId}`);
+      try {
+        const history = await fetchCompletedHistory(promptId);
+        await bridgeExternalComplete(promptId, history);
+      } catch (err) {
+        bridgeExternalError(promptId, err instanceof Error ? err.message : String(err));
+      } finally {
+        tracker.clear(promptId);
+        clearPromptNodeInfo(promptId);
+      }
+    },
+    onError(promptId, message) {
+      bridgeExternalError(promptId, message);
+      tracker.clear(promptId);
+      clearPromptNodeInfo(promptId);
+    },
+  });
+
+  externalBridgeWs = ws;
+
+  ws.on('open', () => {
+    console.log('[External Bridge] Resident ComfyUI WS connected');
+  });
+
+  // 断线自动重连：close/error 后延迟重建，且用单一 timer 防止重复叠加。
+  ws.on('close', () => {
+    console.warn('[External Bridge] Resident ComfyUI WS closed; scheduling reconnect');
+    if (externalBridgeWs === ws) externalBridgeWs = null;
+    scheduleExternalBridgeReconnect();
+  });
+  ws.on('error', () => {
+    // connectWebSocket 内部已记录错误详情；这里确保出错也触发重连（close 常随其后）。
+    if (externalBridgeWs === ws) externalBridgeWs = null;
+    scheduleExternalBridgeReconnect();
+  });
+}
+
 // 启动服务器
 async function startServer() {
   // 尝试自动启动 ComfyUI
@@ -511,6 +786,8 @@ async function startServer() {
     console.log(`[Server] Running on http://localhost:${PORT}`);
     console.log(`[Server] WebSocket on ws://localhost:${PORT}/ws`);
     console.log(`[Server] Output directory: ${outputBase}`);
+    // 服务器就绪后建立对外 API 常驻桥接连接（修复外部任务永远 queued 的 bug）。
+    connectExternalBridge();
   });
 }
 

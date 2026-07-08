@@ -10,6 +10,10 @@ import {
   getDefaultSessionsBase,
   setSessionsBase,
   validateSessionsBase,
+  getDeleteComfyOutputAfterDownload,
+  setDeleteComfyOutputAfterDownload,
+  getComfyOutputDir,
+  setComfyOutputDir,
 } from '../config/paths.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -23,6 +27,8 @@ router.get('/', (_req, res) => {
   res.json({
     sessionsBase: getSessionsBase(),
     defaultSessionsBase: getDefaultSessionsBase(),
+    deleteComfyOutputAfterDownload: getDeleteComfyOutputAfterDownload(),
+    comfyOutputDir: getComfyOutputDir(),
   });
 });
 
@@ -31,7 +37,11 @@ router.get('/', (_req, res) => {
 //   - 绝对路径：切换为自定义路径
 //   - null：恢复默认路径
 router.put('/', express.json(), (req, res) => {
-  const body = (req.body ?? {}) as { sessionsBase?: string | null };
+  const body = (req.body ?? {}) as {
+    sessionsBase?: string | null;
+    deleteComfyOutputAfterDownload?: boolean;
+    comfyOutputDir?: string | null;
+  };
 
   if ('sessionsBase' in body) {
     const value = body.sessionsBase;
@@ -60,9 +70,24 @@ router.put('/', express.json(), (req, res) => {
     }
   }
 
+  if ('deleteComfyOutputAfterDownload' in body) {
+    if (typeof body.deleteComfyOutputAfterDownload === 'boolean') {
+      setDeleteComfyOutputAfterDownload(body.deleteComfyOutputAfterDownload);
+    }
+  }
+
+  if ('comfyOutputDir' in body) {
+    const dir = body.comfyOutputDir;
+    if (dir === null || typeof dir === 'string') {
+      setComfyOutputDir(dir);
+    }
+  }
+
   res.json({
     sessionsBase: getSessionsBase(),
     defaultSessionsBase: getDefaultSessionsBase(),
+    deleteComfyOutputAfterDownload: getDeleteComfyOutputAfterDownload(),
+    comfyOutputDir: getComfyOutputDir(),
   });
 });
 
@@ -74,7 +99,9 @@ router.post('/browse-folder', (req, res) => {
     return;
   }
 
-  const initialPath = ((req.body ?? {}) as { initialPath?: string }).initialPath ?? '';
+  const reqBody = (req.body ?? {}) as { initialPath?: string; title?: string };
+  const initialPath = reqBody.initialPath ?? '';
+  const title = reqBody.title ?? '选择目录';
 
   execFile(
     'powershell.exe',
@@ -83,7 +110,7 @@ router.post('/browse-folder', (req, res) => {
       '-STA',
       '-ExecutionPolicy', 'Bypass',
       '-File', pickFolderScript,
-      '-Title', '选择 Session 存储路径',
+      '-Title', title,
       '-InitialPath', initialPath,
     ],
     { windowsHide: true, timeout: 5 * 60_000 },
