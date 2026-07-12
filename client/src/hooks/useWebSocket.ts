@@ -206,8 +206,9 @@ function getOrCreateConnection(): WebSocket {
                   }
                   const newImage = tabImages[tabImages.length - 1];
 
+                  // Reuse the already-fetched `file` — never re-fetch stagingId
                   const formData = new FormData();
-                  formData.append('image', newImage.file);
+                  formData.append('image', file);
                   formData.append('clientId', clientId);
                   formData.append('prompt', '');
 
