@@ -72,4 +72,12 @@ export interface WSExecutionStartMessage {
   promptId: string;
 }
 
-export type WSMessage = WSConnectedMessage | WSProgressMessage | WSCompleteMessage | WSErrorMessage | WSExecutionStartMessage;
+export interface WSExternalImagePushMessage {
+  type: 'external_image_push';
+  tabId: number;
+  stagingId: string;
+  originalName?: string;
+  targetSessionId?: string;
+}
+
+export type WSMessage = WSConnectedMessage | WSProgressMessage | WSCompleteMessage | WSErrorMessage | WSExecutionStartMessage | WSExternalImagePushMessage;

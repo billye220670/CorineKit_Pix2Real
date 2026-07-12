@@ -11,6 +11,11 @@ let globalWs: WebSocket | null = null;
 let globalReconnectTimer: number | undefined;
 let connectionCount = 0;
 
+// Dedup guard: prevent the same external_image_push stagingId from being consumed twice
+// (e.g. due to HMR orphaned WebSocket or StrictMode double-mount race)
+const processedStagingIds = new Set<string>();
+const STAGING_ID_TTL_MS = 60_000;
+
 /** 根据 promptId 在 tabData 中查找归属的 tabId 与工作流名，用于桌面通知文案。 */
 function resolveWorkflowLabel(promptId: string): { tabId: number | null; workflowName: string } {
   const state = useWorkflowStore.getState();
@@ -127,11 +132,14 @@ function getOrCreateConnection(): WebSocket {
               };
 
               // 异步发送，不阻塞 UI
-              fetch('/api/agent/log-generation', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(record),
-              }).catch(err => console.error('[Agent] Failed to log generation:', err));
+              // 隐私模式开启时跳过上报，避免本次生成进入 generation-log / 用户画像 / 统计
+              if (!useSettingsStore.getState().privacyMode) {
+                fetch('/api/agent/log-generation', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(record),
+                }).catch(err => console.error('[Agent] Failed to log generation:', err));
+              }
 
               break; // 找到即退出
             }
@@ -156,6 +164,36 @@ function getOrCreateConnection(): WebSocket {
             }
           } catch { /* noop */ }
           break;
+        case 'external_image_push': {
+          // Precise multi-window routing: if a target session is specified and it
+          // does not match this window's session, ignore. Undefined → accept.
+          if (msg.targetSessionId && msg.targetSessionId !== store.sessionId) {
+            break;
+          }
+          const { tabId, stagingId, originalName } = msg;
+          // Dedup: skip if this stagingId was already processed (HMR / double-mount guard)
+          if (processedStagingIds.has(stagingId)) {
+            console.debug('[WS] external_image_push dedup: skipping already-processed stagingId', stagingId);
+            break;
+          }
+          processedStagingIds.add(stagingId);
+          setTimeout(() => processedStagingIds.delete(stagingId), STAGING_ID_TTL_MS);
+
+          // onmessage is not async — fetch bytes and hand off in an async IIFE.
+          void (async () => {
+            try {
+              const res = await fetch(`/api/external-image-push/${stagingId}`);
+              if (!res.ok) throw new Error(`Failed to fetch external image: ${res.status}`);
+              const blob = await res.blob();
+              const file = new File([blob], originalName ?? 'pushed.png', { type: blob.type });
+              store.addImagesToTab(tabId, [file]);
+              store.setActiveTab(tabId);
+            } catch (err) {
+              console.warn('[WS] external_image_push failed:', err);
+            }
+          })();
+          break;
+        }
       }
     } catch {
       // ignore
@@ -165,7 +203,7 @@ function getOrCreateConnection(): WebSocket {
     try {
       const msg: WSMessage = JSON.parse(event.data);
       const agentExec = useAgentStore.getState().agentExecution;
-      if (agentExec && agentExec.promptId && msg.type !== 'connected') {
+      if (agentExec && agentExec.promptId && msg.type !== 'connected' && msg.type !== 'external_image_push') {
         // 支持多 promptId 匹配（批量生成模式）
         const isAgentPrompt = agentExec.promptId === msg.promptId ||
           agentExec.allPromptIds?.includes(msg.promptId);

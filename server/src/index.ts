@@ -14,6 +14,8 @@ import favoritesRouter, { favoritesBase } from './routes/favorites.js';
 import settingsRouter from './routes/settings.js';
 import promptsRouter from './routes/prompts.js';
 import externalRouter, { saveExternalOutput, buildExternalResultUrl } from './routes/external.js';
+import externalImagePushRouter from './routes/externalImagePush.js';
+import { registerBroadcaster } from './services/wsHub.js';
 import { getExternalCorsOrigins } from './config/externalApiConfig.js';
 import { getTaskByPromptId, updateProgress, complete as completeExternalTask, fail as failExternalTask } from './services/externalTaskManager.js';
 import { connectWebSocket, getHistory, getImageBuffer, getPromptNodeInfo, getPromptTotalNodes, getPromptTotalWeight, clearPromptNodeInfo, SAMPLER_STEP_WEIGHT } from './services/comfyui.js';
@@ -150,6 +152,7 @@ app.use('/api/favorites', favoritesRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/prompts', promptsRouter);
 app.use('/api/v1', externalRouter);
+app.use('/api/external-image-push', externalImagePushRouter);
 app.use('/favorites', express.static(favoritesBase));
 
 // ComfyUI 状态查询
@@ -164,6 +167,15 @@ app.get('/api/comfyui/status', async (req, res) => {
 
 // WebSocket server
 const wss = new WebSocketServer({ server, path: '/ws' });
+
+// Inject the concrete broadcast implementation into wsHub so decoupled routes
+// (e.g. external-image-push) can broadcast to all frontend clients without
+// importing the wss instance directly.
+registerBroadcaster((event) => {
+  wss.clients.forEach((c) => {
+    if (c.readyState === WebSocket.OPEN) c.send(JSON.stringify(event));
+  });
+});
 
 function generateClientId(): string {
   // Simple UUID-like ID without external dependency
