@@ -188,6 +188,55 @@ function getOrCreateConnection(): WebSocket {
               const file = new File([blob], originalName ?? 'pushed.png', { type: blob.type });
               store.addImagesToTab(tabId, [file]);
               store.setActiveTab(tabId);
+
+              // autoStart: automatically trigger workflow execution after image is added
+              if (msg.autoStart) {
+                try {
+                  const currentState = useWorkflowStore.getState();
+                  const clientId = currentState.clientId;
+                  if (!clientId) {
+                    console.warn('[WS] autoStart skipped: no clientId available');
+                    return;
+                  }
+                  // Find the newly added image (last in the tab's images array)
+                  const tabImages = currentState.tabData[tabId]?.images;
+                  if (!tabImages || tabImages.length === 0) {
+                    console.warn('[WS] autoStart skipped: no images found in tab', tabId);
+                    return;
+                  }
+                  const newImage = tabImages[tabImages.length - 1];
+
+                  const formData = new FormData();
+                  formData.append('image', newImage.file);
+                  formData.append('clientId', clientId);
+                  formData.append('prompt', '');
+
+                  console.log('[WS] autoStart: triggering workflow execution for tab', tabId, 'imageId', newImage.id);
+                  const execRes = await fetch(`/api/workflow/${tabId}/execute?clientId=${clientId}`, {
+                    method: 'POST',
+                    body: formData,
+                  });
+                  if (!execRes.ok) {
+                    console.error('[WS] autoStart execute failed:', await execRes.text());
+                    return;
+                  }
+                  const data = await execRes.json() as { promptId: string };
+                  store.startTaskInTab(tabId, newImage.id, data.promptId);
+                  // Register promptId for progress tracking via WS
+                  if (globalWs?.readyState === WebSocket.OPEN) {
+                    globalWs.send(JSON.stringify({
+                      type: 'register',
+                      promptId: data.promptId,
+                      workflowId: tabId,
+                      sessionId: currentState.sessionId,
+                      tabId,
+                    }));
+                  }
+                  console.log('[WS] autoStart: workflow execution triggered, promptId:', data.promptId);
+                } catch (autoErr) {
+                  console.error('[WS] autoStart execution error:', autoErr);
+                }
+              }
             } catch (err) {
               console.warn('[WS] external_image_push failed:', err);
             }

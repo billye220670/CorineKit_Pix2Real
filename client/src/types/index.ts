@@ -78,6 +78,7 @@ export interface WSExternalImagePushMessage {
   stagingId: string;
   originalName?: string;
   targetSessionId?: string;
+  autoStart?: boolean;
 }
 
 export type WSMessage = WSConnectedMessage | WSProgressMessage | WSCompleteMessage | WSErrorMessage | WSExecutionStartMessage | WSExternalImagePushMessage;

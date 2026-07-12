@@ -93,6 +93,7 @@ function stageAndBroadcast(
   workflowId: number,
   entry: Omit<StagingEntry, 'timer'>,
   targetSessionId: string | undefined,
+  autoStart?: boolean,
 ): void {
   const stagingId = crypto.randomUUID();
   const timer = setTimeout(() => {
@@ -108,6 +109,7 @@ function stageAndBroadcast(
     stagingId,
     originalName: entry.originalName,
     targetSessionId,
+    ...(autoStart ? { autoStart: true } : {}),
   });
 
   res.json({ ok: true, stagingId });
@@ -150,6 +152,7 @@ function handleJsonPath(req: Request, res: Response): void {
     sessionId?: unknown;
     originalName?: unknown;
     filePath?: unknown;
+    autoStart?: unknown;
   };
 
   const workflowId = parseWorkflowId(body.workflowId);
@@ -195,6 +198,7 @@ function handleJsonPath(req: Request, res: Response): void {
       ? body.originalName
       : path.basename(filePath);
   const sessionId = typeof body.sessionId === 'string' && body.sessionId ? body.sessionId : undefined;
+  const autoStart = body.autoStart === true || body.autoStart === 'true';
 
   // Record a reference only — never read the file into memory here.
   stageAndBroadcast(
@@ -202,6 +206,7 @@ function handleJsonPath(req: Request, res: Response): void {
     workflowId,
     { absolutePath: filePath, contentType: resolved.contentType, originalName },
     sessionId,
+    autoStart,
   );
 }
 
@@ -211,6 +216,7 @@ function handleMultipart(req: Request, res: Response): void {
     workflowId?: unknown;
     sessionId?: unknown;
     originalName?: unknown;
+    autoStart?: unknown;
   };
 
   const workflowId = parseWorkflowId(body.workflowId);
@@ -239,12 +245,14 @@ function handleMultipart(req: Request, res: Response): void {
   }
 
   const sessionId = typeof body.sessionId === 'string' && body.sessionId ? body.sessionId : undefined;
+  const autoStart = body.autoStart === true || body.autoStart === 'true';
 
   stageAndBroadcast(
     res,
     workflowId,
     { buffer: file.buffer, contentType: resolved.contentType, originalName },
     sessionId,
+    autoStart,
   );
 }
 

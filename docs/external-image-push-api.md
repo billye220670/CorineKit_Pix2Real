@@ -56,6 +56,7 @@
 | `sessionId` | string | 否 | 目标会话窗口 ID，用于多窗口精确路由，见 [§10](#10-重要使用约束)。 |
 | `originalName` | string | 否 | 展示用文件名。省略时取 `filePath` 的文件名（basename）。 |
 | `filePath` | string | **是** | 本地文件的**绝对路径**，必须存在、且是一个文件。**扩展名**决定媒体类型与大小上限。 |
+| `autoStart` | boolean | 否 | 是否在图片加入目标 Tab 后自动触发工作流执行。默认 `false`。设为 `true` 时，前端会在图片添加完成后立即提交该图片到对应工作流处理，无需用户手动点击发送按钮。 |
 
 **curl 示例：**
 
@@ -65,6 +66,20 @@ curl -X POST http://localhost:3000/api/external-image-push \
   -d '{
     "version": 1,
     "workflowId": 0,
+    "originalName": "hero.png",
+    "filePath": "C:\\Users\\billy\\Pictures\\hero.png"
+  }'
+```
+
+**带 autoStart 的 curl 示例（推送后自动执行）：**
+
+```bash
+curl -X POST http://localhost:3000/api/external-image-push \
+  -H "Content-Type: application/json" \
+  -d '{
+    "version": 1,
+    "workflowId": 0,
+    "autoStart": true,
     "originalName": "hero.png",
     "filePath": "C:\\Users\\billy\\Pictures\\hero.png"
   }'
@@ -82,6 +97,7 @@ curl -X POST http://localhost:3000/api/external-image-push \
 | `workflowId` | text | **是** | 目标工作流编号，整数 `[0, 10]`。 |
 | `sessionId` | text | 否 | 目标会话窗口 ID，用于多窗口精确路由。 |
 | `originalName` | text | 否 | 展示用文件名。省略时取上传文件的原始文件名。 |
+| `autoStart` | text | 否 | `"true"` 或 `"false"`。是否在图片加入目标 Tab 后自动触发工作流执行。默认 `false`。 |
 
 **curl 示例：**
 
@@ -90,6 +106,16 @@ curl -X POST http://localhost:3000/api/external-image-push \
   -F "image=@C:\\Users\\billy\\Pictures\\hero.png" \
   -F "workflowId=0" \
   -F "originalName=hero.png"
+```
+
+**带 autoStart 的 curl 示例（推送后自动执行）：**
+
+```bash
+curl -X POST http://localhost:3000/api/external-image-push \
+  -F "image=@C:\\Users\\billy\\Pictures\\hero.png" \
+  -F "workflowId=0" \
+  -F "originalName=hero.png" \
+  -F "autoStart=true"
 ```
 
 > 注意：字段名必须为 `image`。类型白名单校验基于文件名扩展名，请确保上传文件名（或 `originalName`）带有受支持的扩展名。
@@ -212,9 +238,11 @@ HTTP `200`：
   "tabId": 0,
   "stagingId": "550e8400-e29b-41d4-a716-446655440000",
   "originalName": "hero.png",
-  "targetSessionId": "<sessionId 或未定义>"
+  "targetSessionId": "<sessionId 或未定义>",
+  "autoStart": true
 }
 ```
 
 - `tabId` 即请求中的 `workflowId`。
 - `targetSessionId` 即请求中的 `sessionId`（省略时为未定义，表示广播给当前窗口）。
+- `autoStart` 仅在请求中设为 `true` 时包含；前端据此决定是否自动触发工作流执行。
